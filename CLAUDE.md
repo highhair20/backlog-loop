@@ -10,14 +10,31 @@
 
 ## Verify
 
-The commands that define "done". The backlog loop runs these before opening a PR,
-and `.github/workflows/ci.yml` must run the same ones.
+The commands that define "done" — `/work-next-item` reads this section (and refuses
+to run while it holds only these placeholders). Put one command per line in the code
+block; scope a command to paths with a comment above it (e.g. `# when admin/ changes`).
+`.github/workflows/ci.yml` must run the same ones.
 
 ```sh
 # build:
 # lint:
 # test:
 ```
+
+<!-- Optional sections read by /work-next-item. Delete any you don't need.
+
+## Definition of done
+Checks beyond Verify that a green build can't prove (deploy wiring, infra, docs).
+
+## Scope map
+Where to enumerate the real affected surface: route tables, handler dirs, page
+registries, and what each scope label means.
+
+## Specialist reviewers
+| Changed paths | Agent (`subagent_type`) | Focus |
+|---|---|---|
+| `…` | `…` | … |
+-->
 
 ## GitHub flow guardrails
 

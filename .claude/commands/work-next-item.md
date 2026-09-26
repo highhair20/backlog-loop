@@ -1,0 +1,362 @@
+---
+description: Work the single highest-priority open backlog issue end to end — branch, implement with TDD, verify, push, and open a PR assigned to the maintainer. Designed to be driven by /loop.
+---
+
+You are running one iteration of the autonomous backlog loop for this repository.
+Do **exactly one** issue, then stop and report. `/loop` re-invokes this command for
+the next item.
+
+**Session-limit awareness (important).** A single Claude Code session has finite
+context and usage limits. This iteration may be compacted, paused at a usage limit,
+or killed (closed terminal) at any moment — possibly mid-issue. Therefore:
+
+- **All loop state lives in git and GitHub labels — never in session memory.**
+  Re-derive everything from `gh`/`git` each run; never assume context from a prior
+  iteration survived.
+- Keep the iteration **atomic and recoverable**: an interrupted run must be safely
+  resumable on the next invocation, never orphaned. Step 0 reconciles half-done work
+  before any new work begins.
+
+## Hard guardrails (never violate)
+
+- **Never merge.** Do not run `gh pr merge`, do not push to `main`. A push to
+  `main` may deploy (see CLAUDE.md). Your job ends when the PR is open.
+- **Never implement an issue whose premise you have not verified against the code**
+  (Step 3.5). An issue is a claim, not a fact. Implementing a wrong diagnosis is worse
+  than doing nothing: it ships a plausible PR that fixes nothing and closes the issue
+  over a live bug. If the premise is false, say so, correct the issue, and re-plan.
+- **Never scope the work from the issue's prose alone** (Step 3.6). Derive the affected
+  set from the code and compare the issue against it. A true issue can still be an
+  incomplete one; confirming its list can never reveal what the list omits.
+- **One issue → one branch → one PR.** Never bundle multiple issues.
+- **Never touch unrelated files.** Only change what the selected issue requires.
+- **Skip `blocked` and `needs-infra` apply steps.** For `needs-infra` issues,
+  write the infrastructure change but do **not** apply it; flag it for a human in
+  the PR body.
+- Follow the repo conventions in CLAUDE.md and the global rules: TDD, conventional
+  commits, immutable patterns, no hardcoded secrets, comprehensive error handling.
+
+## The repo contract (CLAUDE.md sections this command reads)
+
+This command is shared across repos; everything repo-specific lives in the repo's
+`CLAUDE.md`, under these headings:
+
+| Section | Required | Used in |
+|---|---|---|
+| `## Verify` | **yes** | Step 5 gate, Step 6.5 re-check, Step 7 PR checklist |
+| `## Definition of done` | no | Step 5 — extra checks beyond Verify (e.g. deploy-readiness) |
+| `## Scope map` | no | Step 3.6 — where to enumerate the real affected surface |
+| `## Specialist reviewers` | no | Step 6.5 — which `.claude/agents/` reviewer covers which paths |
+
+**If `## Verify` is missing or still a placeholder, STOP before Step 0** and report:
+"CLAUDE.md has no Verify section — the loop has no definition of green." Never guess
+the build or test commands.
+- Prefer the Read/Grep/Glob/Edit/Write tools over shell `cat`/`grep`/`sed`/`find`.
+  This loop runs headless under a tight bash allowlist; dedicated tools never need
+  bash permission, so the iteration won't stall on a denied shell command.
+
+## Step 0 — Recover any interrupted iteration
+
+A prior run may have died (context/usage limit, closed session) after claiming an
+issue but before opening its PR. Reconcile before starting anything new. There should
+be at most one `in-progress` issue:
+
+```bash
+gh issue list --state open --label in-progress --json number,title \
+  --jq '.[] | "\(.number)\t\(.title)"'
+```
+
+For that issue `#N`, find its branch (the convention is `<type>/<N>-<slug>`):
+
+```bash
+# Avoid shell grep/jq pipes so this runs under a tight headless allowlist —
+# read the output and identify the branch / PR named `<type>/${N}-…` yourself.
+git ls-remote --heads origin
+gh pr list --state open --json number,headRefName,url
+```
+
+Then:
+
+1. **An open PR already exists from that branch** → the work finished but the label
+   swap didn't. Just fix the state and move on to a new item:
+   `gh issue edit ${N} --remove-label in-progress --add-label in-review`.
+2. **A remote branch exists but no open PR** → work was underway. Resume *that* issue
+   as this iteration (do not pick a new one): fetch and check out the branch, bring it
+   to green (Step 5's gate), then continue from Step 6 (commit/push, review, PR).
+3. **Neither a branch nor a PR** → nothing was actually done; release the claim so the
+   issue becomes selectable again: `gh issue edit ${N} --remove-label in-progress`.
+
+Note: if an issue is labelled `in-review` but its PR is closed-unmerged, leave it —
+that is a human signal, not loop work.
+
+Proceed to Step 1 only once no resumable in-progress item remains.
+
+## Step 1 — Clean base
+
+```bash
+git fetch origin
+git switch main
+git pull --ff-only
+git status --porcelain
+```
+
+If `git status --porcelain` is **non-empty** (dirty working tree), STOP immediately.
+Report: "Working tree is dirty — cannot start a clean iteration." Do not proceed.
+
+## Step 2 — Select the next item
+
+Pick the highest-priority actionable issue. In priority order `P0`, then `P1`,
+then `P2`:
+
+```bash
+gh issue list --state open --label P0 --json number,title,labels \
+  --jq 'sort_by(.number)[] | {number, title, labels: [.labels[].name]}'
+```
+
+The first **actionable** issue is the one whose labels do **not** include any of:
+`in-progress`, `in-review`, `blocked`, `needs-attention`. Take the first actionable
+issue at the highest priority that has one; if `P0` has none, try `P1`, then `P2`.
+
+If **no** actionable issue exists at any priority: report
+"✅ Backlog drained — no actionable issues remain." and STOP. (This ends the loop —
+do not schedule another iteration.)
+
+Read the full body of the selected issue — its **Acceptance criteria** are the spec:
+
+```bash
+gh issue view <number> --json title,body
+```
+
+## Step 3 — Claim it
+
+```bash
+gh issue edit <number> --add-label in-progress
+```
+
+## Step 3.5 — Verify the issue's premise BEFORE writing code
+
+**An issue is a claim, not a fact.** Issues are written by humans and agents from
+logs, hunches, and half-memories, and a confidently-worded wrong diagnosis is the
+single most dangerous input this loop can receive: it produces a plausible PR that
+fixes nothing, a test that passes for the wrong reason, and a closed issue with the
+bug still live.
+
+This is not hypothetical. One issue stated the fix for an LLM repetition loop was to
+set `temperature: 0`. It was **already 0**, on every call, and was 0 when the bug
+occurred — the real cause was closer to the opposite (greedy decoding *causes*
+repetition loops). Implementing that issue as written would have changed nothing and
+shipped a green checkmark over a live bug.
+
+So, before Step 4, **read the code the issue is about and confirm its factual claims**:
+
+- Does the file/function/line it cites exist, and say what the issue says it says?
+- Is the "fix" it proposes already in place?
+- Does the described cause actually explain the described symptom?
+- Do the acceptance criteria still make sense given what the code actually does?
+
+Then act on what you found:
+
+- **Premise holds** → proceed to Step 4.
+- **Premise is wrong, but the underlying problem is real** → the *problem* is the work
+  item, not the issue's prescription. Then, in order:
+  1. **Say so.** Comment on the issue with what you checked, what you found, and why
+     the stated cause is wrong — cite the file and line.
+  2. **Correct the issue.** Edit the body so the Context and Implementation notes
+     describe the *real* cause. Leave the issue accurate for the next reader; a wrong
+     issue left standing will mislead the next agent exactly as it nearly misled you.
+  3. **Re-plan** against the real cause and continue.
+  4. Repeat the correction in the PR body, so the reviewer knows the issue moved.
+- **Premise is wrong and there is no problem** (already fixed, or misread) → do not
+  invent work to justify the issue. Comment with the evidence, remove `in-progress`,
+  close it or drop it to the correct label, and move to the next item.
+
+Treat an issue's "Implementation notes" as a *suggestion from someone who may not have
+read the code recently* — never as a specification. The acceptance criteria are the
+contract; the proposed approach is not — but the contract may itself be incomplete,
+which is what Step 3.6 is for.
+
+## Step 3.6 — Check the issue for COMPLETENESS, not just truth
+
+Step 3.5 asks *"is what the issue says true?"* This step asks the opposite question:
+**"what does the issue fail to say?"** An issue can be entirely accurate and still be
+missing half the work. Verifying a claim and generating the full scope are different
+operations, and only the second one catches an omission.
+
+This is not hypothetical either. An "audit log of admin actions" issue named six admin
+mutations. There were **seven** — the prose omitted the delete endpoint, the most
+destructive in the set, so a proposal that checked each named endpoint against the code
+confirmed all six and never noticed the gap. The same issue said "disable/**enable**
+user" when no enable endpoint existed. Prose-anchored enumeration produces both
+phantoms and blind spots.
+
+Run these four checks before Step 4. They are deliberately mechanical — do not rely on
+judgment where a command will do.
+
+**1. Derive the affected surface from the code, never from the issue's prose.**
+Enumerate the real set first, then compare it to the issue's list — not the reverse.
+Confirming someone else's list can only validate what is on it.
+
+CLAUDE.md `## Scope map` says where this repo's surfaces are enumerated (route
+tables, handler directories, page registries). Without one, find the registry the
+issue's category lives in — the route table, the command list, the page index — and
+enumerate from it, never from the issue's list.
+
+If the code's set is bigger than the issue's, **the code wins** — implement the full
+set and say so in the PR body. If it is smaller, the issue names something that does
+not exist; treat that as a Step 3.5 premise failure.
+
+**2. Every acceptance criterion must name a concrete artifact.**
+For each `- [ ]`, write down the file(s) that will satisfy it. An AC you cannot map to
+an artifact is an AC you are about to skip. Watch for criteria phrased in user terms —
+"an admin can view X" is satisfied by a **page**, not by the endpoint that feeds it.
+Check the Scope map for label meanings that narrow or widen scope.
+
+**3. The Testing section is a floor, not a ceiling.**
+Scale coverage to what you actually touched. If an issue says "a test asserting X for a
+representative case" and you changed seven call sites, write a table-driven test over
+all seven — six untested call sites can regress silently and the issue's author was
+estimating, not specifying. Also add the negative case: the behavior must **not** happen
+on the failure path.
+
+**4. A new side effect on an existing success path needs stated failure semantics.**
+If you are adding a write, an enqueue, or an external call to a path that already
+succeeds, answer explicitly: what happens when the new thing fails? Usually the answer
+is "log it and let the original operation succeed" — a logging table must not turn a
+working delete into a 500. Whatever you choose, state it in the PR body and cover it
+with a test.
+
+**If any check turns up a gap, correct the issue body before implementing** (same
+mechanism as Step 3.5): edit it so the scope is accurate, note what you added in a
+comment, and carry the correction into the PR body. Leave the issue correct for the
+next reader.
+
+## Step 4 — Branch
+
+Derive the type from the issue title prefix (`feat`/`fix`/`refactor`/`docs`/`chore`)
+and a short kebab-case slug from the title (drop the prefix, ~5 words max):
+
+```bash
+git switch -c <type>/<number>-<slug>
+# e.g. fix/19-audit-burger-restaurant-exclusion
+```
+
+## Step 5 — Implement with TDD
+
+1. Translate the issue's acceptance criteria into tests **first** (RED), following
+   any testing notes in CLAUDE.md. Mock external services rather than calling them.
+2. Implement the minimal code to satisfy them (GREEN), then refactor.
+3. The change is **done** only when every command in CLAUDE.md `## Verify` that
+   applies to the changed paths passes locally, **and** every check in
+   `## Definition of done` (if present) is satisfied and recorded in the PR body.
+   Run the commands exactly as written; do not substitute or skip one because it is
+   slow. If Verify marks a command as needing something this runner lacks (e.g.
+   Docker), follow its stated fallback and say so in the PR body.
+4. Do a quick self-review of your diff against the repo's code-quality checklist
+   (small functions, error handling, no secrets, no debug prints) before shipping.
+
+**Give-up condition:** if after a focused effort (~3 substantial implement+test
+cycles) it still isn't green, abort cleanly:
+
+```bash
+gh issue edit <number> --remove-label in-progress --add-label needs-attention
+gh issue comment <number> --body "Autonomous loop could not complete this. Blocker: <concise reason>."
+git switch main
+git branch -D <type>/<number>-<slug>
+```
+
+Then report what blocked you and STOP.
+
+## Step 6 — Commit & push
+
+Conventional commit referencing the issue:
+
+```bash
+git add -A
+git commit -m "<type>: <concise description> (#<number>)"
+git push -u origin <type>/<number>-<slug>
+```
+
+Push now, before review: Step 0 can only recover a branch that exists on the remote.
+
+## Step 6.5 — Specialist review before the PR
+
+The self-review in Step 5 checks the general checklist; this step adds stack-specific
+reviewers. CLAUDE.md `## Specialist reviewers` maps changed paths to agents in
+`.claude/agents/` (committed to the repo, because cloud sessions do not load
+plugins). If that section is absent, skip this step. List what the branch changed:
+
+```bash
+git diff --name-only main...HEAD
+```
+
+Launch each reviewer whose paths match as an agent (in parallel when several apply),
+giving it the issue number, the acceptance criteria, and the changed-file list.
+
+If none applies, skip this step. If an agent is unavailable in this runner, say so in
+the PR body rather than skipping silently.
+
+Act on the findings:
+
+- **CRITICAL / HIGH:** fix, re-run the Step 5 gate (the Verify commands), and commit as `fix: address review findings (#<number>)`. One fix round only: if
+  a CRITICAL finding still stands after it, give up. The branch is already pushed,
+  so the Step 5 give-up path is not enough on its own: first delete the remote
+  branch, or it is orphaned (Step 0 only finds `in-progress` issues, and give-up
+  removes that label):
+  ```bash
+  git push origin --delete <type>/<number>-<slug>
+  ```
+  then run the Step 5 give-up path, naming the surviving finding in the comment.
+- **MEDIUM / LOW:** don't fix unless trivial and inside the issue's scope (the
+  "never touch unrelated files" guardrail still applies). List them in the PR body.
+- **A finding you judge wrong:** don't act on it; record it with a one-line reason in
+  the PR body. An agent's report is a claim, like an issue (Step 3.5).
+
+If you committed fixes, push them before Step 7 with
+`git push origin <type>/<number>-<slug>`. Always name the branch: a bare `git push` is
+denied in `.claude/settings.json`, because on `main` it would push to `main`.
+
+## Step 7 — Open the PR (assigned, not reviewer)
+
+GitHub forbids requesting review from your own PR's author, so assign instead:
+
+```bash
+gh pr create --base main \
+  --title "<type>: <issue title>" \
+  --assignee @me \
+  --body "$(cat <<'PRBODY'
+## Summary
+<what changed and why, 1–3 sentences>
+
+## Changes
+- <bullet>
+- <bullet>
+
+## Testing
+- [x] <each Verify command that ran, one per line, exactly as run>
+- <Definition of done checks and their outcome, if the section exists>
+- <manual verification steps, if any>
+
+## Specialist review
+<!-- From Step 6.5. Omit this section if no reviewer applied. -->
+- Reviewers run: <agent names>
+- Fixed: <CRITICAL/HIGH findings addressed, or "none">
+- Not fixed: <MEDIUM/LOW findings, or disputed ones with a one-line reason>
+
+<!-- For needs-infra issues, add: -->
+## ⚠️ Manual step required
+Infrastructure changes are included but NOT applied. <exact command to apply, per
+CLAUDE.md> before this takes effect.
+
+Closes #<number>
+PRBODY
+)"
+```
+
+## Step 8 — Update state & report
+
+```bash
+gh issue edit <number> --remove-label in-progress --add-label in-review
+```
+
+Report concisely: issue number + title, branch, PR URL, and test results. If any
+actionable issues remain, the loop will continue to the next one.

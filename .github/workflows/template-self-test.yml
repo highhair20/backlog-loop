@@ -18,3 +18,5 @@ jobs:
       - uses: actions/checkout@v4
       - name: Test sync-guardrails.sh
         run: scripts/test-sync-guardrails.sh
+      - name: Test check-verify-section.sh
+        run: scripts/test-check-verify-section.sh

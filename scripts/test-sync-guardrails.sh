@@ -59,6 +59,8 @@ check "second sync is a no-op" "[ -z \"\$(git -C '$T' status --porcelain)\" ]"
 echo "# local edit" >>"$T/.claude/hooks/pr-review-gate.sh"
 git -C "$T" -c user.name=t -c user.email=t@t commit -qam drift
 "$SYNC" "$T" >/dev/null 2>&1
+check "copies the generic loop command and driver" "[ -f '$T/.claude/commands/work-next-item.md' ] && [ -x '$T/scripts/backlog-loop.sh' ] && [ -x '$T/scripts/check-verify-section.sh' ]"
+check "does not make the command file executable" "[ ! -x '$T/.claude/commands/work-next-item.md' ]"
 check "overwrites a drifted managed hook" "! grep -q '# local edit' '$T/.claude/hooks/pr-review-gate.sh'"
 
 # --- refusals ---
