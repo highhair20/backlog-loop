@@ -1,7 +1,7 @@
 name: Template self-test
 
 # Tests the template's own scripts. Inert in repos created from the template
-# (the job only runs in a repo named repo-template, i.e. this one and its
+# (the job only runs in a repo named claude-code-repo-template, i.e. this one and its
 # forks); safe to delete there.
 on:
   push:
@@ -13,7 +13,7 @@ permissions:
 
 jobs:
   sync-guardrails:
-    if: github.event.repository.name == 'repo-template'
+    if: github.event.repository.name == 'claude-code-repo-template'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
