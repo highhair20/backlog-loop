@@ -57,3 +57,7 @@ The sync never commits; review `git diff` in the target, then commit on a branch
 - The review hook reads the PR URL from `gh pr create`'s stdout; capturing it
   (`URL=$(gh pr create …)`) means no loop opens. Seed it manually with
   `.claude/hooks/pr-review-state.sh seed <pr> <url>`.
+- Sync only adds deny rules. A rule later removed from the template stays in synced
+  repos, since the script cannot tell it from one the repo added; delete it by hand.
+- `ci.yml` is seeded only into a repo with no workflows, so an existing CI setup never
+  gains a failing placeholder.

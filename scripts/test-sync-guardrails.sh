@@ -81,5 +81,28 @@ mkdir -p "$B" && git -C "$B" init -q -b main
 "$SYNC" "$B" >/dev/null 2>&1
 check "creates settings.json when missing" "jq -e '.permissions.deny | length > 0' '$B/.claude/settings.json' >/dev/null"
 
+# --- .gitignore with no trailing newline is not corrupted ---
+N="$(new_target nonewline)"
+printf 'node_modules' >"$N/.gitignore"
+git -C "$N" -c user.name=t -c user.email=t@t commit -qam no-newline
+"$SYNC" "$N" >/dev/null 2>&1
+check "keeps the last .gitignore line intact" "grep -qx node_modules '$N/.gitignore' && grep -qx .claude/settings.local.json '$N/.gitignore'"
+
+# --- a stale registration of a managed hook is replaced, not duplicated ---
+S="$(new_target stale)"
+jq '.hooks.Stop += [{"matcher":"*","hooks":[{"type":"command","command":"old/.claude/hooks/pr-review-gate.sh --old"}]}]' "$S/.claude/settings.json" >"$S/s.tmp" && mv "$S/s.tmp" "$S/.claude/settings.json"
+git -C "$S" -c user.name=t -c user.email=t@t commit -qam stale
+"$SYNC" "$S" >/dev/null 2>&1
+check "registers the review gate exactly once" "[ \"\$(jq '[.hooks.Stop[].hooks[].command | select(test(\"pr-review-gate.sh\"))] | length' '$S/.claude/settings.json')\" = 1 ]"
+check "drops the stale registration" "! grep -q -- '--old' '$S/.claude/settings.json'"
+check "keeps unrelated hooks when replacing" "jq -e '[.hooks.Stop[].hooks[].command] | index(\"echo local-stop\")' '$S/.claude/settings.json' >/dev/null"
+
+# --- placeholder CI is not added next to an existing workflow ---
+W="$(new_target hasci)"
+mkdir -p "$W/.github/workflows" && echo "name: test" >"$W/.github/workflows/test.yml"
+git -C "$W" add -A && git -C "$W" -c user.name=t -c user.email=t@t commit -qm ci
+"$SYNC" "$W" >/dev/null 2>&1
+check "skips ci.yml when other workflows exist" "[ ! -e '$W/.github/workflows/ci.yml' ]"
+
 echo
 if [ "$failures" -eq 0 ]; then echo "all tests passed"; else echo "$failures test(s) failed" >&2; exit 1; fi

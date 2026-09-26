@@ -35,16 +35,27 @@ SETTINGS=.claude/settings.json
 
 die() { echo "sync-guardrails: $*" >&2; exit 1; }
 
-# Union of deny rules (target order first) and hook entries (an entry is added
-# only if one of its commands is not already registered for that event).
+# Deny rules: union, target order first. A rule later removed from the template
+# stays in synced repos — the script cannot tell it from one the repo added.
+#
+# Hooks: registrations of the managed hook scripts are managed too. Any target
+# command naming one is dropped, then the template's entries are added, so a
+# changed invocation replaces the old one instead of running twice. Other hooks
+# are kept, and a template entry is added only if one of its commands is new.
 merge_settings() {
-  jq -s '
+  local managed
+  managed="$(printf '%s\n' "${MANAGED[@]##*/}" | jq -R . | jq -s .)"
+  jq -s --argjson managed "$managed" '
+    def is_managed: . as $c | [$managed[] as $m | $c | contains($m)] | any;
     .[0] as $t | .[1] as $s
     | $t
     | .permissions.deny = (($t.permissions.deny // []) + (($s.permissions.deny // []) - ($t.permissions.deny // [])))
-    | .hooks = reduce (($s.hooks // {}) | to_entries[]) as $e (($t.hooks // {});
+    | .hooks = (($t.hooks // {})
+        | map_values(map(.hooks |= map(select(.command | is_managed | not))) | map(select(.hooks | length > 0))))
+    | .hooks = reduce (($s.hooks // {}) | to_entries[]) as $e (.hooks;
         .[$e.key] = ((.[$e.key] // []) as $cur
           | $cur + [ $e.value[] | select(([.hooks[].command] - [$cur[].hooks[]?.command]) | length > 0) ]))
+    | .hooks |= with_entries(select(.value | length > 0))
   ' "$1" "$2"
 }
 
@@ -66,6 +77,12 @@ main() {
 
   for f in "${SEEDED[@]}"; do
     [ -e "$target/$f" ] && continue
+    # The placeholder CI fails on purpose. Next to a repo's existing workflows it
+    # would only add a red check, so seed it only into a repo with no CI at all.
+    if [ "$f" = .github/workflows/ci.yml ] && compgen -G "$target/.github/workflows/*.y*ml" >/dev/null; then
+      echo "skipped $f: the repo already has workflows"
+      continue
+    fi
     mkdir -p "$target/$(dirname "$f")"
     cp "$TEMPLATE/$f" "$target/$f"
   done
@@ -81,9 +98,13 @@ main() {
 
   local line
   touch "$target/.gitignore"
+  # Without this, the first appended line would join a last line that has no newline.
+  if [ -s "$target/.gitignore" ] && [ -n "$(tail -c1 "$target/.gitignore")" ]; then
+    echo >>"$target/.gitignore"
+  fi
   while IFS= read -r line; do
     [ -z "$line" ] || [ "${line#\#}" != "$line" ] && continue
-    grep -qxF "$line" "$target/.gitignore" || printf '%s\n' "$line" >>"$target/.gitignore"
+    grep -qxF -- "$line" "$target/.gitignore" || printf '%s\n' "$line" >>"$target/.gitignore"
   done <"$TEMPLATE/.gitignore"
 
   echo "Synced from repo-template @ $(git -C "$TEMPLATE" rev-parse --short HEAD)."
