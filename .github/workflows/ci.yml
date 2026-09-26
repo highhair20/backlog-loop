@@ -1,0 +1,27 @@
+name: CI
+
+# Every branch except main, plus PRs. main is covered by the PR that merged into
+# it; a deploy workflow (if any) owns pushes to main.
+on:
+  push:
+    branches-ignore: [main]
+  pull_request:
+
+# Read-only floor. Grant more per job, only where a step actually writes.
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Fails on purpose until replaced. A placeholder that passes would give a
+      # new repo a green check that tests nothing. Replace this step with the
+      # same build / lint / test commands listed under "Verify" in CLAUDE.md,
+      # so CI and the backlog loop's definition of done cannot drift apart.
+      - name: Verify (not configured)
+        run: |
+          echo "::error::CI is not configured. Replace this step with the Verify commands from CLAUDE.md."
+          exit 1

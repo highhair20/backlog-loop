@@ -1,0 +1,3 @@
+# Keep blank issues available for quick notes, but steer toward the structured
+# templates. See docs/ISSUE_GUIDE.md for the full convention.
+blank_issues_enabled: true

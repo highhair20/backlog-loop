@@ -1,0 +1,3 @@
+# Per-machine Claude settings and PR review loop state
+.claude/settings.local.json
+.claude/state/
