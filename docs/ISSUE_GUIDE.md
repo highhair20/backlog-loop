@@ -42,7 +42,7 @@ change, not the symptom — `feat: in-app account deletion`, not `add delete but
 
 This table is the definition of record. An agent working from a checkout never
 sees GitHub's label descriptions, so if you add or change a label, change it here
-too.
+too, and in `scripts/seed-labels.sh`, which creates them.
 
 **Priority** (exactly one — the loop selects highest first):
 

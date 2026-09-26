@@ -13,6 +13,9 @@ permissions:
 
 jobs:
   verify:
+    # Skipped in the template repo itself, which has no project to verify; its own
+    # scripts are tested by template-self-test.yml.
+    if: github.repository != 'highhair20/repo-template'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
