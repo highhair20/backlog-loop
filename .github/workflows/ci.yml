@@ -13,10 +13,12 @@ permissions:
 
 jobs:
   verify:
-    # Skipped while the repo is marked as a template (it has no project to verify;
-    # template-self-test.yml tests its scripts). Repos created from it are not
-    # templates, so the job runs there.
-    if: ${{ !github.event.repository.is_template }}
+    # Skipped only in repo-template itself and its forks (which keep the name): it
+    # has no project to verify, and template-self-test.yml tests its scripts. Keyed
+    # on the name, not the template flag, so a repo created from it — even one you
+    # mark as your own template — always runs its real CI. Rename such a repo if
+    # you ever call it repo-template.
+    if: github.event.repository.name != 'repo-template'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

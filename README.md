@@ -23,7 +23,7 @@ beyond the tools you already use.
 
 | Capability | What you get |
 |---|---|
-| **Merge and push guardrails** | A committed `.claude/settings.json` that denies merging PRs (CLI, REST API, and GitHub MCP tools), pushing to `main`, force pushes, tag pushes, and file writes through the GitHub API. Because it is committed, it applies to cloud and headless sessions too. |
+| **Merge and push guardrails** | A committed `.claude/settings.json` that denies merging PRs (CLI, REST API, and GitHub MCP tools), pushing to `main`, force pushes, tag pushes, and the GitHub MCP file-write tools. Because it is committed, it applies to cloud and headless sessions too. |
 | **Autonomous backlog loop** | `/work-next-item` takes the highest-priority open issue, checks that the issue's diagnosis matches the code, derives the full scope from the code rather than the issue text, implements it test-first, runs your verify commands, and opens a PR assigned to you. One issue, one branch, one PR — never merged. |
 | **Cold-context driver** | `scripts/backlog-loop.sh` runs one issue per fresh `claude -p` session, so a long backlog never exhausts a context window. All state lives in git and issue labels, so it is safe to stop and resume at any time. |
 | **PR review loop** | Hooks that start a `/code-review` when a PR is opened and keep the session from ending until the review's critical and high findings are resolved — with a round cap and timeouts so it cannot run forever. |
@@ -147,7 +147,9 @@ The guardrails are layered, from softest to hardest:
 - **Permission rules match command text; they are a filter, not a wall.** A
   sufficiently unusual spelling of a push to `main` can get past them. The branch
   ruleset in step 4 is the hard block.
-- The push rule for git global options (`git -C <dir> push …`) also denies a few
+- The deny rules block merging through `gh api`, but not other raw API writes: a
+  `gh api -X PUT repos/<owner>/<repo>/contents/<path>` can still write to `main`.
+  The branch ruleset blocks that too.- The push rule for git global options (`git -C <dir> push …`) also denies a few
   non-push commands, such as `git -C . commit -m "fix push flow"`. Commit without
   `-C`.
 - The review hook finds the new PR's URL in `gh pr create`'s output. If you capture

@@ -1,7 +1,8 @@
 name: Template self-test
 
 # Tests the template's own scripts. Inert in repos created from the template
-# (the job only runs while the repo is marked as a template); safe to delete there.
+# (the job only runs in a repo named repo-template, i.e. this one and its
+# forks); safe to delete there.
 on:
   push:
     branches-ignore: [main]
@@ -12,7 +13,7 @@ permissions:
 
 jobs:
   sync-guardrails:
-    if: github.event.repository.is_template
+    if: github.event.repository.name == 'repo-template'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
