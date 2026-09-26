@@ -6,7 +6,7 @@
 # The loop it drives: review -> adjudicate -> fix -> re-review, until no
 # CRITICAL/HIGH findings remain or the round cap is hit. Both halves matter.
 # Without re-review, a fix that introduces a new defect ships unnoticed (that is
-# exactly what happened on PR #223). Without a cap, it never terminates — a
+# exactly what happened in practice before this loop existed). Without a cap, it never terminates — a
 # high-effort reviewer nearly always emits *something*.
 #
 # Usage:
@@ -40,7 +40,7 @@ MAX_GATE_BLOCKS=6
 MAX_REVIEWING_PER_ROUND=2
 TTL_SECONDS=$((24 * 60 * 60))
 # How long a review may be in flight before the gate stops believing in it. The
-# reviews on #223/#224 took 6-9 minutes, so this is generous but not open-ended.
+# observed reviews took 6-9 minutes, so this is generous but not open-ended.
 REVIEW_GRACE_SECONDS=$((20 * 60))
 
 # Derived from this script's own location, never from the environment or cwd.

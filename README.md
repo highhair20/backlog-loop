@@ -1,74 +1,194 @@
 # repo-template
 
-Jason's starting point for a new repo: the GitHub-flow guardrails, PR review
-loop, and issue conventions extracted from `happyhour`.
+**A GitHub template for repositories where [Claude Code](https://code.claude.com/docs/en/overview) does the work and a human merges.**
 
-## Use it
+It gives an AI coding agent a structured backlog to work from, a definition of
+"done" to meet, a review loop to pass, and guardrails that keep it from merging or
+pushing to `main`. You file issues; the agent turns them into reviewed pull
+requests; you decide what ships.
 
-```sh
-gh repo create <name> --private --template highhair20/repo-template --clone
-```
+Everything here is plain files — Claude Code settings, shell scripts, GitHub issue
+templates, and a workflow — so there is no service to run and nothing to install
+beyond the tools you already use.
 
-Then, in the new repo:
+## Who it is for
 
-1. Fill in `CLAUDE.md` — especially **Verify** (build / lint / test). The backlog
-   loop refuses to run until it holds real commands.
-2. Replace the failing placeholder step in `.github/workflows/ci.yml` with those
-   same Verify commands.
-3. To run the loop unattended (`scripts/backlog-loop.sh`, headless `claude -p`), allow
-   in `.claude/settings.local.json` everything it runs, since nobody is there to
-   approve a prompt: the Verify commands, plus `gh issue list/view/edit/comment`,
-   `gh pr list/create`, `git fetch/switch/pull/status/branch/ls-remote/diff/add/
-   commit/stash`, and `git push -u origin *`. The committed deny list still blocks
-   merges and `main` pushes (deny wins over allow). A missing allow makes the first
-   item stop early, which the driver reports as "no progress"; the item's log names
-   the refused command.
-4. Create the standard labels: `scripts/seed-labels.sh` (safe to re-run).
-5. Add a ruleset on `main` (require a PR + passing CI; only the owner may bypass).
-   Private repos need GitHub Pro for this.
+- Solo developers and small teams who want to hand a backlog to Claude Code and
+  review PRs rather than write every change by hand.
+- Anyone running Claude Code **unattended** (headless `claude -p`, `/loop`, or a
+  scheduled cloud routine) who needs the safety rules to live in the repository,
+  where every session can see them, rather than in one person's local config.
 
-## What's in it
+## What it does
 
-| Path | Purpose |
+| Capability | What you get |
 |---|---|
-| `.claude/settings.json` | Denies merges, `main`/force/tag pushes, and GitHub MCP file writes. Committed so cloud sessions, which see only the repo, are covered. Also wires the PR review hooks. |
-| `.claude/hooks/pr-*.sh` | After `gh pr create`, open a `/code-review` loop and block the turn from ending until it passes (round cap + TTL prevent wedging). Needs `jq` and the `code-review` plugin. |
-| `.github/ISSUE_TEMPLATE/` | Feature and Bug templates: Context / Goal / Acceptance criteria / Implementation notes / Out of scope / Testing. |
-| `.github/workflows/ci.yml` | Runs on non-`main` branches and PRs with read-only permissions. **Fails until configured**, so a new repo never shows a green check that tests nothing. |
-| `.claude/commands/work-next-item.md` | `/work-next-item`: one backlog issue → branch → TDD → PR, never merging. Generic; reads the repo's build/test commands and other specifics from `CLAUDE.md` (see its "repo contract" table). |
-| `scripts/backlog-loop.sh` | Runs `/work-next-item` repeatedly, each item in a cold `claude -p` session. Checks for a Verify section first (`scripts/check-verify-section.sh`). |
-| `docs/ISSUE_GUIDE.md` | Issue anatomy, title convention, and the label set (priority P0–P3, type, status). |
-| `CLAUDE.md` | Skeleton: Verify (required by the loop), optional Definition of done / Scope map / Specialist reviewers, and the guardrail summary. |
+| **Merge and push guardrails** | A committed `.claude/settings.json` that denies merging PRs (CLI, REST API, and GitHub MCP tools), pushing to `main`, force pushes, tag pushes, and file writes through the GitHub API. Because it is committed, it applies to cloud and headless sessions too. |
+| **Autonomous backlog loop** | `/work-next-item` takes the highest-priority open issue, checks that the issue's diagnosis matches the code, derives the full scope from the code rather than the issue text, implements it test-first, runs your verify commands, and opens a PR assigned to you. One issue, one branch, one PR — never merged. |
+| **Cold-context driver** | `scripts/backlog-loop.sh` runs one issue per fresh `claude -p` session, so a long backlog never exhausts a context window. All state lives in git and issue labels, so it is safe to stop and resume at any time. |
+| **PR review loop** | Hooks that start a `/code-review` when a PR is opened and keep the session from ending until the review's critical and high findings are resolved — with a round cap and timeouts so it cannot run forever. |
+| **Issue conventions** | Feature and bug templates and a guide (`docs/ISSUE_GUIDE.md`) that make each issue a self-contained work item an agent can pick up cold, plus a script that creates the priority and status labels the loop uses. |
+| **CI skeleton** | A workflow that runs on branches and PRs with read-only permissions, and fails until you configure it — so a new repo never shows a green check that tests nothing. |
+| **Sync for existing repos** | `scripts/sync-guardrails.sh` brings any existing repository up to date with this template without overwriting the parts you have customised. |
 
-## Keeping repos in sync
+## How it works
 
-Files copied from a template drift. To bring an existing repo up to date, from a
-clone of this template:
-
-```sh
-scripts/sync-guardrails.sh ../<repo>     # target must have a clean working tree
-scripts/seed-labels.sh highhair20/<repo>
+```mermaid
+flowchart LR
+  A[You file an issue<br/>P0–P3 label] --> B["/work-next-item<br/>claims it"]
+  B --> C[Verify premise<br/>and scope vs. code]
+  C --> D[Test-first implementation<br/>until Verify passes]
+  D --> E[Push branch,<br/>open PR assigned to you]
+  E --> F[Review loop until no<br/>critical/high findings]
+  F --> G([You review and merge])
 ```
 
-The sync never commits; review `git diff` in the target, then commit on a branch.
+The loop is generic. Everything specific to your project comes from sections of
+your repo's `CLAUDE.md`:
 
-| Kind | Files | On re-run |
+| Section | Required | What it tells the loop |
 |---|---|---|
-| managed | `.claude/hooks/pr-*.sh`, `work-next-item.md`, `backlog-loop.sh`, `check-verify-section.sh` | overwritten (local edits are drift) |
-| seeded | `CLAUDE.md`, CI, issue templates, `docs/ISSUE_GUIDE.md` | copied only if missing |
-| merged | `.claude/settings.json`, `.gitignore` | template deny rules and hooks added; the repo's own kept |
+| `## Verify` | **Yes** | The build, lint, and test commands that define "green". The loop refuses to start without real commands here. |
+| `## Definition of done` | No | Checks a green build cannot prove — deploy wiring, infrastructure, docs. |
+| `## Scope map` | No | Where to enumerate what an issue could touch — route tables, handler directories, page registries. |
+| `## Specialist reviewers` | No | Which reviewer agents in `.claude/agents/` (you add these; none ship with the template) cover which paths. |
 
-`scripts/test-sync-guardrails.sh` tests the sync; CI runs it here via
-`template-self-test.yml` (inert in repos made from the template, safe to delete).
+## Requirements
 
-## Known limits
+- [Claude Code](https://code.claude.com/docs/en/overview), with its `/code-review` command available
+- [GitHub CLI](https://cli.github.com/) (`gh`), authenticated
+- `git`, `bash`, and [`jq`](https://jqlang.org/)
 
-- Deny rules match command text: a filter, not a wall. Only a GitHub ruleset is a
-  hard block.
-- The review hook reads the PR URL from `gh pr create`'s stdout; capturing it
-  (`URL=$(gh pr create …)`) means no loop opens. Seed it manually with
-  `.claude/hooks/pr-review-state.sh seed <pr> <url>`.
-- Sync only adds deny rules. A rule later removed from the template stays in synced
-  repos, since the script cannot tell it from one the repo added; delete it by hand.
-- `ci.yml` is seeded only into a repo with no workflows, so an existing CI setup never
-  gains a failing placeholder.
+## Getting started
+
+### A new repository
+
+Click **Use this template** on GitHub, or:
+
+```sh
+gh repo create my-app --private --template highhair20/repo-template --clone
+cd my-app
+```
+
+Then:
+
+1. **Fill in `CLAUDE.md`**, above all the `## Verify` section. Write every command
+   to run from the repo root and never `cd`, because the loop may run several in
+   one shell.
+2. **Configure CI.** Replace the failing placeholder step in
+   `.github/workflows/ci.yml` with the same Verify commands, so CI and the loop
+   agree on what "green" means.
+3. **Create the labels:** `scripts/seed-labels.sh`. It is safe to re-run.
+4. **Protect `main`** with a branch ruleset: require a pull request and passing CI,
+   and let only the maintainer bypass it. This is the only guardrail that holds no
+   matter how a command is phrased (see [Limits](#limits)). Rulesets are free on
+   public repositories; private repositories need a paid GitHub plan.
+5. **Allow the loop's commands** if you will run it unattended — see
+   [Running the backlog loop](#running-the-backlog-loop).
+
+### An existing repository
+
+Clone this template next to your repo and sync it in:
+
+```sh
+git clone https://github.com/highhair20/repo-template.git
+repo-template/scripts/sync-guardrails.sh ./my-app     # my-app must have a clean working tree
+repo-template/scripts/seed-labels.sh <owner>/my-app
+```
+
+The sync never commits. Review `git diff` in your repo, then commit it on a branch.
+It treats files three ways, so re-running it later is safe:
+
+| Kind | Files | On every sync |
+|---|---|---|
+| **Managed** | review hooks, `work-next-item.md`, `backlog-loop.sh`, `check-verify-section.sh` | Overwritten. These hold no project-specific content; put customisation in `CLAUDE.md`. |
+| **Seeded** | `CLAUDE.md`, CI workflow, issue templates, `docs/ISSUE_GUIDE.md` | Copied only if missing. Yours to edit. The placeholder CI is added only to a repo with no workflows. |
+| **Merged** | `.claude/settings.json`, `.gitignore` | The template's deny rules, hooks, and ignore lines are added; yours are kept. |
+
+## Running the backlog loop
+
+Write issues with the templates, give each exactly one priority label (`P0`–`P3`;
+`P3` is never picked automatically), then choose how to run it:
+
+| How | When |
+|---|---|
+| `/work-next-item` in a Claude Code session | Work one issue while you watch. |
+| `/loop /work-next-item` | Keep working issues in one session. |
+| `scripts/backlog-loop.sh` | Unattended. Each issue gets a fresh `claude -p` session; stops when the backlog is empty, when an item makes no progress, or after `MAX_ITEMS` (default 25). |
+
+**Unattended runs need permissions.** A headless session cannot ask you to approve
+a command, so allow everything the loop runs in `.claude/settings.local.json`:
+your Verify commands, `gh issue list/view/edit/comment`, `gh pr list/create`,
+`git fetch/switch/pull/status/branch/ls-remote/diff/add/commit/stash`, and
+`git push -u origin *`. The committed deny rules still win over any allow rule, so
+merges and pushes to `main` stay blocked. If a command is missing, the first item
+stops early and the driver reports "no progress"; that item's log in `.loop-logs/`
+names the refused command.
+
+The loop manages these status labels: `in-progress`, `in-review`, `blocked`,
+`needs-infra`, and `needs-attention` (it gave up and a human should look). See
+[`docs/ISSUE_GUIDE.md`](docs/ISSUE_GUIDE.md) for the full set.
+
+## Safety model
+
+The guardrails are layered, from softest to hardest:
+
+1. **Instructions** — `CLAUDE.md` and the loop command say never to merge or push
+   to `main`.
+2. **Permission rules** — `.claude/settings.json` denies those commands and tools
+   outright, in every local, headless, and cloud session.
+3. **CI** — required checks run on every PR.
+4. **Branch ruleset** — GitHub itself refuses a direct push or unreviewed merge to
+   `main`. You set this up once per repo.
+5. **You** — every change reaches `main` only through a merge you make.
+
+## Limits
+
+- **Permission rules match command text; they are a filter, not a wall.** A
+  sufficiently unusual spelling of a push to `main` can get past them. The branch
+  ruleset in step 4 is the hard block.
+- The push rule for git global options (`git -C <dir> push …`) also denies a few
+  non-push commands, such as `git -C . commit -m "fix push flow"`. Commit without
+  `-C`.
+- The review hook finds the new PR's URL in `gh pr create`'s output. If you capture
+  that output (`URL=$(gh pr create …)`), no review loop opens; start one by hand
+  with `.claude/hooks/pr-review-state.sh seed <pr> <url>`.
+- The sync only ever adds deny rules. A rule later removed from the template stays
+  in repos that already have it; delete it by hand.
+- Known issues and planned improvements are tracked in
+  [Issues](https://github.com/highhair20/repo-template/issues).
+
+## What's in the repo
+
+```text
+.claude/
+  settings.json              deny rules + hook registration (committed on purpose)
+  commands/work-next-item.md the backlog loop command
+  hooks/pr-*.sh              PR review loop
+.github/
+  ISSUE_TEMPLATE/            feature and bug templates
+  workflows/ci.yml           CI skeleton (fails until configured)
+  workflows/template-self-test.yml   tests this template's scripts; inert in your repo
+docs/ISSUE_GUIDE.md          how to write issues the loop can work
+scripts/
+  backlog-loop.sh            unattended driver
+  check-verify-section.sh    refuses to run without Verify commands
+  sync-guardrails.sh         update an existing repo from this template
+  seed-labels.sh             create the standard labels
+  test-*.sh                  tests for the scripts above
+CLAUDE.md                    skeleton for your project's instructions
+```
+
+## Contributing
+
+Issues and pull requests are welcome. Run the tests before opening a PR:
+
+```sh
+for t in scripts/test-*.sh; do "$t" || exit 1; done
+```
+
+They are plain bash and need only `git` and `jq`; CI runs the same files.
+
+## License
+
+[MIT](LICENSE)
