@@ -1,0 +1,20 @@
+name: Template self-test
+
+# Tests the template's own scripts. Inert in repos created from the template
+# (the job only runs in highhair20/repo-template); safe to delete there.
+on:
+  push:
+    branches-ignore: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  sync-guardrails:
+    if: github.repository == 'highhair20/repo-template'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Test sync-guardrails.sh
+        run: scripts/test-sync-guardrails.sh

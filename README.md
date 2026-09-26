@@ -14,7 +14,8 @@ Then, in the new repo:
 1. Fill in `CLAUDE.md` — especially **Verify** (build / lint / test).
 2. Replace the failing placeholder step in `.github/workflows/ci.yml` with those
    same Verify commands.
-3. Add a ruleset on `main` (require a PR + passing CI; only the owner may bypass).
+3. Create the standard labels: `scripts/seed-labels.sh` (safe to re-run).
+4. Add a ruleset on `main` (require a PR + passing CI; only the owner may bypass).
    Private repos need GitHub Pro for this.
 
 ## What's in it
@@ -30,8 +31,24 @@ Then, in the new repo:
 
 ## Keeping repos in sync
 
-Files copied from a template drift. Existing repos will pull updates with a sync
-script (planned) rather than by hand.
+Files copied from a template drift. To bring an existing repo up to date, from a
+clone of this template:
+
+```sh
+scripts/sync-guardrails.sh ../<repo>     # target must have a clean working tree
+scripts/seed-labels.sh highhair20/<repo>
+```
+
+The sync never commits; review `git diff` in the target, then commit on a branch.
+
+| Kind | Files | On re-run |
+|---|---|---|
+| managed | `.claude/hooks/pr-*.sh` | overwritten (local edits are drift) |
+| seeded | `CLAUDE.md`, CI, issue templates, `docs/ISSUE_GUIDE.md` | copied only if missing |
+| merged | `.claude/settings.json`, `.gitignore` | template deny rules and hooks added; the repo's own kept |
+
+`scripts/test-sync-guardrails.sh` tests the sync; CI runs it here via
+`template-self-test.yml` (inert in repos made from the template, safe to delete).
 
 ## Known limits
 
