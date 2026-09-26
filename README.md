@@ -1,4 +1,4 @@
-# repo-template
+# claude-code-repo-template
 
 **A GitHub template for repositories where [Claude Code](https://code.claude.com/docs/en/overview) does the work and a human merges.**
 
@@ -66,7 +66,7 @@ your repo's `CLAUDE.md`:
 Click **Use this template** on GitHub, or:
 
 ```sh
-gh repo create my-app --private --template highhair20/repo-template --clone
+gh repo create my-app --private --template highhair20/claude-code-repo-template --clone
 cd my-app
 ```
 
@@ -91,9 +91,9 @@ Then:
 Clone this template next to your repo and sync it in:
 
 ```sh
-git clone https://github.com/highhair20/repo-template.git
-repo-template/scripts/sync-guardrails.sh ./my-app     # my-app must have a clean working tree
-repo-template/scripts/seed-labels.sh <owner>/my-app
+git clone https://github.com/highhair20/claude-code-repo-template.git
+claude-code-repo-template/scripts/sync-guardrails.sh ./my-app     # my-app must have a clean working tree
+claude-code-repo-template/scripts/seed-labels.sh <owner>/my-app
 ```
 
 The sync never commits. Review `git diff` in your repo, then commit it on a branch.
@@ -158,7 +158,7 @@ The guardrails are layered, from softest to hardest:
 - The sync only ever adds deny rules. A rule later removed from the template stays
   in repos that already have it; delete it by hand.
 - Known issues and planned improvements are tracked in
-  [Issues](https://github.com/highhair20/repo-template/issues).
+  [Issues](https://github.com/highhair20/claude-code-repo-template/issues).
 
 ## What's in the repo
 

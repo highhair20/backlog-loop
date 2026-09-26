@@ -111,7 +111,7 @@ main() {
     grep -qxF -- "$line" "$target/.gitignore" || printf '%s\n' "$line" >>"$target/.gitignore"
   done <"$TEMPLATE/.gitignore"
 
-  echo "Synced from repo-template @ $(git -C "$TEMPLATE" rev-parse --short HEAD)."
+  echo "Synced from claude-code-repo-template @ $(git -C "$TEMPLATE" rev-parse --short HEAD)."
   git -C "$target" status --short
   echo "Review with: git diff  (in $target), then commit on a branch."
 }
