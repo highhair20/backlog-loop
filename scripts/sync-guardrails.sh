@@ -4,7 +4,8 @@
 # Three kinds of file, handled differently so a re-run never clobbers local work:
 #
 #   managed  — overwritten every run. Files with no per-repo content (the PR
-#              review hooks); a local edit there is drift, and drift is the bug.
+#              review hooks, the backlog loop command and driver); a local edit
+#              there is drift, and drift is the bug. Repo specifics go in CLAUDE.md.
 #   seeded   — copied only when missing. Files each repo is expected to tailor
 #              (CLAUDE.md, CI, issue templates, the issue guide).
 #   merged   — .claude/settings.json keeps the repo's own rules and hooks and
@@ -22,6 +23,9 @@ MANAGED=(
   .claude/hooks/pr-created-review.sh
   .claude/hooks/pr-review-gate.sh
   .claude/hooks/pr-review-state.sh
+  .claude/commands/work-next-item.md
+  scripts/backlog-loop.sh
+  scripts/check-verify-section.sh
 )
 SEEDED=(
   CLAUDE.md
@@ -72,7 +76,7 @@ main() {
   for f in "${MANAGED[@]}"; do
     mkdir -p "$target/$(dirname "$f")"
     cp "$TEMPLATE/$f" "$target/$f"
-    chmod +x "$target/$f"
+    case "$f" in *.sh) chmod +x "$target/$f" ;; esac
   done
 
   for f in "${SEEDED[@]}"; do

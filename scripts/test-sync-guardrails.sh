@@ -48,6 +48,7 @@ check "keeps the target's own Stop hook" "jq -e '[.hooks.Stop[].hooks[].command]
 check "adds the review gate Stop hook" "jq -e '[.hooks.Stop[].hooks[].command] | any(test(\"pr-review-gate.sh\"))' '$T/.claude/settings.json' >/dev/null"
 check "adds the PR-created PostToolUse hook" "jq -e '[.hooks.PostToolUse[].hooks[].command] | any(test(\"pr-created-review.sh\"))' '$T/.claude/settings.json' >/dev/null"
 check "appends only missing .gitignore lines" "[ \"\$(grep -cx '.claude/state/' '$T/.gitignore')\" = 1 ] && grep -qx '.claude/settings.local.json' '$T/.gitignore'"
+check "ignores the backlog-loop log directory" "grep -qx '.loop-logs/' '$T/.gitignore'"
 
 # --- idempotency: a second sync after committing changes nothing ---
 git -C "$T" add -A
@@ -59,6 +60,8 @@ check "second sync is a no-op" "[ -z \"\$(git -C '$T' status --porcelain)\" ]"
 echo "# local edit" >>"$T/.claude/hooks/pr-review-gate.sh"
 git -C "$T" -c user.name=t -c user.email=t@t commit -qam drift
 "$SYNC" "$T" >/dev/null 2>&1
+check "copies the generic loop command and driver" "[ -f '$T/.claude/commands/work-next-item.md' ] && [ -x '$T/scripts/backlog-loop.sh' ] && [ -x '$T/scripts/check-verify-section.sh' ]"
+check "does not make the command file executable" "[ ! -x '$T/.claude/commands/work-next-item.md' ]"
 check "overwrites a drifted managed hook" "! grep -q '# local edit' '$T/.claude/hooks/pr-review-gate.sh'"
 
 # --- refusals ---
