@@ -78,6 +78,17 @@ while [ "$count" -lt "$MAX_ITEMS" ]; do
     echo "✅ Backlog drained — no actionable issues remain. Completed $count item(s) this run."
     exit 0
   fi
+  # Every productive iteration moves one issue out of the count (PR opened →
+  # in-review, gave up → needs-attention, premise false → closed). An unchanged
+  # count means the command stopped early (dirty tree, bad Verify, ...) and will
+  # stop again, so don't spend a cold session per MAX_ITEMS finding that out.
+  # Issues filed mid-run can mask progress; stopping then is safe — just re-run.
+  if [ -n "${previous:-}" ] && [ "$remaining" -ge "$previous" ]; then
+    echo "✗ The last item made no progress ($remaining actionable before and after)." >&2
+    echo "  Read its log in $LOG_DIR, fix the cause, and re-run." >&2
+    exit 3
+  fi
+  previous="$remaining"
 
   count=$((count + 1))
   ts="$(date +%Y%m%d-%H%M%S)"

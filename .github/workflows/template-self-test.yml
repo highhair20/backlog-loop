@@ -20,3 +20,5 @@ jobs:
         run: scripts/test-sync-guardrails.sh
       - name: Test check-verify-section.sh
         run: scripts/test-check-verify-section.sh
+      - name: Test backlog-loop.sh
+        run: scripts/test-backlog-loop.sh

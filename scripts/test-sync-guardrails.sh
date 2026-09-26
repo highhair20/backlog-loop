@@ -48,6 +48,7 @@ check "keeps the target's own Stop hook" "jq -e '[.hooks.Stop[].hooks[].command]
 check "adds the review gate Stop hook" "jq -e '[.hooks.Stop[].hooks[].command] | any(test(\"pr-review-gate.sh\"))' '$T/.claude/settings.json' >/dev/null"
 check "adds the PR-created PostToolUse hook" "jq -e '[.hooks.PostToolUse[].hooks[].command] | any(test(\"pr-created-review.sh\"))' '$T/.claude/settings.json' >/dev/null"
 check "appends only missing .gitignore lines" "[ \"\$(grep -cx '.claude/state/' '$T/.gitignore')\" = 1 ] && grep -qx '.claude/settings.local.json' '$T/.gitignore'"
+check "ignores the backlog-loop log directory" "grep -qx '.loop-logs/' '$T/.gitignore'"
 
 # --- idempotency: a second sync after committing changes nothing ---
 git -C "$T" add -A

@@ -35,6 +35,9 @@ or killed (closed terminal) at any moment — possibly mid-issue. Therefore:
   the PR body.
 - Follow the repo conventions in CLAUDE.md and the global rules: TDD, conventional
   commits, immutable patterns, no hardcoded secrets, comprehensive error handling.
+- Prefer the Read/Grep/Glob/Edit/Write tools over shell `cat`/`grep`/`sed`/`find`.
+  This loop runs headless under a tight bash allowlist; dedicated tools never need
+  bash permission, so the iteration won't stall on a denied shell command.
 
 ## The repo contract (CLAUDE.md sections this command reads)
 
@@ -51,9 +54,6 @@ This command is shared across repos; everything repo-specific lives in the repo'
 **If `## Verify` is missing or still a placeholder, STOP before Step 0** and report:
 "CLAUDE.md has no Verify section — the loop has no definition of green." Never guess
 the build or test commands.
-- Prefer the Read/Grep/Glob/Edit/Write tools over shell `cat`/`grep`/`sed`/`find`.
-  This loop runs headless under a tight bash allowlist; dedicated tools never need
-  bash permission, so the iteration won't stall on a denied shell command.
 
 ## Step 0 — Recover any interrupted iteration
 
@@ -72,19 +72,28 @@ For that issue `#N`, find its branch (the convention is `<type>/<N>-<slug>`):
 # Avoid shell grep/jq pipes so this runs under a tight headless allowlist —
 # read the output and identify the branch / PR named `<type>/${N}-…` yourself.
 git ls-remote --heads origin
+git branch --list
+git status --porcelain
 gh pr list --state open --json number,headRefName,url
 ```
+
+The branch reaches the remote only at Step 6, so a run interrupted in Steps 4–5 leaves
+a **local-only** branch, possibly with uncommitted edits. Check local branches too.
 
 Then:
 
 1. **An open PR already exists from that branch** → the work finished but the label
    swap didn't. Just fix the state and move on to a new item:
    `gh issue edit ${N} --remove-label in-progress --add-label in-review`.
-2. **A remote branch exists but no open PR** → work was underway. Resume *that* issue
-   as this iteration (do not pick a new one): fetch and check out the branch, bring it
-   to green (Step 5's gate), then continue from Step 6 (commit/push, review, PR).
+2. **A branch exists (remote or local-only) but no open PR** → work was underway.
+   Resume *that* issue as this iteration (do not pick a new one): check out the branch
+   (fetch it first if it is remote-only; a local one keeps any uncommitted edits), bring
+   it to green (Step 5's gate), then continue from Step 6 (commit/push, review, PR).
 3. **Neither a branch nor a PR** → nothing was actually done; release the claim so the
    issue becomes selectable again: `gh issue edit ${N} --remove-label in-progress`.
+   If `git status --porcelain` is non-empty here, the edits belong to no branch: stash
+   them (`git stash push -u -m "orphaned edits for #${N}"`) so Step 1 starts clean,
+   and mention the stash in your report.
 
 Note: if an issue is labelled `in-review` but its PR is closed-unmerged, leave it —
 that is a human signal, not loop work.
@@ -260,6 +269,9 @@ cycles) it still isn't green, abort cleanly:
 ```bash
 gh issue edit <number> --remove-label in-progress --add-label needs-attention
 gh issue comment <number> --body "Autonomous loop could not complete this. Blocker: <concise reason>."
+# Nothing is committed yet, so set the edits aside first: a plain switch would carry
+# them onto main (every later Step 1 then halts on a dirty tree) or refuse outright.
+git stash push -u -m "abandoned #<number>"
 git switch main
 git branch -D <type>/<number>-<slug>
 ```
