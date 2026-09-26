@@ -62,7 +62,7 @@ issue but before opening its PR. Reconcile before starting anything new. There s
 be at most one `in-progress` issue:
 
 ```bash
-gh issue list --state open --label in-progress --json number,title \
+gh issue list --state open --label in-progress --limit 1000 --json number,title \
   --jq '.[] | "\(.number)\t\(.title)"'
 ```
 
@@ -115,10 +115,11 @@ Report: "Working tree is dirty — cannot start a clean iteration." Do not proce
 ## Step 2 — Select the next item
 
 Pick the highest-priority actionable issue. In priority order `P0`, then `P1`,
-then `P2`:
+then `P2` (always pass `--limit`: `gh` returns only 30 issues by default, which can
+hide every actionable one behind newer in-review or blocked ones):
 
 ```bash
-gh issue list --state open --label P0 --json number,title,labels \
+gh issue list --state open --label P0 --limit 1000 --json number,title,labels \
   --jq 'sort_by(.number)[] | {number, title, labels: [.labels[].name]}'
 ```
 

@@ -12,12 +12,19 @@ gh repo create <name> --private --template highhair20/repo-template --clone
 Then, in the new repo:
 
 1. Fill in `CLAUDE.md` — especially **Verify** (build / lint / test). The backlog
-   loop refuses to run until it holds real commands, and those commands must be
-   allowed in `.claude/settings.local.json` for the loop to run unattended.
+   loop refuses to run until it holds real commands.
 2. Replace the failing placeholder step in `.github/workflows/ci.yml` with those
    same Verify commands.
-3. Create the standard labels: `scripts/seed-labels.sh` (safe to re-run).
-4. Add a ruleset on `main` (require a PR + passing CI; only the owner may bypass).
+3. To run the loop unattended (`scripts/backlog-loop.sh`, headless `claude -p`), allow
+   in `.claude/settings.local.json` everything it runs, since nobody is there to
+   approve a prompt: the Verify commands, plus `gh issue list/view/edit/comment`,
+   `gh pr list/create`, `git fetch/switch/pull/status/branch/ls-remote/diff/add/
+   commit/stash`, and `git push -u origin *`. The committed deny list still blocks
+   merges and `main` pushes (deny wins over allow). A missing allow makes the first
+   item stop early, which the driver reports as "no progress"; the item's log names
+   the refused command.
+4. Create the standard labels: `scripts/seed-labels.sh` (safe to re-run).
+5. Add a ruleset on `main` (require a PR + passing CI; only the owner may bypass).
    Private repos need GitHub Pro for this.
 
 ## What's in it

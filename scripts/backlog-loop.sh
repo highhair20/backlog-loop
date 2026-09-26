@@ -50,7 +50,7 @@ trap 'rmdir "$LOCK" 2>/dev/null' EXIT
 # Count open, prioritized issues that still need loop work. in-progress counts
 # (Step 0 recovers it); blocked / needs-attention / in-review do not.
 work_remaining() {
-  gh issue list --state open --limit 200 --json labels --jq '
+  gh issue list --state open --limit 1000 --json labels --jq '
     [ .[] | ([.labels[].name]) as $l
       | select( ($l | any(. == "P0" or . == "P1" or . == "P2"))
             and (($l | any(. == "blocked" or . == "needs-attention" or . == "in-review")) | not) )
@@ -59,7 +59,8 @@ work_remaining() {
 
 # One cold-context invocation. acceptEdits auto-approves file writes; bash is still
 # governed by permissions: the committed .claude/settings.json denies merges and
-# main pushes, and .claude/settings.local.json must allow the Verify commands.
+# main pushes, and .claude/settings.local.json must allow every gh/git command
+# /work-next-item runs plus the Verify commands (see README), or items stop early.
 run_item() {
   if [ -n "${MODEL:-}" ]; then
     claude -p "/work-next-item" --permission-mode acceptEdits --model "$MODEL" >"$1" 2>&1

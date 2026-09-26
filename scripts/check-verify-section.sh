@@ -11,8 +11,8 @@ file="${1:-CLAUDE.md}"
 [ -f "$file" ] || { echo "check-verify-section: $file not found" >&2; exit 1; }
 
 awk '
-  /^## / { in_verify = ($0 ~ /^## Verify[[:space:]]*$/); in_code = 0; next }
-  in_verify && /^```/ { in_code = !in_code; next }
+  /^```/ { in_code = !in_code; next }
+  !in_code && /^## / { in_verify = ($0 ~ /^## Verify[[:space:]]*$/); next }
   in_verify && in_code && $0 !~ /^[[:space:]]*(#|$)/ { found = 1 }
   END { exit found ? 0 : 1 }
 ' "$file" || { echo "check-verify-section: no Verify commands in $file (see the repo contract in .claude/commands/work-next-item.md)" >&2; exit 1; }

@@ -21,6 +21,7 @@ expect "rejects a missing Verify section" 1 $'# x\n\n## Build\n```sh\nmake\n```\
 expect "rejects the template placeholder" 1 $'## Verify\n\n```sh\n# build:\n# lint:\n# test:\n```\n'
 expect "rejects a Verify section with no code block" 1 $'## Verify\n\nRun the tests.\n'
 expect "ignores commands in a later section" 1 $'## Verify\n```sh\n# test:\n```\n\n## Other\n```sh\nmake\n```\n'
+expect "treats ## inside a code block as a comment" 0 $'## Verify\n```sh\n## unit tests\ngo test ./...\n```\n'
 expect "does not match ## Verify as a prefix" 1 $'## Verifying things\n```sh\nmake\n```\n'
 
 "$CHECK" "$WORK/missing.md" >/dev/null 2>&1
