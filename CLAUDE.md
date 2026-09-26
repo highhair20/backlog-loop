@@ -12,7 +12,9 @@
 
 The commands that define "done" — `/work-next-item` reads this section (and refuses
 to run while it holds only these placeholders). Put one command per line in the code
-block; scope a command to paths with a comment above it (e.g. `# when admin/ changes`).
+block; scope a command to paths with a comment above it (e.g. `# when web/ changes`).
+Write every command to run from the repo root and never `cd` — the loop may run
+several in one shell (use `npm --prefix web test`, `tsc -p web`, and so on).
 `.github/workflows/ci.yml` must run the same ones.
 
 ```sh
