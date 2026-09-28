@@ -27,6 +27,8 @@ MANAGED=(
   scripts/backlog-loop.sh
   scripts/check-verify-section.sh
   scripts/protect-main.sh
+  scripts/seed-labels.sh
+  scripts/setup.sh
   .claude/settings.local.json.example
 )
 SEEDED=(

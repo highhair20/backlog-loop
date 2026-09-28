@@ -34,3 +34,5 @@ jobs:
         run: scripts/test-settings-example.sh
       - name: Test label definitions
         run: scripts/test-labels.sh
+      - name: Test setup.sh
+        run: scripts/test-setup.sh
