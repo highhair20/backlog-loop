@@ -77,14 +77,16 @@ command that fixes each item:
 
 ```sh
 scripts/setup.sh          # check only
-scripts/setup.sh --fix    # also create the labels and the local allowlist
+scripts/setup.sh --fix    # also swap in the CLAUDE.md skeleton, create the labels and the local allowlist
 ```
 
 It exits 0 once nothing is failing, so re-run it until it does. The steps it checks:
 
-1. **Fill in `CLAUDE.md`**, above all the `## Verify` section. Write every command
-   to run from the repo root and never `cd`, because the loop may run several in
-   one shell.
+1. **Fill in `CLAUDE.md`**, above all the `## Verify` section. A new repo starts
+   with this template's own `CLAUDE.md`; `setup.sh --fix` replaces it with the
+   project skeleton from `templates/CLAUDE.md`, and the loop refuses to run until it
+   is replaced. Write every command to run from the repo root and never `cd`,
+   because the loop may run several in one shell.
 2. **Configure CI.** Replace the failing placeholder step in
    `.github/workflows/ci.yml` with the same Verify commands, so CI and the loop
    agree on what "green" means.
@@ -117,7 +119,7 @@ It treats files three ways, so re-running it later is safe:
 | Kind | Files | On every sync |
 |---|---|---|
 | **Managed** | review hooks, `work-next-item.md`, `backlog-loop.sh`, `check-verify-section.sh`, `protect-main.sh`, `seed-labels.sh`, `setup.sh`, `vendor-agents.sh`, `settings.local.json.example` | Overwritten. These hold no project-specific content; put customisation in `CLAUDE.md`. |
-| **Seeded** | `CLAUDE.md`, CI workflow, issue forms, PR template, `dependabot.yml`, `docs/ISSUE_GUIDE.md`, `docs/BACKLOG.md`, the reviewer agents and their `.claude/agent-context/` | Copied only if missing. Yours to edit. Nothing is added beside an equivalent you already have: the placeholder CI only goes into a repo with no workflows, the issue forms only into one with no issue templates of its own, the PR template only if GitHub finds none anywhere, and `dependabot.yml` not beside a `dependabot.yaml`. `.editorconfig` is never synced; its indent defaults could change how editors treat existing code. |
+| **Seeded** | `CLAUDE.md` (the skeleton in `templates/`), CI workflow, issue forms, PR template, `dependabot.yml`, `docs/ISSUE_GUIDE.md`, `docs/BACKLOG.md`, the reviewer agents and their `.claude/agent-context/` | Copied only if missing. Yours to edit. Nothing is added beside an equivalent you already have: the placeholder CI only goes into a repo with no workflows, the issue forms only into one with no issue templates of its own, the PR template only if GitHub finds none anywhere, and `dependabot.yml` not beside a `dependabot.yaml`. `.editorconfig` is never synced; its indent defaults could change how editors treat existing code. |
 | **Merged** | `.claude/settings.json`, `.gitignore` | The template's deny rules, hooks, and ignore lines are added; yours are kept. |
 
 Each sync also writes `.claude/template-version`: the template commit your repo now
@@ -213,7 +215,9 @@ scripts/
   seed-labels.sh             create the standard labels
   protect-main.sh            create the branch ruleset on main
   test-*.sh                  tests for the scripts above
-CLAUDE.md                    skeleton for your project's instructions
+  run-tests.sh               run every test-*.sh (this repo's Verify; not synced)
+templates/CLAUDE.md          skeleton for your project's instructions
+CLAUDE.md                    this template repo's own instructions (replaced in new repos)
 .editorconfig                editor defaults
 ```
 
@@ -222,11 +226,14 @@ CLAUDE.md                    skeleton for your project's instructions
 Issues and pull requests are welcome. Run the tests before opening a PR:
 
 ```sh
-for t in scripts/test-*.sh; do "$t" || exit 1; done
+scripts/run-tests.sh
+shellcheck --severity=warning scripts/*.sh .claude/hooks/*.sh
 ```
 
-They are plain bash and need only `git` and `jq`; CI runs the same files, plus
-`shellcheck --severity=warning scripts/*.sh .claude/hooks/*.sh`.
+These are the Verify commands in this repo's `CLAUDE.md`, and CI runs the same two,
+so the backlog loop can work this repo's own issues. The tests are plain bash and
+need only `git`, `jq`, and `ruby` (for YAML); a new `scripts/test-*.sh` is picked up
+automatically.
 
 ## License
 

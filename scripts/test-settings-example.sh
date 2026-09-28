@@ -39,7 +39,7 @@ DENY=(); while IFS= read -r -d "" l; do DENY+=("$l"); done < <(jq -r '.permissio
 # `git …` spans in prose. Placeholders (<number>, ${N}) are made concrete.
 CMDS=(); while IFS= read -r -d "" l; do CMDS+=("$l"); done < <(
   {
-    awk '/^```/ { f = !f; next } f && /^(gh|git) / { sub(/[[:space:]]*\\$/, ""); print }' "$COMMAND"
+    awk '/^```/ { f = !f; next } f && /^(gh |git |scripts\/)/ { sub(/[[:space:]]*\\$/, ""); print }' "$COMMAND"
     grep -oE '`(gh|git) [^`]+`' "$COMMAND" | tr -d '`'
   } | sed -E 's/<[a-z/ -]+>/x/g; s/\$\{N\}/1/g; s/\$N/1/g' | sort -u | read_lines
 )
@@ -50,6 +50,10 @@ for cmd in "${CMDS[@]}"; do
   matches_any "$cmd" "${DENY[@]}" && continue
   if matches_any "$cmd" "${ALLOW[@]}"; then echo "ok   allowed: $cmd"; else fail "not allowed: $cmd"; fi
 done
+
+# Every way of running the loop must refuse a CLAUDE.md the checker rejects (such as
+# the template repo's own), not just backlog-loop.sh.
+if grep -qF 'scripts/check-verify-section.sh CLAUDE.md' "$COMMAND"; then echo "ok   the loop command runs check-verify-section.sh"; else fail "the loop command does not run check-verify-section.sh"; fi
 
 # The deny list must still win for the pushes that matter, even with the allow rules.
 # A pushed release tag (v1.2.3) often triggers a deploy, so it counts as one of them.

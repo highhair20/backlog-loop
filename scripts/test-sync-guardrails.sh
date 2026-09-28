@@ -92,6 +92,7 @@ check "refuses a missing argument" "[ \$? -ne 0 ]"
 B="$WORK/bare"
 mkdir -p "$B" && git -C "$B" init -q -b main
 "$SYNC" "$B" >/dev/null 2>&1
+check "seeds the project skeleton, not the template's own CLAUDE.md" "cmp -s '$HERE/../templates/CLAUDE.md' '$B/CLAUDE.md'"
 check "creates settings.json when missing" "jq -e '.permissions.deny | length > 0' '$B/.claude/settings.json' >/dev/null"
 
 # --- .gitignore with no trailing newline is not corrupted ---

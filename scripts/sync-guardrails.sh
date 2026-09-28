@@ -118,6 +118,15 @@ has_pr_template() {
   return 1
 }
 
+# Where the template keeps a seeded file. The root CLAUDE.md is the template
+# repo's own instructions; repos get the project skeleton instead.
+seed_source() {
+  case "$1" in
+    CLAUDE.md) echo templates/CLAUDE.md ;;
+    *) echo "$1" ;;
+  esac
+}
+
 main() {
   [ $# -eq 1 ] || die "usage: $0 <target-repo-dir>"
   command -v jq >/dev/null || die "jq not found"
@@ -158,7 +167,7 @@ main() {
       continue
     fi
     mkdir -p "$target/$(dirname "$f")"
-    cp "$TEMPLATE/$f" "$target/$f"
+    cp "$TEMPLATE/$(seed_source "$f")" "$target/$f"
   done
 
   mkdir -p "$target/.claude"

@@ -1,66 +1,73 @@
-# <project> — Project Instructions
+<!-- claude-code-repo-template: own instructions -->
+# claude-code-repo-template — Project Instructions
 
-<!-- Replace the placeholders, then delete this comment. -->
+> **In a repo created from this template, this is the wrong file.** It holds the
+> template repo's own instructions, and its Verify runs the template's tests, not
+> yours. Stop and run `scripts/setup.sh --fix`, which replaces it with the project
+> skeleton in `templates/CLAUDE.md`. `scripts/check-verify-section.sh` refuses to
+> start the loop until you do.
 
 ## Repo layout
 
 | Path | What it is |
 |---|---|
-| `…` | … |
+| `.claude/` | Settings (deny rules, hooks), the `/work-next-item` command, the PR review hooks, and the vendored reviewer agents with their context |
+| `.github/` | Issue forms, PR template, Dependabot, the placeholder `ci.yml` for new repos, and `template-self-test.yml`, this repo's CI |
+| `docs/` | `ISSUE_GUIDE.md` and `BACKLOG.md`, both seeded into repos |
+| `scripts/` | The loop and setup scripts, and a `test-*.sh` for each |
+| `templates/CLAUDE.md` | The project skeleton that new and synced repos get as their `CLAUDE.md` |
 
 ## Verify
 
-The commands that define "done" — `/work-next-item` reads this section (and refuses
-to run while it holds only these placeholders). Put one command per line in the code
-block; scope a command to paths with a comment above it (e.g. `# when web/ changes`).
-Write every command to run from the repo root and never `cd` — the loop may run
-several in one shell (use `npm --prefix web test`, `tsc -p web`, and so on).
-`.github/workflows/ci.yml` must run the same ones.
-
 ```sh
-# build:
-# lint:
-# test:
+scripts/run-tests.sh
+# needs shellcheck (brew install shellcheck); if this runner lacks it, say so in the PR body, since CI runs it
+shellcheck --severity=warning scripts/*.sh .claude/hooks/*.sh
 ```
+
+`.github/workflows/template-self-test.yml` runs the same two commands.
+
+## Testing notes
+
+- Every script has a `scripts/test-<name>.sh`: plain bash, fakes for `gh` and
+  `claude` on `PATH`, throwaway repos under `mktemp -d`. No network.
+- Scripts must run on macOS's bash 3.2: no `mapfile`, no associative arrays, and
+  guard empty arrays under `set -u` (`${a[@]+"${a[@]}"}`).
+- A new test script is picked up by `run-tests.sh` automatically if it is named
+  `test-*.sh`.
+
+## Definition of done
+
+- **User-facing change:** the README says so, in the capability table, the
+  getting-started steps, the sync table, or the file list, whichever applies.
+- **New or renamed file that repos should get:** it is in the right list in
+  `scripts/sync-guardrails.sh` (MANAGED or SEEDED), with a check in
+  `scripts/test-sync-guardrails.sh`.
+- **Changed a seeded file:** existing repos keep their old copy. If they need the
+  change, say how to apply it in the PR body.
+
+## Scope map
+
+- What repos receive: the MANAGED and SEEDED lists in `scripts/sync-guardrails.sh`,
+  and everything at the repo root (what "Use this template" copies).
+- What the loop reads from a repo's `CLAUDE.md`: the contract table in
+  `.claude/commands/work-next-item.md`.
+- Labels: `docs/ISSUE_GUIDE.md` and `scripts/seed-labels.sh`, kept equal by
+  `scripts/test-labels.sh`.
 
 ## Specialist reviewers
 
-`/work-next-item` Step 6.5 runs each reviewer whose paths match the branch's changes
-and fixes its CRITICAL/HIGH findings before opening the PR. The agents live in
-`.claude/agents/`, built by `scripts/vendor-agents.sh`; give each one this repo's
-context in `.claude/agent-context/`. Add rows for stack-specific reviewers; each one
-is an extra agent run per item.
-
 | Changed paths | Agent (`subagent_type`) | Focus |
 |---|---|---|
-| any source or test file | `pr-test-analyzer` | each acceptance criterion has a test that reaches its real failure case |
-| any source file | `silent-failure-hunter` | swallowed errors and fallbacks that hide failure |
-
-<!-- Optional sections read by /work-next-item. Delete any you don't need.
-
-## Testing notes
-How tests run here: frameworks, fixtures, what to mock and what must be real (for
-example, a real database for anything that depends on constraints).
-
-## Definition of done
-Checks beyond Verify that a green build can't prove (deploy wiring, infra, docs).
-docs/BACKLOG.md shows the pattern: turn each one into a test where you can.
-
-## Scope map
-Where to enumerate the real affected surface: route tables, handler dirs, page
-registries, and what each scope label means.
--->
+| any script or test | `pr-test-analyzer` | each acceptance criterion has a test that reaches its real failure case |
+| any script or hook | `silent-failure-hunter` | swallowed errors and fallbacks that hide failure |
 
 ## GitHub flow guardrails
 
 - Claude works on feature branches named `<type>/<issue>-<slug>`, one issue per
   branch and one branch per PR, and opens PRs with `Closes #N`, assigned to the maintainer.
-- **Claude never merges and never pushes to `main`.** Merge is the maintainer's step. The
-  committed `.claude/settings.json` denies merges, `main`/force/tag pushes, and the
-  GitHub MCP file-write tools, so cloud sessions enforce this too.
-- Those deny rules match command text, so they are a filter, not a wall. The hard
-  block is a GitHub ruleset on `main` that only the maintainer can bypass.
+- **Claude never merges and never pushes to `main`.** Merge is the maintainer's step.
+  The `protect-main` ruleset enforces this on GitHub.
 - After `gh pr create`, the PR review hooks open a `/code-review` loop and hold the
-  turn open until it passes. Run `gh pr create` without capturing its stdout, or
-  the hook cannot see the PR URL.
+  turn open until it passes. Run `gh pr create` without capturing its stdout.
 - Issue structure and labels: [`docs/ISSUE_GUIDE.md`](docs/ISSUE_GUIDE.md).

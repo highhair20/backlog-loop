@@ -24,6 +24,20 @@ expect "ignores commands in a later section" 1 $'## Verify\n```sh\n# test:\n```\
 expect "treats ## inside a code block as a comment" 0 $'## Verify\n```sh\n## unit tests\ngo test ./...\n```\n'
 expect "does not match ## Verify as a prefix" 1 $'## Verifying things\n```sh\nmake\n```\n'
 
+# The template repo's own CLAUDE.md carries a marker. In a repo created from the
+# template it is the wrong file: its Verify runs the template's tests, not yours.
+own_md() { # own_md <dir> <origin-url>: a git repo holding the template's own CLAUDE.md
+  mkdir -p "$1" && git -C "$1" init -q -b main && git -C "$1" remote add origin "$2"
+  printf '<!-- claude-code-repo-template: own instructions -->\n# x\n\n## Verify\n\n```sh\nmake test\n```\n' >"$1/CLAUDE.md"
+}
+own_md "$WORK/copy" https://github.com/acme/my-app.git
+out="$("$CHECK" "$WORK/copy/CLAUDE.md" 2>&1)"; rc=$?
+if [ $rc -ne 0 ] && printf '%s' "$out" | grep -q 'setup.sh --fix'; then echo "ok   rejects the template's own CLAUDE.md in another repo"; else echo "FAIL rejects the template's own CLAUDE.md in another repo" >&2; failures=$((failures + 1)); fi
+
+own_md "$WORK/tmpl" git@github.com:highhair20/claude-code-repo-template.git
+"$CHECK" "$WORK/tmpl/CLAUDE.md" >/dev/null 2>&1
+if [ $? -eq 0 ]; then echo "ok   accepts it in the template repo itself"; else echo "FAIL accepts it in the template repo itself" >&2; failures=$((failures + 1)); fi
+
 "$CHECK" "$WORK/missing.md" >/dev/null 2>&1
 if [ $? -ne 0 ]; then echo "ok   rejects a missing file"; else echo "FAIL rejects a missing file" >&2; failures=$((failures + 1)); fi
 
