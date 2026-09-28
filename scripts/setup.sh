@@ -128,7 +128,8 @@ check_template_version() {
   have="$(head -1 .claude/template-version)"
   have="${have%-dirty}"
   # The HEAD pattern also matches refs like refs/remotes/origin/HEAD; take the exact one.
-  latest="$(git ls-remote "$TEMPLATE_REPO" HEAD 2>/dev/null | awk '$2 == "HEAD" { print $1; exit }')"
+  # GIT_TERMINAL_PROMPT=0: a private or mistyped URL must fail, not wait for a password.
+  latest="$(GIT_TERMINAL_PROMPT=0 git ls-remote "$TEMPLATE_REPO" HEAD 2>/dev/null | awk '$2 == "HEAD" { print $1; exit }')"
   if [ -z "$latest" ]; then
     warn "could not reach $TEMPLATE_REPO to compare versions"
   elif [ "$have" = "$latest" ]; then
@@ -185,13 +186,18 @@ check_labels() {
 
 check_ruleset() {
   echo "Branch protection"
-  local names
-  if ! names="$(gh api "repos/$repo/rulesets?includes_parents=false" 2>/dev/null | jq -r '.[].name')"; then
+  local enforcement
+  # A disabled or evaluate-only ruleset blocks nothing, so read its enforcement too.
+  if ! enforcement="$(gh api "repos/$repo/rulesets?includes_parents=false" --paginate 2>/dev/null \
+      | jq -r --arg name "$RULESET_NAME" '.[] | select(.name == $name) | .enforcement' | head -1)"; then
     warn "could not read the rulesets on $repo (needs admin; private repos need a paid plan)"
     return
   fi
-  if printf '%s\n' "$names" | grep -qxF "$RULESET_NAME"; then
-    ok "ruleset $RULESET_NAME exists"
+  if [ "$enforcement" = active ]; then
+    ok "ruleset $RULESET_NAME is active"
+  elif [ -n "$enforcement" ]; then
+    bad "ruleset $RULESET_NAME exists but is $enforcement, so it blocks nothing" \
+      "set it to Active in Settings → Rules → Rulesets, or re-run scripts/protect-main.sh"
   else
     bad "no $RULESET_NAME ruleset, so nothing on GitHub's side stops a push to main" \
       "scripts/protect-main.sh $repo <ci-job-name>...  (job names as they appear on a PR)"

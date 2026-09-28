@@ -47,7 +47,7 @@ configured_repo() {
   printf '# acme — Project Instructions\n\n## Verify\n\n```sh\nmake lint\nmake test\n```\n' >"$dir/CLAUDE.md"
   printf 'jobs:\n  verify:\n    steps:\n      - run: make lint\n      - run: make test\n' >"$dir/.github/workflows/ci.yml"
   printf '%s\n' "$ALL_LABELS" >"$dir/.fake/labels"
-  echo '[{"id": 1, "name": "protect-main"}]' >"$dir/.fake/rulesets"
+  echo '[{"id": 1, "name": "protect-main", "enforcement": "active"}]' >"$dir/.fake/rulesets"
   cp "$dir/.claude/settings.local.json.example" "$dir/.claude/settings.local.json"
   echo "$TEMPLATE_HEAD" >"$dir/.claude/template-version"
   echo "$dir"
@@ -94,6 +94,11 @@ S="$(configured_repo stale)"
 echo 0000000000000000000000000000000000000000 >"$S/.claude/template-version"
 run "$S"; rc=$?
 check "a stale template stamp is a warning" "[ $rc -eq 0 ] && grep -q 'the template is now at' '$S/.fake/out'"
+
+R="$(configured_repo disabled)"
+echo '[{"id": 1, "name": "protect-main", "enforcement": "disabled"}]' >"$R/.fake/rulesets"
+run "$R"; rc=$?
+check "a ruleset that is not enforced fails" "[ $rc -eq 1 ] && grep -q 'protect-main exists but is disabled' '$R/.fake/out'"
 
 run "$C" --bogus; rc=$?
 check "rejects an unknown argument" "[ $rc -eq 2 ]"
