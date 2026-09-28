@@ -17,10 +17,11 @@ TEMPLATE_HEAD="$(git -C "$ROOT" rev-parse HEAD)"
 # and CI, no labels, no ruleset. State the fake gh serves lives in $dir/.fake.
 fresh_repo() {
   local dir="$WORK/$1"
-  mkdir -p "$dir/scripts" "$dir/.claude" "$dir/.github/workflows" "$dir/.fake/bin"
+  mkdir -p "$dir/scripts" "$dir/.claude" "$dir/.github/workflows" "$dir/.fake/bin" "$dir/templates"
   git -C "$dir" init -q -b main
   cp "$ROOT"/scripts/{setup,check-verify-section,seed-labels,protect-main}.sh "$dir/scripts/"
-  cp "$ROOT/CLAUDE.md" "$dir/"
+  cp "$ROOT/templates/CLAUDE.md" "$dir/templates/"
+  cp "$ROOT/templates/CLAUDE.md" "$dir/"
   cp "$ROOT/.github/workflows/ci.yml" "$dir/.github/workflows/"
   cp "$ROOT/.claude/settings.local.json.example" "$dir/.claude/"
   : >"$dir/.fake/labels"
@@ -99,6 +100,15 @@ R="$(configured_repo disabled)"
 echo '[{"id": 1, "name": "protect-main", "enforcement": "disabled"}]' >"$R/.fake/rulesets"
 run "$R"; rc=$?
 check "a ruleset that is not enforced fails" "[ $rc -eq 1 ] && grep -q 'protect-main exists but is disabled' '$R/.fake/out'"
+
+# A repo made with "Use this template" starts with the template's own CLAUDE.md.
+O="$(fresh_repo owncopy)"
+cp "$ROOT/CLAUDE.md" "$O/CLAUDE.md"
+run "$O"; rc=$?
+check "flags the template's own CLAUDE.md" "[ $rc -eq 1 ] && grep -q \"template's own\" '$O/.fake/out'"
+check "does not replace it without --fix" "cmp -s '$ROOT/CLAUDE.md' '$O/CLAUDE.md'"
+run "$O" --fix
+check "--fix swaps in the project skeleton" "cmp -s '$ROOT/templates/CLAUDE.md' '$O/CLAUDE.md'"
 
 run "$C" --bogus; rc=$?
 check "rejects an unknown argument" "[ $rc -eq 2 ]"

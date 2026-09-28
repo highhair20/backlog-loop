@@ -16,6 +16,13 @@ TEMPLATE_REPO="${TEMPLATE_REPO:-https://github.com/highhair20/claude-code-repo-t
 RULESET_NAME=protect-main
 CI_PLACEHOLDER='Verify (not configured)'
 LOCAL_SETTINGS=.claude/settings.local.json
+SKELETON=templates/CLAUDE.md
+# Same test as check-verify-section.sh. The template repo's own CLAUDE.md starts
+# with this marker. In any other repo it is the wrong file: its Verify would make
+# the template's tests this repo's definition of green. The repo is recognised by
+# its origin's name, as CI does.
+TEMPLATE_MARKER='claude-code-repo-template: own instructions'
+TEMPLATE_ORIGIN_RE='[/:]claude-code-repo-template(\.git)?/?$'
 
 fix=0
 case "${1:-}" in
@@ -45,6 +52,11 @@ verify_commands() {
   ' CLAUDE.md
 }
 
+is_template_own_claude_md() {
+  grep -qF "$TEMPLATE_MARKER" CLAUDE.md || return 1
+  ! git remote get-url origin 2>/dev/null | grep -qE "$TEMPLATE_ORIGIN_RE"
+}
+
 # Label names from seed-labels.sh, the script that creates them.
 required_labels() { sed -nE 's/^[[:space:]]*"([^|"]+)\|.*/\1/p' scripts/seed-labels.sh; }
 
@@ -66,6 +78,18 @@ check_claude_md() {
   if [ ! -f CLAUDE.md ]; then
     bad "CLAUDE.md is missing" "copy it from the template and fill it in"
     return
+  fi
+  if is_template_own_claude_md; then
+    if [ ! -f "$SKELETON" ]; then
+      bad "CLAUDE.md is the template's own instructions, not this project's" "copy templates/CLAUDE.md from claude-code-repo-template over it"
+      return
+    fi
+    if [ "$fix" -ne 1 ]; then
+      bad "CLAUDE.md is the template's own instructions, not this project's" "scripts/setup.sh --fix  (copies $SKELETON over it)"
+      return
+    fi
+    cp "$SKELETON" CLAUDE.md
+    ok "replaced the template's own CLAUDE.md with the project skeleton from $SKELETON"
   fi
   if grep -q '^# <project>' CLAUDE.md; then
     warn "the title is still the <project> placeholder" "put your project's name on the first line of CLAUDE.md"
