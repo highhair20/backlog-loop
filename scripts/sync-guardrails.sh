@@ -26,6 +26,8 @@ MANAGED=(
   .claude/commands/work-next-item.md
   scripts/backlog-loop.sh
   scripts/check-verify-section.sh
+  scripts/protect-main.sh
+  .claude/settings.local.json.example
 )
 SEEDED=(
   CLAUDE.md
@@ -36,6 +38,7 @@ SEEDED=(
   .github/ISSUE_TEMPLATE/config.yml
 )
 SETTINGS=.claude/settings.json
+VERSION_FILE=.claude/template-version
 
 die() { echo "sync-guardrails: $*" >&2; exit 1; }
 
@@ -111,7 +114,14 @@ main() {
     grep -qxF -- "$line" "$target/.gitignore" || printf '%s\n' "$line" >>"$target/.gitignore"
   done <"$TEMPLATE/.gitignore"
 
-  echo "Synced from claude-code-repo-template @ $(git -C "$TEMPLATE" rev-parse --short HEAD)."
+  # Record which template commit this repo now matches, so drift is visible later
+  # (in git history, and to any tool comparing it with the template's HEAD).
+  local version
+  version="$(git -C "$TEMPLATE" rev-parse HEAD)"
+  [ -z "$(git -C "$TEMPLATE" status --porcelain)" ] || version="$version-dirty"
+  printf '%s\n' "$version" >"$target/$VERSION_FILE"
+
+  echo "Synced from claude-code-repo-template @ $version."
   git -C "$target" status --short
   echo "Review with: git diff  (in $target), then commit on a branch."
 }

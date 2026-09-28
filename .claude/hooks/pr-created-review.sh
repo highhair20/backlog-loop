@@ -34,6 +34,31 @@ set -uo pipefail
 
 input=$(cat)
 
+# Cloud sessions have no gh CLI and create PRs with the GitHub MCP tool instead,
+# so that tool is the second way in (the settings.json matcher routes it here).
+# Its result is structured, so read the PR's own URL field rather than scanning
+# text: `url`/`html_url` of the created PR, possibly inside a text block holding
+# JSON. Only a github.com/<o>/<r>/pull/<n> URL qualifies, which rules out the REST
+# API's .../pulls/<n> `url`, and only top-level fields count, so a PR merely
+# linked from the new PR's body cannot be mistaken for it.
+url_from_mcp() {
+  printf '%s' "$input" | jq -r '
+    def top_urls: objects | (.html_url?, .url?) | strings;
+    [ .tool_response
+      | (top_urls,
+         (arrays | .[] | top_urls),
+         (.. | strings | fromjson? | (top_urls, (arrays | .[] | top_urls)))) ]
+    | map(select(test("^https://github\\.com/[^/]+/[^/]+/pull/[0-9]+$")))
+    | first // empty' 2>/dev/null
+}
+
+tool=$(printf '%s' "$input" | jq -r '.tool_name // empty' 2>/dev/null) || exit 0
+
+if [ "$tool" = mcp__github__create_pull_request ]; then
+  url=$(url_from_mcp)
+  [ -n "$url" ] || exit 0
+else
+
 command=$(printf '%s' "$input" | jq -r '.tool_input.command // empty' 2>/dev/null) || exit 0
 printf '%s' "$command" | grep -qE 'gh[[:space:]]+pr[[:space:]]+create([[:space:]]|$)' || exit 0
 
@@ -56,6 +81,8 @@ url=$(printf '%s' "$out" \
   | grep -E '^[[:space:]]*https://[^[:space:]]+/pull/[0-9]+[[:space:]]*$' \
   | head -1 | tr -d '[:space:]')
 [ -n "$url" ] || exit 0
+
+fi
 
 pr=${url##*/}
 session=$(printf '%s' "$input" | jq -r '.session_id // empty' 2>/dev/null)
@@ -93,7 +120,9 @@ jq -n --arg url "$url" --arg pr "$pr" --arg helper "$here/pr-review-state.sh" '{
       "A review loop is now open for PR \($pr). The Stop hook will not let this " +
       "turn end until the loop closes, so work it rather than deferring it.\n\n" +
       "Each round:\n" +
-      "1. Start the review with `/code-review \($pr)`, then IMMEDIATELY run:\n" +
+      "1. Start the review with `/code-review \($url)` (the URL, not the bare " +
+      "number, which would name a PR in whatever repo the session is in), then " +
+      "IMMEDIATELY run:\n" +
       "     \($helper) reviewing \($pr)\n" +
       "   The review is a background agent that takes several minutes, and it can " +
       "only report back if the turn is allowed to end. This tells the gate to go " +

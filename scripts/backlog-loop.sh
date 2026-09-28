@@ -25,7 +25,7 @@
 set -uo pipefail
 
 # Move to the repo root (parent of this script's directory).
-cd "$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)" || exit 1
+cd "$(CDPATH='' cd -- "$(dirname -- "$0")/.." && pwd)" || exit 1
 
 MAX_ITEMS="${MAX_ITEMS:-25}"
 PACE_SECONDS="${PACE_SECONDS:-5}"
@@ -36,6 +36,13 @@ LOG_DIR="${LOG_DIR:-.loop-logs}"
 # /work-next-item stops at once without a Verify section; fail here instead of
 # spending MAX_ITEMS invocations discovering that one at a time.
 scripts/check-verify-section.sh CLAUDE.md || exit 1
+
+# A missing tool would otherwise look like a usage limit: run_item fails, and the
+# driver backs off for MAX_RETRIES rounds before giving up.
+for tool in claude gh; do
+  command -v "$tool" >/dev/null || { echo "✗ $tool not found on PATH. Install it, then re-run." >&2; exit 1; }
+done
+gh auth status >/dev/null 2>&1 || { echo "✗ gh is not authenticated. Run: gh auth login" >&2; exit 1; }
 
 mkdir -p "$LOG_DIR"
 

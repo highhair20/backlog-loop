@@ -48,5 +48,17 @@ printf '## Verify\n```sh\n# test:\n```\n' >"$N/CLAUDE.md"
 run "$N"; rc=$?
 check "refuses to start without Verify commands" "[ $rc -ne 0 ] && [ ! -s '$N/calls' ]"
 
+# Preflight: a missing tool or a logged-out gh fails fast instead of backing off.
+C="$(setup noclaude progress)"
+rm "$C/bin/claude"
+PATH="$C/bin:/usr/bin:/bin" PACE_SECONDS=0 BACKOFF_SECONDS=60 LOG_DIR="$WORK/logs-noclaude" \
+  "$C/scripts/backlog-loop.sh" >"$C/out" 2>&1; rc=$?
+check "refuses to start without claude on PATH" "[ $rc -ne 0 ] && grep -q 'claude not found' '$C/out'"
+
+A="$(setup noauth progress)"
+printf '#!/usr/bin/env bash\n[ "$1" = auth ] && exit 1\ncat "%s/count"\n' "$A" >"$A/bin/gh"
+run "$A"; rc=$?
+check "refuses to start when gh is not authenticated" "[ $rc -ne 0 ] && [ ! -s '$A/calls' ] && grep -q 'gh auth login' '$A/out'"
+
 echo
 if [ "$failures" -eq 0 ]; then echo "all tests passed"; else echo "$failures test(s) failed" >&2; exit 1; fi

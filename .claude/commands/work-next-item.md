@@ -55,6 +55,34 @@ This command is shared across repos; everything repo-specific lives in the repo'
 "CLAUDE.md has no Verify section — the loop has no definition of green." Never guess
 the build or test commands.
 
+## GitHub access: `gh` locally, the GitHub MCP tools in the cloud
+
+The GitHub steps below are written as `gh` commands. Cloud sessions (scheduled
+routines) have **no `gh` CLI**; they reach GitHub through `mcp__github__*` tools
+instead. Decide once, before Step 0:
+
+```bash
+command -v gh && gh auth status
+```
+
+If that succeeds, run the `gh` commands as written. Otherwise do each GitHub
+operation with the MCP tool in this table. Git itself (fetch, branch, commit, push)
+works the same in both; take `owner`/`repo` from `git remote get-url origin`.
+
+| Operation (as written below) | GitHub MCP equivalent |
+|---|---|
+| `gh issue list --label X …` | `mcp__github__list_issues` with state `OPEN` and labels `[X]`; page until a short page, since one call returns a single page |
+| `gh issue view N` | `mcp__github__issue_read` (get) |
+| `gh issue edit N --add-label A --remove-label R` | `mcp__github__issue_read` for the current labels, then `mcp__github__issue_write` (update) with the **complete** new set — current minus R plus A. The `labels` field **replaces** the whole set; passing only `[A]` silently deletes the priority and type labels. |
+| `gh issue edit N --body …` / close | `mcp__github__issue_write` (update) with `body` / `state: closed` |
+| `gh issue comment N --body …` | `mcp__github__add_issue_comment` |
+| `gh pr list --state open …` | `mcp__github__list_pull_requests` with state `open` |
+| `gh pr create --assignee @me …` | `mcp__github__create_pull_request` (base `main`, head = the branch), then `mcp__github__issue_write` (update) on **the PR's number** with `assignees: [<your login>]` from `mcp__github__get_me` — the create tool cannot assign, and a PR is an issue for this purpose |
+
+Never use the MCP tools that merge, enable auto-merge, or write files or branches
+through the API (`merge_pull_request`, `push_files`, `create_or_update_file`, …); the
+committed settings deny them, and the guardrails above forbid what they do.
+
 ## Step 0 — Recover any interrupted iteration
 
 A prior run may have died (context/usage limit, closed session) after claiming an

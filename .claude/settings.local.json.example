@@ -1,0 +1,32 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(command -v gh)",
+      "Bash(gh auth status*)",
+      "Bash(gh issue list *)",
+      "Bash(gh issue view *)",
+      "Bash(gh issue edit *)",
+      "Bash(gh issue comment *)",
+      "Bash(gh pr list *)",
+      "Bash(gh pr view *)",
+      "Bash(gh pr create *)",
+      "Bash(git fetch *)",
+      "Bash(git switch *)",
+      "Bash(git pull *)",
+      "Bash(git status *)",
+      "Bash(git branch *)",
+      "Bash(git ls-remote *)",
+      "Bash(git log *)",
+      "Bash(git diff *)",
+      "Bash(git add *)",
+      "Bash(git commit *)",
+      "Bash(git stash *)",
+      "Bash(git push -u origin *)",
+      "Bash(git push origin *)",
+      "Bash(scripts/check-verify-section.sh *)",
+      "Bash(*/.claude/hooks/pr-review-state.sh *)",
+      "Bash(.claude/hooks/pr-review-state.sh *)",
+      "Bash(git remote get-url *)"
+    ]
+  }
+}

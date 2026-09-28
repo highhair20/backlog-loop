@@ -47,8 +47,10 @@ check "does not duplicate a shared deny rule" "[ \"\$(jq '[.permissions.deny[] |
 check "keeps the target's own Stop hook" "jq -e '[.hooks.Stop[].hooks[].command] | index(\"echo local-stop\")' '$T/.claude/settings.json' >/dev/null"
 check "adds the review gate Stop hook" "jq -e '[.hooks.Stop[].hooks[].command] | any(test(\"pr-review-gate.sh\"))' '$T/.claude/settings.json' >/dev/null"
 check "adds the PR-created PostToolUse hook" "jq -e '[.hooks.PostToolUse[].hooks[].command] | any(test(\"pr-created-review.sh\"))' '$T/.claude/settings.json' >/dev/null"
+check "routes MCP PR creation to the review hook" "jq -e '[.hooks.PostToolUse[] | select(.hooks[].command | test(\"pr-created-review.sh\")) | .matcher] | any(test(\"mcp__github__create_pull_request\"))' '$T/.claude/settings.json' >/dev/null"
 check "appends only missing .gitignore lines" "[ \"\$(grep -cx '.claude/state/' '$T/.gitignore')\" = 1 ] && grep -qx '.claude/settings.local.json' '$T/.gitignore'"
 check "ignores the backlog-loop log directory" "grep -qx '.loop-logs/' '$T/.gitignore'"
+check "stamps the template commit it synced from" "grep -qE \"^\$(git -C '$HERE' rev-parse HEAD)(-dirty)?\$\" '$T/.claude/template-version'"
 
 # --- idempotency: a second sync after committing changes nothing ---
 git -C "$T" add -A
@@ -61,6 +63,7 @@ echo "# local edit" >>"$T/.claude/hooks/pr-review-gate.sh"
 git -C "$T" -c user.name=t -c user.email=t@t commit -qam drift
 "$SYNC" "$T" >/dev/null 2>&1
 check "copies the generic loop command and driver" "[ -f '$T/.claude/commands/work-next-item.md' ] && [ -x '$T/scripts/backlog-loop.sh' ] && [ -x '$T/scripts/check-verify-section.sh' ]"
+check "copies protect-main.sh and the allowlist example" "[ -x '$T/scripts/protect-main.sh' ] && [ -f '$T/.claude/settings.local.json.example' ]"
 check "does not make the command file executable" "[ ! -x '$T/.claude/commands/work-next-item.md' ]"
 check "overwrites a drifted managed hook" "! grep -q '# local edit' '$T/.claude/hooks/pr-review-gate.sh'"
 
