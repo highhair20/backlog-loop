@@ -5,9 +5,12 @@ loop, so each one must be a **self-contained work item**: a fresh contributor â€
 or an agent with no prior context â€” should be able to pick it up cold and finish
 it without asking questions.
 
-GitHub offers two templates when you open a new issue (**Feature** / **Bug**),
-defined in [`.github/ISSUE_TEMPLATE/`](../.github/ISSUE_TEMPLATE). When creating
-issues via `gh`, follow the same structure below.
+GitHub offers two issue forms when you open a new issue (**Feature** / **Bug**),
+defined in [`.github/ISSUE_TEMPLATE/`](../.github/ISSUE_TEMPLATE). The forms make
+Context, Goal, Acceptance criteria, and Testing required, and each section becomes
+a `### <Section>` heading in the issue body. They cannot set a priority label, so
+add one after creating the issue. When creating issues via `gh` or the API, write
+the body with the same headings.
 
 ## Principles
 

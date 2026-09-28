@@ -21,7 +21,10 @@ jobs:
     if: github.event.repository.name != 'claude-code-repo-template'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      # Pin every action to a commit SHA: a tag can be moved to other code, a SHA
+      # cannot. Dependabot (.github/dependabot.yml) updates the SHA and the
+      # version comment together.
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
       # Fails on purpose until replaced. A placeholder that passes would give a
       # new repo a green check that tests nothing. Replace this step with the

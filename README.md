@@ -27,8 +27,9 @@ beyond the tools you already use.
 | **Autonomous backlog loop** | `/work-next-item` takes the highest-priority open issue, checks that the issue's diagnosis matches the code, derives the full scope from the code rather than the issue text, implements it test-first, runs your verify commands, and opens a PR assigned to you. One issue, one branch, one PR — never merged. |
 | **Cold-context driver** | `scripts/backlog-loop.sh` runs one issue per fresh `claude -p` session, so a long backlog never exhausts a context window. All state lives in git and issue labels, so it is safe to stop and resume at any time. |
 | **PR review loop** | Hooks that start a `/code-review` when a PR is opened and keep the session from ending until the review's critical and high findings are resolved — with a round cap and timeouts so it cannot run forever. |
-| **Issue conventions** | Feature and bug templates and a guide (`docs/ISSUE_GUIDE.md`) that make each issue a self-contained work item an agent can pick up cold, plus a script that creates the priority and status labels the loop uses. |
-| **CI skeleton** | A workflow that runs on branches and PRs with read-only permissions, and fails until you configure it — so a new repo never shows a green check that tests nothing. |
+| **Issue conventions** | Feature and bug issue forms (the key sections are required fields) and a guide (`docs/ISSUE_GUIDE.md`) that make each issue a self-contained work item an agent can pick up cold, plus a script that creates the priority and status labels the loop uses. |
+| **CI skeleton** | A workflow that runs on branches and PRs with read-only permissions, and fails until you configure it — so a new repo never shows a green check that tests nothing. Actions are pinned to commit SHAs, and Dependabot keeps the pins current. |
+| **Repo defaults** | A PR template for PRs opened by hand, and an `.editorconfig` with LF endings, final newlines, and tabs where a format requires them. |
 | **Sync for existing repos** | `scripts/sync-guardrails.sh` brings any existing repository up to date with this template without overwriting the parts you have customised. |
 
 ## How it works
@@ -115,7 +116,7 @@ It treats files three ways, so re-running it later is safe:
 | Kind | Files | On every sync |
 |---|---|---|
 | **Managed** | review hooks, `work-next-item.md`, `backlog-loop.sh`, `check-verify-section.sh`, `protect-main.sh`, `seed-labels.sh`, `setup.sh`, `settings.local.json.example` | Overwritten. These hold no project-specific content; put customisation in `CLAUDE.md`. |
-| **Seeded** | `CLAUDE.md`, CI workflow, issue templates, `docs/ISSUE_GUIDE.md` | Copied only if missing. Yours to edit. The placeholder CI is added only to a repo with no workflows. |
+| **Seeded** | `CLAUDE.md`, CI workflow, issue forms, PR template, `dependabot.yml`, `docs/ISSUE_GUIDE.md` | Copied only if missing. Yours to edit. Nothing is added beside an equivalent you already have: the placeholder CI only goes into a repo with no workflows, the issue forms only into one with no issue templates of its own, the PR template only if GitHub finds none anywhere, and `dependabot.yml` not beside a `dependabot.yaml`. `.editorconfig` is never synced; its indent defaults could change how editors treat existing code. |
 | **Merged** | `.claude/settings.json`, `.gitignore` | The template's deny rules, hooks, and ignore lines are added; yours are kept. |
 
 Each sync also writes `.claude/template-version`: the template commit your repo now
@@ -195,7 +196,9 @@ The guardrails are layered, from softest to hardest:
   commands/work-next-item.md the backlog loop command
   hooks/pr-*.sh              PR review loop
 .github/
-  ISSUE_TEMPLATE/            feature and bug templates
+  ISSUE_TEMPLATE/            feature and bug issue forms
+  pull_request_template.md   PR body for PRs opened by hand
+  dependabot.yml             weekly updates for the pinned actions
   workflows/ci.yml           CI skeleton (fails until configured)
   workflows/template-self-test.yml   tests this template's scripts; inert in your repo
 docs/ISSUE_GUIDE.md          how to write issues the loop can work
@@ -208,6 +211,7 @@ scripts/
   protect-main.sh            create the branch ruleset on main
   test-*.sh                  tests for the scripts above
 CLAUDE.md                    skeleton for your project's instructions
+.editorconfig                editor defaults
 ```
 
 ## Contributing

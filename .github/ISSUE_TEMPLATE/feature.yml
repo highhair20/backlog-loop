@@ -1,0 +1,58 @@
+name: Feature
+description: A new feature or enhancement, written as a self-contained work item
+title: "feat: "
+labels: [enhancement]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Write this so a fresh contributor, or an agent running `/work-next-item` with no prior context, can pick it up cold and finish it. See `docs/ISSUE_GUIDE.md`.
+
+        **After you create the issue, add exactly one priority label:** `P0` (do first), `P1` (high), `P2` (medium), or `P3` (nice-to-have). The loop never picks up an issue without one, or one labelled `P3`.
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Context
+      description: Why this is needed and the background required to act on it. Link related issues with #NN. State constraints (stack, infra, external rules).
+    validations:
+      required: true
+
+  - type: textarea
+    id: goal
+    attributes:
+      label: Goal
+      description: "The outcome in 1–2 sentences: what \"done\" looks like from the user's view."
+    validations:
+      required: true
+
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criteria
+      description: Checkable, observable conditions. This is the definition of done.
+      placeholder: |
+        - [ ] An admin can see the list of deleted accounts
+        - [ ] Deleting an account writes an audit entry
+    validations:
+      required: true
+
+  - type: textarea
+    id: implementation
+    attributes:
+      label: Implementation notes
+      description: Proposed approach, key files and endpoints, decisions and trade-offs. Flag any `needs-infra` work; it is written but applied by a human.
+
+  - type: textarea
+    id: out-of-scope
+    attributes:
+      label: Out of scope
+      description: What this issue deliberately does not cover, and alternatives considered and rejected, with the reason.
+
+  - type: textarea
+    id: testing
+    attributes:
+      label: Testing
+      description: Unit and integration tests to add or run, plus manual or E2E steps. Include deploy prerequisites where the behavior only exists after deploy.
+    validations:
+      required: true
