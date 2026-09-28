@@ -70,7 +70,15 @@ gh repo create my-app --private --template highhair20/claude-code-repo-template 
 cd my-app
 ```
 
-Then:
+Then run the setup check. It is read-only, lists what is left to do, and gives the
+command that fixes each item:
+
+```sh
+scripts/setup.sh          # check only
+scripts/setup.sh --fix    # also create the labels and the local allowlist
+```
+
+It exits 0 once nothing is failing, so re-run it until it does. The steps it checks:
 
 1. **Fill in `CLAUDE.md`**, above all the `## Verify` section. Write every command
    to run from the repo root and never `cd`, because the loop may run several in
@@ -78,7 +86,8 @@ Then:
 2. **Configure CI.** Replace the failing placeholder step in
    `.github/workflows/ci.yml` with the same Verify commands, so CI and the loop
    agree on what "green" means.
-3. **Create the labels:** `scripts/seed-labels.sh`. It is safe to re-run.
+3. **Create the labels:** `scripts/seed-labels.sh` (or `setup.sh --fix`). It is
+   safe to re-run.
 4. **Protect `main`:** `scripts/protect-main.sh <owner>/<repo> <ci-job-name>…`.
    It creates a branch ruleset that requires a pull request and the named CI
    checks, and lets admins bypass only by merging a PR. This is the only guardrail
@@ -95,16 +104,17 @@ Clone this template next to your repo and sync it in:
 ```sh
 git clone https://github.com/highhair20/claude-code-repo-template.git
 claude-code-repo-template/scripts/sync-guardrails.sh ./my-app     # my-app must have a clean working tree
-claude-code-repo-template/scripts/seed-labels.sh <owner>/my-app
-my-app/scripts/protect-main.sh <owner>/my-app <ci-job-name>…
+cd my-app && scripts/setup.sh --fix
 ```
+
+`setup.sh` then lists anything still missing, such as the branch ruleset.
 
 The sync never commits. Review `git diff` in your repo, then commit it on a branch.
 It treats files three ways, so re-running it later is safe:
 
 | Kind | Files | On every sync |
 |---|---|---|
-| **Managed** | review hooks, `work-next-item.md`, `backlog-loop.sh`, `check-verify-section.sh`, `protect-main.sh`, `settings.local.json.example` | Overwritten. These hold no project-specific content; put customisation in `CLAUDE.md`. |
+| **Managed** | review hooks, `work-next-item.md`, `backlog-loop.sh`, `check-verify-section.sh`, `protect-main.sh`, `seed-labels.sh`, `setup.sh`, `settings.local.json.example` | Overwritten. These hold no project-specific content; put customisation in `CLAUDE.md`. |
 | **Seeded** | `CLAUDE.md`, CI workflow, issue templates, `docs/ISSUE_GUIDE.md` | Copied only if missing. Yours to edit. The placeholder CI is added only to a repo with no workflows. |
 | **Merged** | `.claude/settings.json`, `.gitignore` | The template's deny rules, hooks, and ignore lines are added; yours are kept. |
 
@@ -193,6 +203,7 @@ scripts/
   backlog-loop.sh            unattended driver
   check-verify-section.sh    refuses to run without Verify commands
   sync-guardrails.sh         update an existing repo from this template
+  setup.sh                   check the repo is ready for the loop; --fix the safe parts
   seed-labels.sh             create the standard labels
   protect-main.sh            create the branch ruleset on main
   test-*.sh                  tests for the scripts above
