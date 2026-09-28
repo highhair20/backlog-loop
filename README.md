@@ -79,10 +79,12 @@ Then:
    `.github/workflows/ci.yml` with the same Verify commands, so CI and the loop
    agree on what "green" means.
 3. **Create the labels:** `scripts/seed-labels.sh`. It is safe to re-run.
-4. **Protect `main`** with a branch ruleset: require a pull request and passing CI,
-   and let only the maintainer bypass it. This is the only guardrail that holds no
-   matter how a command is phrased (see [Limits](#limits)). Rulesets are free on
-   public repositories; private repositories need a paid GitHub plan.
+4. **Protect `main`:** `scripts/protect-main.sh <owner>/<repo> <ci-job-name>…`.
+   It creates a branch ruleset that requires a pull request and the named CI
+   checks, and lets admins bypass only by merging a PR. This is the only guardrail
+   that holds no matter how a command is phrased (see [Limits](#limits)). It is
+   safe to re-run. Rulesets are free on public repositories; private repositories
+   need a paid GitHub plan.
 5. **Allow the loop's commands** if you will run it unattended — see
    [Running the backlog loop](#running-the-backlog-loop).
 
@@ -94,6 +96,7 @@ Clone this template next to your repo and sync it in:
 git clone https://github.com/highhair20/claude-code-repo-template.git
 claude-code-repo-template/scripts/sync-guardrails.sh ./my-app     # my-app must have a clean working tree
 claude-code-repo-template/scripts/seed-labels.sh <owner>/my-app
+my-app/scripts/protect-main.sh <owner>/my-app <ci-job-name>…
 ```
 
 The sync never commits. Review `git diff` in your repo, then commit it on a branch.
@@ -101,7 +104,7 @@ It treats files three ways, so re-running it later is safe:
 
 | Kind | Files | On every sync |
 |---|---|---|
-| **Managed** | review hooks, `work-next-item.md`, `backlog-loop.sh`, `check-verify-section.sh` | Overwritten. These hold no project-specific content; put customisation in `CLAUDE.md`. |
+| **Managed** | review hooks, `work-next-item.md`, `backlog-loop.sh`, `check-verify-section.sh`, `protect-main.sh`, `settings.local.json.example` | Overwritten. These hold no project-specific content; put customisation in `CLAUDE.md`. |
 | **Seeded** | `CLAUDE.md`, CI workflow, issue templates, `docs/ISSUE_GUIDE.md` | Copied only if missing. Yours to edit. The placeholder CI is added only to a repo with no workflows. |
 | **Merged** | `.claude/settings.json`, `.gitignore` | The template's deny rules, hooks, and ignore lines are added; yours are kept. |
 
@@ -117,10 +120,15 @@ Write issues with the templates, give each exactly one priority label (`P0`–`P
 | `scripts/backlog-loop.sh` | Unattended. Each issue gets a fresh `claude -p` session; stops when the backlog is empty, when an item makes no progress, or after `MAX_ITEMS` (default 25). |
 
 **Unattended runs need permissions.** A headless session cannot ask you to approve
-a command, so allow everything the loop runs in `.claude/settings.local.json`:
-your Verify commands, `gh issue list/view/edit/comment`, `gh pr list/create`,
-`git fetch/switch/pull/status/branch/ls-remote/diff/add/commit/stash`, and
-`git push -u origin *`. The committed deny rules still win over any allow rule, so
+a command, so allow everything the loop runs in `.claude/settings.local.json`.
+Start from the example, then add your Verify commands to its `allow` list:
+
+```sh
+cp .claude/settings.local.json.example .claude/settings.local.json
+```
+
+The example covers every `gh` and `git` command `/work-next-item` runs; a test
+keeps the two in step. The committed deny rules still win over any allow rule, so
 merges and pushes to `main` stay blocked. If a command is missing, the first item
 stops early and the driver reports "no progress"; that item's log in `.loop-logs/`
 names the refused command.
@@ -149,7 +157,8 @@ The guardrails are layered, from softest to hardest:
   ruleset in step 4 is the hard block.
 - The deny rules block merging through `gh api`, but not other raw API writes: a
   `gh api -X PUT repos/<owner>/<repo>/contents/<path>` can still write to `main`.
-  The branch ruleset blocks that too.- The push rule for git global options (`git -C <dir> push …`) also denies a few
+  The branch ruleset blocks that too.
+- The push rule for git global options (`git -C <dir> push …`) also denies a few
   non-push commands, such as `git -C . commit -m "fix push flow"`. Commit without
   `-C`.
 - The review hook finds the new PR's URL in `gh pr create`'s output. If you capture
@@ -165,6 +174,7 @@ The guardrails are layered, from softest to hardest:
 ```text
 .claude/
   settings.json              deny rules + hook registration (committed on purpose)
+  settings.local.json.example  allowlist for unattended runs (copy, then add Verify)
   commands/work-next-item.md the backlog loop command
   hooks/pr-*.sh              PR review loop
 .github/
@@ -177,6 +187,7 @@ scripts/
   check-verify-section.sh    refuses to run without Verify commands
   sync-guardrails.sh         update an existing repo from this template
   seed-labels.sh             create the standard labels
+  protect-main.sh            create the branch ruleset on main
   test-*.sh                  tests for the scripts above
 CLAUDE.md                    skeleton for your project's instructions
 ```

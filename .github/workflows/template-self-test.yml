@@ -23,3 +23,9 @@ jobs:
         run: scripts/test-check-verify-section.sh
       - name: Test backlog-loop.sh
         run: scripts/test-backlog-loop.sh
+      - name: Test protect-main.sh
+        run: scripts/test-protect-main.sh
+      - name: Test pr-created-review.sh
+        run: scripts/test-pr-created-review.sh
+      - name: Test settings.local.json.example
+        run: scripts/test-settings-example.sh

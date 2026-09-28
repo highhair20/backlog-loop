@@ -26,6 +26,8 @@ MANAGED=(
   .claude/commands/work-next-item.md
   scripts/backlog-loop.sh
   scripts/check-verify-section.sh
+  scripts/protect-main.sh
+  .claude/settings.local.json.example
 )
 SEEDED=(
   CLAUDE.md
