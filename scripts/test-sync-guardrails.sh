@@ -40,7 +40,8 @@ check "exits 0 on a clean target" "[ \$? -eq 0 ]"
 check "copies review hooks, executable" "[ -x '$T/.claude/hooks/pr-review-gate.sh' ] && [ -x '$T/.claude/hooks/pr-review-state.sh' ] && [ -x '$T/.claude/hooks/pr-created-review.sh' ]"
 check "leaves an existing CLAUDE.md alone" "grep -qx '# Custom CLAUDE.md' '$T/CLAUDE.md'"
 check "seeds a missing ISSUE_GUIDE.md" "[ -f '$T/docs/ISSUE_GUIDE.md' ]"
-check "seeds missing issue templates and CI" "[ -f '$T/.github/ISSUE_TEMPLATE/feature.md' ] && [ -f '$T/.github/workflows/ci.yml' ]"
+check "seeds missing issue forms and CI" "[ -f '$T/.github/ISSUE_TEMPLATE/feature.yml' ] && [ -f '$T/.github/ISSUE_TEMPLATE/bug.yml' ] && [ -f '$T/.github/workflows/ci.yml' ]"
+check "seeds dependabot, editorconfig, and the PR template" "[ -f '$T/.github/dependabot.yml' ] && [ -f '$T/.editorconfig' ] && [ -f '$T/.github/pull_request_template.md' ]"
 check "keeps the target's own deny rule" "jq -e '.permissions.deny | index(\"Bash(git push * v*)\")' '$T/.claude/settings.json' >/dev/null"
 check "adds the template's deny rules" "jq -e '.permissions.deny | index(\"Bash(git -* push*)\")' '$T/.claude/settings.json' >/dev/null"
 check "does not duplicate a shared deny rule" "[ \"\$(jq '[.permissions.deny[] | select(. == \"Bash(gh pr merge:*)\")] | length' '$T/.claude/settings.json')\" = 1 ]"
@@ -103,6 +104,17 @@ git -C "$S" -c user.name=t -c user.email=t@t commit -qam stale
 check "registers the review gate exactly once" "[ \"\$(jq '[.hooks.Stop[].hooks[].command | select(test(\"pr-review-gate.sh\"))] | length' '$S/.claude/settings.json')\" = 1 ]"
 check "drops the stale registration" "! grep -q -- '--old' '$S/.claude/settings.json'"
 check "keeps unrelated hooks when replacing" "jq -e '[.hooks.Stop[].hooks[].command] | index(\"echo local-stop\")' '$S/.claude/settings.json' >/dev/null"
+
+# --- a file the repo has under another extension is not seeded beside it ---
+E="$(new_target equivalents)"
+mkdir -p "$E/.github/ISSUE_TEMPLATE"
+echo "# old-style template" >"$E/.github/ISSUE_TEMPLATE/feature.md"
+echo "version: 2" >"$E/.github/dependabot.yaml"
+git -C "$E" add -A && git -C "$E" -c user.name=t -c user.email=t@t commit -qm equivalents
+"$SYNC" "$E" >/dev/null 2>&1
+check "does not seed feature.yml beside an existing feature.md" "[ ! -e '$E/.github/ISSUE_TEMPLATE/feature.yml' ]"
+check "does not seed dependabot.yml beside an existing dependabot.yaml" "[ ! -e '$E/.github/dependabot.yml' ]"
+check "still seeds a form the repo lacks" "[ -f '$E/.github/ISSUE_TEMPLATE/bug.yml' ]"
 
 # --- placeholder CI is not added next to an existing workflow ---
 W="$(new_target hasci)"

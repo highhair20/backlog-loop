@@ -1,0 +1,77 @@
+name: Bug
+description: Something isn't working
+title: "fix: "
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Write this so it can be picked up cold. See `docs/ISSUE_GUIDE.md`.
+
+        **After you create the issue, add exactly one priority label:** `P0` (do first), `P1` (high), `P2` (medium), or `P3` (nice-to-have). The loop never picks up an issue without one, or one labelled `P3`.
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Context
+      description: What's broken, where, and since when. Environment, affected component, and any error output or logs. Link related issues.
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1.
+        2.
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected-actual
+    attributes:
+      label: Expected vs actual
+      placeholder: |
+        Expected:
+        Actual:
+    validations:
+      required: true
+
+  - type: textarea
+    id: goal
+    attributes:
+      label: Goal
+      description: The corrected behavior in 1–2 sentences.
+    validations:
+      required: true
+
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criteria
+      description: Checkable, observable conditions. This is the definition of done.
+      placeholder: |
+        - [ ] The export includes rows created after midnight UTC
+    validations:
+      required: true
+
+  - type: textarea
+    id: implementation
+    attributes:
+      label: Implementation notes
+      description: Suspected cause, relevant files, anything already ruled out.
+
+  - type: textarea
+    id: out-of-scope
+    attributes:
+      label: Out of scope
+      description: Related problems this issue does not fix.
+
+  - type: textarea
+    id: testing
+    attributes:
+      label: Testing
+      description: The regression test to add so it cannot recur, plus manual verification. Include deploy prerequisites where relevant.
+    validations:
+      required: true

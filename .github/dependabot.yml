@@ -1,0 +1,19 @@
+# Dependabot opens PRs that update dependencies. They wait for your merge like any
+# other PR; the backlog loop works issues, not PRs, so it never touches them.
+# Add a block for each package ecosystem this repo uses.
+version: 2
+updates:
+  # Keeps the SHA-pinned actions in .github/workflows current: it updates the
+  # SHA and its "# vX.Y.Z" comment together, grouped into one weekly PR.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      actions:
+        patterns: ["*"]
+
+  # - package-ecosystem: npm        # or pip, gomod, cargo, docker, ...
+  #   directory: /                  # where the manifest lives
+  #   schedule:
+  #     interval: weekly

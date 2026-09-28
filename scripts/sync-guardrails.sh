@@ -35,9 +35,12 @@ SEEDED=(
   CLAUDE.md
   docs/ISSUE_GUIDE.md
   .github/workflows/ci.yml
-  .github/ISSUE_TEMPLATE/bug.md
-  .github/ISSUE_TEMPLATE/feature.md
+  .github/ISSUE_TEMPLATE/bug.yml
+  .github/ISSUE_TEMPLATE/feature.yml
   .github/ISSUE_TEMPLATE/config.yml
+  .github/pull_request_template.md
+  .github/dependabot.yml
+  .editorconfig
 )
 SETTINGS=.claude/settings.json
 VERSION_FILE=.claude/template-version
@@ -68,6 +71,21 @@ merge_settings() {
   ' "$1" "$2"
 }
 
+# True if the target already has seeded file $2, or the same file under another
+# extension: issue templates predate forms (.md vs .yml), and GitHub reads both
+# .yml and .yaml. Seeding beside one would give GitHub two of the same thing.
+has_equivalent() {
+  local target="$1" f="$2" ext
+  case "$f" in
+    *.md|*.yml|*.yaml)
+      for ext in md yml yaml; do
+        [ -e "$target/${f%.*}.$ext" ] && return 0
+      done
+      return 1 ;;
+    *) [ -e "$target/$f" ] ;;
+  esac
+}
+
 main() {
   [ $# -eq 1 ] || die "usage: $0 <target-repo-dir>"
   command -v jq >/dev/null || die "jq not found"
@@ -85,7 +103,7 @@ main() {
   done
 
   for f in "${SEEDED[@]}"; do
-    [ -e "$target/$f" ] && continue
+    has_equivalent "$target" "$f" && continue
     # The placeholder CI fails on purpose. Next to a repo's existing workflows it
     # would only add a red check, so seed it only into a repo with no CI at all.
     if [ "$f" = .github/workflows/ci.yml ] && compgen -G "$target/.github/workflows/*.y*ml" >/dev/null; then
