@@ -66,6 +66,9 @@ echo "# local edit" >>"$T/.claude/hooks/pr-review-gate.sh"
 git -C "$T" -c user.name=t -c user.email=t@t commit -qam drift
 "$SYNC" "$T" >/dev/null 2>&1
 check "copies the generic loop command and driver" "[ -f '$T/.claude/commands/work-next-item.md' ] && [ -x '$T/scripts/backlog-loop.sh' ] && [ -x '$T/scripts/check-verify-section.sh' ]"
+check "copies vendor-agents.sh, executable" "[ -x '$T/scripts/vendor-agents.sh' ]"
+check "seeds the reviewer agents, their context, and the ECC license" "[ -f '$T/.claude/agents/pr-test-analyzer.md' ] && [ -f '$T/.claude/agents/silent-failure-hunter.md' ] && [ -f '$T/.claude/agent-context/_common.md' ] && [ -f '$T/.claude/agents/LICENSE.ECC' ]"
+check "seeds the backlog operator doc" "[ -f '$T/docs/BACKLOG.md' ]"
 check "copies setup.sh and seed-labels.sh, executable" "[ -x '$T/scripts/setup.sh' ] && [ -x '$T/scripts/seed-labels.sh' ]"
 check "copies protect-main.sh and the allowlist example" "[ -x '$T/scripts/protect-main.sh' ] && [ -f '$T/.claude/settings.local.json.example' ]"
 check "does not make the command file executable" "[ ! -x '$T/.claude/commands/work-next-item.md' ]"
@@ -106,6 +109,15 @@ git -C "$S" -c user.name=t -c user.email=t@t commit -qam stale
 check "registers the review gate exactly once" "[ \"\$(jq '[.hooks.Stop[].hooks[].command | select(test(\"pr-review-gate.sh\"))] | length' '$S/.claude/settings.json')\" = 1 ]"
 check "drops the stale registration" "! grep -q -- '--old' '$S/.claude/settings.json'"
 check "keeps unrelated hooks when replacing" "jq -e '[.hooks.Stop[].hooks[].command] | index(\"echo local-stop\")' '$S/.claude/settings.json' >/dev/null"
+
+# --- a repo's own reviewer agent is kept ---
+V="$(new_target ownagent)"
+mkdir -p "$V/.claude/agents" && echo "# my own reviewer" >"$V/.claude/agents/pr-test-analyzer.md"
+git -C "$V" add -A && git -C "$V" -c user.name=t -c user.email=t@t commit -qm agent
+"$SYNC" "$V" >/dev/null 2>&1
+check "keeps a repo's own version of a seeded agent" "grep -qx '# my own reviewer' '$V/.claude/agents/pr-test-analyzer.md'"
+# Its context file would make the next vendor-agents.sh run target that agent.
+check "seeds no context for an agent the repo already has" "[ ! -e '$V/.claude/agent-context/pr-test-analyzer.md' ] && [ -f '$V/.claude/agent-context/silent-failure-hunter.md' ]"
 
 # --- a file the repo has under another extension is not seeded beside it ---
 E="$(new_target equivalents)"

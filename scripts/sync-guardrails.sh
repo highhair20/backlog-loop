@@ -29,6 +29,7 @@ MANAGED=(
   scripts/protect-main.sh
   scripts/seed-labels.sh
   scripts/setup.sh
+  scripts/vendor-agents.sh
   .claude/settings.local.json.example
 )
 SEEDED=(
@@ -40,6 +41,13 @@ SEEDED=(
   .github/ISSUE_TEMPLATE/config.yml
   .github/pull_request_template.md
   .github/dependabot.yml
+  docs/BACKLOG.md
+  .claude/agent-context/_common.md
+  .claude/agent-context/pr-test-analyzer.md
+  .claude/agent-context/silent-failure-hunter.md
+  .claude/agents/pr-test-analyzer.md
+  .claude/agents/silent-failure-hunter.md
+  .claude/agents/LICENSE.ECC
 )
 # Not synced: .editorconfig. New repos get it from the template, but its indent
 # defaults would silently change how editors treat an existing repo's code.
@@ -135,6 +143,12 @@ main() {
       .github/ISSUE_TEMPLATE/config.yml) has_equivalent "$target" "$f" && continue ;;
       .github/ISSUE_TEMPLATE/*) [ "$had_issue_templates" -eq 0 ] || continue ;;
       .github/pull_request_template.md) has_pr_template "$target" && continue ;;
+      # A context file makes vendor-agents.sh build that agent, so none for an
+      # agent the repo already has (its own, or one it built another way).
+      .claude/agent-context/_common.md) has_equivalent "$target" "$f" && continue ;;
+      .claude/agent-context/*)
+        [ -e "$target/.claude/agents/${f##*/}" ] && continue
+        has_equivalent "$target" "$f" && continue ;;
       *) has_equivalent "$target" "$f" && continue ;;
     esac
     # The placeholder CI fails on purpose. Next to a repo's existing workflows it

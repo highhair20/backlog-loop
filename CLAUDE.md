@@ -23,19 +23,32 @@ several in one shell (use `npm --prefix web test`, `tsc -p web`, and so on).
 # test:
 ```
 
+## Specialist reviewers
+
+`/work-next-item` Step 6.5 runs each reviewer whose paths match the branch's changes
+and fixes its CRITICAL/HIGH findings before opening the PR. The agents live in
+`.claude/agents/`, built by `scripts/vendor-agents.sh`; give each one this repo's
+context in `.claude/agent-context/`. Add rows for stack-specific reviewers; each one
+is an extra agent run per item.
+
+| Changed paths | Agent (`subagent_type`) | Focus |
+|---|---|---|
+| any source or test file | `pr-test-analyzer` | each acceptance criterion has a test that reaches its real failure case |
+| any source file | `silent-failure-hunter` | swallowed errors and fallbacks that hide failure |
+
 <!-- Optional sections read by /work-next-item. Delete any you don't need.
+
+## Testing notes
+How tests run here: frameworks, fixtures, what to mock and what must be real (for
+example, a real database for anything that depends on constraints).
 
 ## Definition of done
 Checks beyond Verify that a green build can't prove (deploy wiring, infra, docs).
+docs/BACKLOG.md shows the pattern: turn each one into a test where you can.
 
 ## Scope map
 Where to enumerate the real affected surface: route tables, handler dirs, page
 registries, and what each scope label means.
-
-## Specialist reviewers
-| Changed paths | Agent (`subagent_type`) | Focus |
-|---|---|---|
-| `…` | `…` | … |
 -->
 
 ## GitHub flow guardrails
