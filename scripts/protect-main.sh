@@ -53,7 +53,9 @@ body="$(jq -n --arg name "$NAME" --args '
     )
   }' "$@")"
 
-existing="$(gh api "repos/$repo/rulesets" --paginate | jq -r --arg name "$NAME" '.[] | select(.name == $name) | .id' | head -1)" \
+# includes_parents=false: an org-level ruleset of the same name is listed by
+# default, and its id cannot be updated through this repo's endpoint.
+existing="$(gh api "repos/$repo/rulesets?includes_parents=false" --paginate | jq -r --arg name "$NAME" '.[] | select(.name == $name) | .id' | head -1)" \
   || die "could not list rulesets on $repo (does it exist, and are you an admin?)"
 
 if [ -n "$existing" ]; then

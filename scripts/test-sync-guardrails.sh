@@ -20,7 +20,7 @@ new_target() {
   git -C "$dir" init -q -b main
   cat >"$dir/.claude/settings.json" <<'EOF'
 {
-  "permissions": { "deny": ["Bash(git push * v*)", "Bash(gh pr merge:*)"] },
+  "permissions": { "deny": ["Bash(terraform apply*)", "Bash(gh pr merge:*)"] },
   "hooks": {
     "Stop": [ { "matcher": "*", "hooks": [ { "type": "command", "command": "echo local-stop" } ] } ]
   }
@@ -41,7 +41,7 @@ check "copies review hooks, executable" "[ -x '$T/.claude/hooks/pr-review-gate.s
 check "leaves an existing CLAUDE.md alone" "grep -qx '# Custom CLAUDE.md' '$T/CLAUDE.md'"
 check "seeds a missing ISSUE_GUIDE.md" "[ -f '$T/docs/ISSUE_GUIDE.md' ]"
 check "seeds missing issue templates and CI" "[ -f '$T/.github/ISSUE_TEMPLATE/feature.md' ] && [ -f '$T/.github/workflows/ci.yml' ]"
-check "keeps the target's own deny rule" "jq -e '.permissions.deny | index(\"Bash(git push * v*)\")' '$T/.claude/settings.json' >/dev/null"
+check "keeps the target's own deny rule" "jq -e '.permissions.deny | index(\"Bash(terraform apply*)\")' '$T/.claude/settings.json' >/dev/null"
 check "adds the template's deny rules" "jq -e '.permissions.deny | index(\"Bash(git -* push*)\")' '$T/.claude/settings.json' >/dev/null"
 check "does not duplicate a shared deny rule" "[ \"\$(jq '[.permissions.deny[] | select(. == \"Bash(gh pr merge:*)\")] | length' '$T/.claude/settings.json')\" = 1 ]"
 check "keeps the target's own Stop hook" "jq -e '[.hooks.Stop[].hooks[].command] | index(\"echo local-stop\")' '$T/.claude/settings.json' >/dev/null"
