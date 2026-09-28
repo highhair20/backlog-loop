@@ -51,9 +51,17 @@ This command is shared across repos; everything repo-specific lives in the repo'
 | `## Scope map` | no | Step 3.6 — where to enumerate the real affected surface |
 | `## Specialist reviewers` | no | Step 6.5 — which `.claude/agents/` reviewer covers which paths |
 
-**If `## Verify` is missing or still a placeholder, STOP before Step 0** and report:
-"CLAUDE.md has no Verify section — the loop has no definition of green." Never guess
-the build or test commands.
+**Before Step 0, run the checker and STOP if it fails:**
+
+```bash
+scripts/check-verify-section.sh CLAUDE.md
+```
+
+It fails when `## Verify` is missing or still a placeholder ("the loop has no
+definition of green"), and when `CLAUDE.md` is claude-code-repo-template's own
+instructions in a repo created from it: that Verify runs the template's tests, which
+pass whatever this repo's code does. Report its message and stop. Never guess the
+build or test commands.
 
 ## GitHub access: `gh` locally, the GitHub MCP tools in the cloud
 

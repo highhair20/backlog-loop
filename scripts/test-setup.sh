@@ -107,8 +107,16 @@ cp "$ROOT/CLAUDE.md" "$O/CLAUDE.md"
 run "$O"; rc=$?
 check "flags the template's own CLAUDE.md" "[ $rc -eq 1 ] && grep -q \"template's own\" '$O/.fake/out'"
 check "does not replace it without --fix" "cmp -s '$ROOT/CLAUDE.md' '$O/CLAUDE.md'"
+printf '\n## Notes I added by hand\n' >>"$O/CLAUDE.md"
+cp "$O/CLAUDE.md" "$O/.fake/edited"
 run "$O" --fix
 check "--fix swaps in the project skeleton" "cmp -s '$ROOT/templates/CLAUDE.md' '$O/CLAUDE.md'"
+check "--fix keeps the replaced file, edits included" "cmp -s '$O/.fake/edited' '$O/CLAUDE.md.template-own'"
+
+# A second swap must not overwrite the first backup.
+cp "$ROOT/CLAUDE.md" "$O/CLAUDE.md"
+run "$O" --fix; rc=$?
+check "--fix refuses when a backup already exists" "[ $rc -eq 1 ] && cmp -s '$ROOT/CLAUDE.md' '$O/CLAUDE.md' && cmp -s '$O/.fake/edited' '$O/CLAUDE.md.template-own'"
 
 run "$C" --bogus; rc=$?
 check "rejects an unknown argument" "[ $rc -eq 2 ]"

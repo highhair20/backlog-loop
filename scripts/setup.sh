@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
 # Check that this repo is set up for the backlog loop, and say how to fix what is
 # not. Read-only unless --fix, which applies only the safe, repeatable fixes: it
-# creates missing labels and copies the local allowlist example. The ruleset is
+# creates missing labels, copies the local allowlist example, and replaces the
+# template repo's own CLAUDE.md with the project skeleton, moving the old file to
+# CLAUDE.md.template-own rather than discarding it. The ruleset is
 # never created here, because it needs your CI job names and admin rights; the
 # check prints the exact command instead.
 #
@@ -17,6 +19,7 @@ RULESET_NAME=protect-main
 CI_PLACEHOLDER='Verify (not configured)'
 LOCAL_SETTINGS=.claude/settings.local.json
 SKELETON=templates/CLAUDE.md
+OWN_BACKUP=CLAUDE.md.template-own
 # Same test as check-verify-section.sh. The template repo's own CLAUDE.md starts
 # with this marker. In any other repo it is the wrong file: its Verify would make
 # the template's tests this repo's definition of green. The repo is recognised by
@@ -88,8 +91,16 @@ check_claude_md() {
       bad "CLAUDE.md is the template's own instructions, not this project's" "scripts/setup.sh --fix  (copies $SKELETON over it)"
       return
     fi
+    # The marker is an invisible HTML comment, so a file someone has already edited
+    # may still carry it: keep the old file rather than discard their work.
+    if [ -e "$OWN_BACKUP" ]; then
+      bad "CLAUDE.md is the template's own instructions, and $OWN_BACKUP already exists" \
+        "move $OWN_BACKUP aside, then re-run scripts/setup.sh --fix"
+      return
+    fi
+    mv CLAUDE.md "$OWN_BACKUP"
     cp "$SKELETON" CLAUDE.md
-    ok "replaced the template's own CLAUDE.md with the project skeleton from $SKELETON"
+    ok "replaced CLAUDE.md with the project skeleton from $SKELETON; the old file is $OWN_BACKUP (delete it once you have kept anything you added)"
   fi
   if grep -q '^# <project>' CLAUDE.md; then
     warn "the title is still the <project> placeholder" "put your project's name on the first line of CLAUDE.md"
