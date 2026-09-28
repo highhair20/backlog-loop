@@ -116,6 +116,8 @@ mkdir -p "$V/.claude/agents" && echo "# my own reviewer" >"$V/.claude/agents/pr-
 git -C "$V" add -A && git -C "$V" -c user.name=t -c user.email=t@t commit -qm agent
 "$SYNC" "$V" >/dev/null 2>&1
 check "keeps a repo's own version of a seeded agent" "grep -qx '# my own reviewer' '$V/.claude/agents/pr-test-analyzer.md'"
+# Its context file would make the next vendor-agents.sh run target that agent.
+check "seeds no context for an agent the repo already has" "[ ! -e '$V/.claude/agent-context/pr-test-analyzer.md' ] && [ -f '$V/.claude/agent-context/silent-failure-hunter.md' ]"
 
 # --- a file the repo has under another extension is not seeded beside it ---
 E="$(new_target equivalents)"
