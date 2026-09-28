@@ -116,7 +116,7 @@ It treats files three ways, so re-running it later is safe:
 | Kind | Files | On every sync |
 |---|---|---|
 | **Managed** | review hooks, `work-next-item.md`, `backlog-loop.sh`, `check-verify-section.sh`, `protect-main.sh`, `seed-labels.sh`, `setup.sh`, `settings.local.json.example` | Overwritten. These hold no project-specific content; put customisation in `CLAUDE.md`. |
-| **Seeded** | `CLAUDE.md`, CI workflow, issue forms, PR template, `dependabot.yml`, `.editorconfig`, `docs/ISSUE_GUIDE.md` | Copied only if missing. Yours to edit. The placeholder CI is added only to a repo with no workflows, and a form or config is skipped if the repo has the same file under another extension (an older `feature.md` template, a `dependabot.yaml`). |
+| **Seeded** | `CLAUDE.md`, CI workflow, issue forms, PR template, `dependabot.yml`, `docs/ISSUE_GUIDE.md` | Copied only if missing. Yours to edit. Nothing is added beside an equivalent you already have: the placeholder CI only goes into a repo with no workflows, the issue forms only into one with no issue templates of its own, the PR template only if GitHub finds none anywhere, and `dependabot.yml` not beside a `dependabot.yaml`. `.editorconfig` is never synced; its indent defaults could change how editors treat existing code. |
 | **Merged** | `.claude/settings.json`, `.gitignore` | The template's deny rules, hooks, and ignore lines are added; yours are kept. |
 
 Each sync also writes `.claude/template-version`: the template commit your repo now

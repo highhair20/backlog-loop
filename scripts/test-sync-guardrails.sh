@@ -41,7 +41,9 @@ check "copies review hooks, executable" "[ -x '$T/.claude/hooks/pr-review-gate.s
 check "leaves an existing CLAUDE.md alone" "grep -qx '# Custom CLAUDE.md' '$T/CLAUDE.md'"
 check "seeds a missing ISSUE_GUIDE.md" "[ -f '$T/docs/ISSUE_GUIDE.md' ]"
 check "seeds missing issue forms and CI" "[ -f '$T/.github/ISSUE_TEMPLATE/feature.yml' ] && [ -f '$T/.github/ISSUE_TEMPLATE/bug.yml' ] && [ -f '$T/.github/workflows/ci.yml' ]"
-check "seeds dependabot, editorconfig, and the PR template" "[ -f '$T/.github/dependabot.yml' ] && [ -f '$T/.editorconfig' ] && [ -f '$T/.github/pull_request_template.md' ]"
+check "seeds dependabot and the PR template" "[ -f '$T/.github/dependabot.yml' ] && [ -f '$T/.github/pull_request_template.md' ]"
+# Its indent defaults would silently change how editors treat existing code.
+check "never adds .editorconfig to an existing repo" "[ ! -e '$T/.editorconfig' ]"
 check "keeps the target's own deny rule" "jq -e '.permissions.deny | index(\"Bash(git push * v*)\")' '$T/.claude/settings.json' >/dev/null"
 check "adds the template's deny rules" "jq -e '.permissions.deny | index(\"Bash(git -* push*)\")' '$T/.claude/settings.json' >/dev/null"
 check "does not duplicate a shared deny rule" "[ \"\$(jq '[.permissions.deny[] | select(. == \"Bash(gh pr merge:*)\")] | length' '$T/.claude/settings.json')\" = 1 ]"
@@ -112,9 +114,25 @@ echo "# old-style template" >"$E/.github/ISSUE_TEMPLATE/feature.md"
 echo "version: 2" >"$E/.github/dependabot.yaml"
 git -C "$E" add -A && git -C "$E" -c user.name=t -c user.email=t@t commit -qm equivalents
 "$SYNC" "$E" >/dev/null 2>&1
-check "does not seed feature.yml beside an existing feature.md" "[ ! -e '$E/.github/ISSUE_TEMPLATE/feature.yml' ]"
+check "adds no issue forms to a repo with its own templates" "[ ! -e '$E/.github/ISSUE_TEMPLATE/feature.yml' ] && [ ! -e '$E/.github/ISSUE_TEMPLATE/bug.yml' ]"
 check "does not seed dependabot.yml beside an existing dependabot.yaml" "[ ! -e '$E/.github/dependabot.yml' ]"
-check "still seeds a form the repo lacks" "[ -f '$E/.github/ISSUE_TEMPLATE/bug.yml' ]"
+
+# GitHub's default template names, and the other places it reads a PR template from.
+G="$(new_target defaultnames)"
+mkdir -p "$G/.github/ISSUE_TEMPLATE" "$G/docs"
+echo "# bug" >"$G/.github/ISSUE_TEMPLATE/bug_report.md"
+echo "# pr" >"$G/docs/PULL_REQUEST_TEMPLATE.md"
+git -C "$G" add -A && git -C "$G" -c user.name=t -c user.email=t@t commit -qm defaults
+"$SYNC" "$G" >/dev/null 2>&1
+check "adds no issue forms beside GitHub-default template names" "[ ! -e '$G/.github/ISSUE_TEMPLATE/bug.yml' ] && [ ! -e '$G/.github/ISSUE_TEMPLATE/feature.yml' ]"
+check "adds no PR template when one exists elsewhere" "[ ! -e '$G/.github/pull_request_template.md' ]"
+
+# A repo whose ISSUE_TEMPLATE holds only config.yml still gets the forms.
+K="$(new_target configonly)"
+mkdir -p "$K/.github/ISSUE_TEMPLATE" && echo "blank_issues_enabled: true" >"$K/.github/ISSUE_TEMPLATE/config.yml"
+git -C "$K" add -A && git -C "$K" -c user.name=t -c user.email=t@t commit -qm config
+"$SYNC" "$K" >/dev/null 2>&1
+check "seeds the forms when only config.yml exists" "[ -f '$K/.github/ISSUE_TEMPLATE/bug.yml' ] && [ -f '$K/.github/ISSUE_TEMPLATE/feature.yml' ]"
 
 # --- placeholder CI is not added next to an existing workflow ---
 W="$(new_target hasci)"

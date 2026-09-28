@@ -40,8 +40,9 @@ SEEDED=(
   .github/ISSUE_TEMPLATE/config.yml
   .github/pull_request_template.md
   .github/dependabot.yml
-  .editorconfig
 )
+# Not synced: .editorconfig. New repos get it from the template, but its indent
+# defaults would silently change how editors treat an existing repo's code.
 SETTINGS=.claude/settings.json
 VERSION_FILE=.claude/template-version
 
@@ -72,8 +73,8 @@ merge_settings() {
 }
 
 # True if the target already has seeded file $2, or the same file under another
-# extension: issue templates predate forms (.md vs .yml), and GitHub reads both
-# .yml and .yaml. Seeding beside one would give GitHub two of the same thing.
+# extension: GitHub reads both .yml and .yaml. Seeding beside one would give
+# GitHub two of the same thing.
 has_equivalent() {
   local target="$1" f="$2" ext
   case "$f" in
@@ -84,6 +85,29 @@ has_equivalent() {
       return 1 ;;
     *) [ -e "$target/$f" ] ;;
   esac
+}
+
+# True if the target has any issue template of its own, whatever its name
+# (bug_report.md, feature_request.yml, ...). The forms are a set: adding them
+# beside other templates would only double the "New issue" chooser.
+has_issue_templates() {
+  local f
+  for f in "$1"/.github/ISSUE_TEMPLATE/*; do
+    [ -f "$f" ] || continue
+    case "${f##*/}" in config.yml|config.yaml) ;; *) return 0 ;; esac
+  done
+  return 1
+}
+
+# True if the target has a PR template anywhere GitHub reads one from.
+has_pr_template() {
+  local dir name
+  for dir in .github . docs; do
+    for name in pull_request_template.md PULL_REQUEST_TEMPLATE.md PULL_REQUEST_TEMPLATE; do
+      [ -e "$1/$dir/$name" ] && return 0
+    done
+  done
+  return 1
 }
 
 main() {
@@ -102,8 +126,17 @@ main() {
     case "$f" in *.sh) chmod +x "$target/$f" ;; esac
   done
 
+  # Decided before seeding: the first form seeded must not hide the second.
+  local had_issue_templates=0
+  has_issue_templates "$target" && had_issue_templates=1
+
   for f in "${SEEDED[@]}"; do
-    has_equivalent "$target" "$f" && continue
+    case "$f" in
+      .github/ISSUE_TEMPLATE/config.yml) has_equivalent "$target" "$f" && continue ;;
+      .github/ISSUE_TEMPLATE/*) [ "$had_issue_templates" -eq 0 ] || continue ;;
+      .github/pull_request_template.md) has_pr_template "$target" && continue ;;
+      *) has_equivalent "$target" "$f" && continue ;;
+    esac
     # The placeholder CI fails on purpose. Next to a repo's existing workflows it
     # would only add a red check, so seed it only into a repo with no CI at all.
     if [ "$f" = .github/workflows/ci.yml ] && compgen -G "$target/.github/workflows/*.y*ml" >/dev/null; then
