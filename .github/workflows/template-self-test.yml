@@ -38,3 +38,5 @@ jobs:
         run: scripts/test-setup.sh
       - name: Test repo files (pinned actions, issue forms, defaults)
         run: scripts/test-repo-files.sh
+      - name: Test vendor-agents.sh and agent drift
+        run: scripts/test-vendor-agents.sh

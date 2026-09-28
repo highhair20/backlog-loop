@@ -1,0 +1,1 @@
+Report as HIGH an error that is swallowed, or logged and then ignored, on a path where nobody is watching when it fails: background jobs, queue consumers, scheduled tasks, webhook handlers. There, nothing else will surface the failure.

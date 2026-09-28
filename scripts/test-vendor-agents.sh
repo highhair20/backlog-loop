@@ -1,0 +1,81 @@
+#!/usr/bin/env bash
+# Tests for scripts/vendor-agents.sh against a fake ECC checkout, plus a drift
+# check on this repo: each committed agent must contain its current context.
+# Usage: scripts/test-vendor-agents.sh
+set -uo pipefail
+
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+WORK="$(mktemp -d)"
+trap 'rm -rf "$WORK"' EXIT
+
+failures=0
+check() { if eval "$2"; then echo "ok   $1"; else echo "FAIL $1" >&2; failures=$((failures + 1)); fi; }
+git_q() { git -c user.name=t -c user.email=t@t "$@"; }
+# contains <file> <file>: the first file's text includes the second's, whole.
+contains() { local hay needle; hay="$(cat "$1")"; needle="$(cat "$2")"; [[ "$hay" == *"$needle"* ]]; }
+
+# A fake ECC checkout with one agent and a license.
+ECC="$WORK/ecc"
+mkdir -p "$ECC/agents"
+printf -- '---\nname: alpha\ndescription: Upstream alpha.\nmodel: sonnet\ntools: Read, Grep\n---\n\n# Alpha Agent\n\nUpstream body line.\n' >"$ECC/agents/alpha.md"
+printf 'MIT License\n\nCopyright (c) test\n' >"$ECC/LICENSE"
+git -C "$ECC" init -q -b main && git -C "$ECC" add -A && git_q -C "$ECC" commit -qm ecc
+ECC_SHA="$(git -C "$ECC" rev-parse HEAD)"
+
+# A target repo with context for the given agents.
+target() { # target <name> <agent>...
+  local dir="$WORK/$1" a; shift
+  mkdir -p "$dir/scripts" "$dir/.claude/agents" "$dir/.claude/agent-context"
+  git -C "$dir" init -q -b main
+  cp "$ROOT/scripts/vendor-agents.sh" "$dir/scripts/"
+  echo "COMMON: review only the given files." >"$dir/.claude/agent-context/_common.md"
+  for a in "$@"; do echo "CONTEXT for $a." >"$dir/.claude/agent-context/$a.md"; done
+  echo "$dir"
+}
+run() { (cd "$1" && ECC_ROOT="${2:-$ECC}" scripts/vendor-agents.sh) >"$1/out" 2>&1; }
+
+T="$(target ok alpha)"
+run "$T"; rc=$?
+out="$T/.claude/agents/alpha.md"
+check "vendors an agent" "[ $rc -eq 0 ] && [ -f '$out' ]"
+check "keeps the upstream frontmatter unchanged" "[ \"\$(head -6 '$out')\" = \"\$(head -6 '$ECC/agents/alpha.md')\" ]"
+check "stamps the ECC commit" "grep -q '$ECC_SHA' '$out'"
+check "includes the common and the agent's context" "contains '$out' '$T/.claude/agent-context/_common.md' && contains '$out' '$T/.claude/agent-context/alpha.md'"
+check "puts the context before the upstream body" "[ \$(grep -n 'CONTEXT for alpha' '$out' | cut -d: -f1) -lt \$(grep -n '^# Alpha Agent' '$out' | cut -d: -f1) ]"
+check "keeps the upstream body verbatim" "[ \"\$(sed -n '/^# Alpha Agent/,\$p' '$out')\" = \"\$(sed -n '/^# Alpha Agent/,\$p' '$ECC/agents/alpha.md')\" ]"
+check "copies the ECC license beside the agents" "cmp -s '$ECC/LICENSE' '$T/.claude/agents/LICENSE.ECC'"
+
+# shellcheck disable=SC2034  # read inside check's eval string
+before="$(cat "$out")"
+run "$T"
+check "is idempotent" "[ \"\$(cat '$out')\" = \"\$before\" ]"
+
+U="$(target unknown alpha beta)"
+run "$U"; rc=$?
+check "refuses context for an agent ECC does not have" "[ $rc -ne 0 ] && grep -q 'beta' '$U/out'"
+check "writes nothing when any agent is unknown" "[ ! -e '$U/.claude/agents/alpha.md' ]"
+
+N="$(target none)"
+run "$N"; rc=$?
+check "refuses when there is no agent context" "[ $rc -ne 0 ]"
+
+M="$(target missing alpha)"
+run "$M" "$WORK/no-such-ecc"; rc=$?
+check "refuses without an ECC checkout" "[ $rc -ne 0 ] && grep -q 'ECC_ROOT' '$M/out'"
+
+# --- drift: this repo's agents must match its context files ---
+shopt -s nullglob
+contexts=("$ROOT"/.claude/agent-context/*.md)
+check "this repo has agent context files" "[ ${#contexts[@]} -gt 1 ]"
+# The +"…" form: bash 3.2 (macOS) treats an empty array as unbound under set -u.
+for ctx in ${contexts[@]+"${contexts[@]}"}; do
+  name="$(basename "$ctx" .md)"
+  [ "$name" = _common ] && continue
+  agent="$ROOT/.claude/agents/$name.md"
+  check "$name.md is built from its current context (else re-run vendor-agents.sh)" \
+    "[ -f '$agent' ] && contains '$agent' '$ctx' && contains '$agent' '$ROOT/.claude/agent-context/_common.md'"
+done
+check "the ECC license ships with the vendored agents" "grep -q 'MIT License' '$ROOT/.claude/agents/LICENSE.ECC'"
+
+echo
+if [ "$failures" -eq 0 ]; then echo "all tests passed"; else echo "$failures test(s) failed" >&2; exit 1; fi

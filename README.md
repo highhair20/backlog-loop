@@ -26,6 +26,7 @@ beyond the tools you already use.
 | **Merge and push guardrails** | A committed `.claude/settings.json` that denies merging PRs (CLI, REST API, and GitHub MCP tools), pushing to `main`, force pushes, tag pushes, and the GitHub MCP file-write tools. Because it is committed, it applies to cloud and headless sessions too. |
 | **Autonomous backlog loop** | `/work-next-item` takes the highest-priority open issue, checks that the issue's diagnosis matches the code, derives the full scope from the code rather than the issue text, implements it test-first, runs your verify commands, and opens a PR assigned to you. One issue, one branch, one PR — never merged. |
 | **Cold-context driver** | `scripts/backlog-loop.sh` runs one issue per fresh `claude -p` session, so a long backlog never exhausts a context window. All state lives in git and issue labels, so it is safe to stop and resume at any time. |
+| **Specialist reviewers** | Two reviewer agents, `pr-test-analyzer` and `silent-failure-hunter`, that the loop runs on every change before opening a PR. They are vendored from [ECC](https://github.com/affaan-m/ECC) (MIT) by `scripts/vendor-agents.sh`, which adds your repo's context, so they work in cloud sessions that load no plugins. |
 | **PR review loop** | Hooks that start a `/code-review` when a PR is opened and keep the session from ending until the review's critical and high findings are resolved — with a round cap and timeouts so it cannot run forever. |
 | **Issue conventions** | Feature and bug issue forms (the key sections are required fields) and a guide (`docs/ISSUE_GUIDE.md`) that make each issue a self-contained work item an agent can pick up cold, plus a script that creates the priority and status labels the loop uses. |
 | **CI skeleton** | A workflow that runs on branches and PRs with read-only permissions, and fails until you configure it — so a new repo never shows a green check that tests nothing. Actions are pinned to commit SHAs, and Dependabot keeps the pins current. |
@@ -52,7 +53,7 @@ your repo's `CLAUDE.md`:
 | `## Verify` | **Yes** | The build, lint, and test commands that define "green". The loop refuses to start without real commands here. |
 | `## Definition of done` | No | Checks a green build cannot prove — deploy wiring, infrastructure, docs. |
 | `## Scope map` | No | Where to enumerate what an issue could touch — route tables, handler directories, page registries. |
-| `## Specialist reviewers` | No | Which reviewer agents in `.claude/agents/` (you add these; none ship with the template) cover which paths. |
+| `## Specialist reviewers` | No | Which reviewer agents in `.claude/agents/` cover which paths. The skeleton enables the two that ship with the template. |
 
 ## Requirements
 
@@ -115,8 +116,8 @@ It treats files three ways, so re-running it later is safe:
 
 | Kind | Files | On every sync |
 |---|---|---|
-| **Managed** | review hooks, `work-next-item.md`, `backlog-loop.sh`, `check-verify-section.sh`, `protect-main.sh`, `seed-labels.sh`, `setup.sh`, `settings.local.json.example` | Overwritten. These hold no project-specific content; put customisation in `CLAUDE.md`. |
-| **Seeded** | `CLAUDE.md`, CI workflow, issue forms, PR template, `dependabot.yml`, `docs/ISSUE_GUIDE.md` | Copied only if missing. Yours to edit. Nothing is added beside an equivalent you already have: the placeholder CI only goes into a repo with no workflows, the issue forms only into one with no issue templates of its own, the PR template only if GitHub finds none anywhere, and `dependabot.yml` not beside a `dependabot.yaml`. `.editorconfig` is never synced; its indent defaults could change how editors treat existing code. |
+| **Managed** | review hooks, `work-next-item.md`, `backlog-loop.sh`, `check-verify-section.sh`, `protect-main.sh`, `seed-labels.sh`, `setup.sh`, `vendor-agents.sh`, `settings.local.json.example` | Overwritten. These hold no project-specific content; put customisation in `CLAUDE.md`. |
+| **Seeded** | `CLAUDE.md`, CI workflow, issue forms, PR template, `dependabot.yml`, `docs/ISSUE_GUIDE.md`, `docs/BACKLOG.md`, the reviewer agents and their `.claude/agent-context/` | Copied only if missing. Yours to edit. Nothing is added beside an equivalent you already have: the placeholder CI only goes into a repo with no workflows, the issue forms only into one with no issue templates of its own, the PR template only if GitHub finds none anywhere, and `dependabot.yml` not beside a `dependabot.yaml`. `.editorconfig` is never synced; its indent defaults could change how editors treat existing code. |
 | **Merged** | `.claude/settings.json`, `.gitignore` | The template's deny rules, hooks, and ignore lines are added; yours are kept. |
 
 Each sync also writes `.claude/template-version`: the template commit your repo now
@@ -202,11 +203,13 @@ The guardrails are layered, from softest to hardest:
   workflows/ci.yml           CI skeleton (fails until configured)
   workflows/template-self-test.yml   tests this template's scripts; inert in your repo
 docs/ISSUE_GUIDE.md          how to write issues the loop can work
+docs/BACKLOG.md              operating the loop: drivers, one iteration, definition of done, why each guardrail
 scripts/
   backlog-loop.sh            unattended driver
   check-verify-section.sh    refuses to run without Verify commands
   sync-guardrails.sh         update an existing repo from this template
   setup.sh                   check the repo is ready for the loop; --fix the safe parts
+  vendor-agents.sh           rebuild .claude/agents/ from ECC plus .claude/agent-context/
   seed-labels.sh             create the standard labels
   protect-main.sh            create the branch ruleset on main
   test-*.sh                  tests for the scripts above
