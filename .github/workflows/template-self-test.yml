@@ -17,6 +17,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      # Preinstalled on ubuntu-latest. Warning level and up; style notes are advisory.
+      - name: Lint shell scripts
+        run: shellcheck --severity=warning scripts/*.sh .claude/hooks/*.sh
       - name: Test sync-guardrails.sh
         run: scripts/test-sync-guardrails.sh
       - name: Test check-verify-section.sh
@@ -29,3 +32,5 @@ jobs:
         run: scripts/test-pr-created-review.sh
       - name: Test settings.local.json.example
         run: scripts/test-settings-example.sh
+      - name: Test label definitions
+        run: scripts/test-labels.sh

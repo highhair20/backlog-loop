@@ -50,6 +50,7 @@ check "adds the PR-created PostToolUse hook" "jq -e '[.hooks.PostToolUse[].hooks
 check "routes MCP PR creation to the review hook" "jq -e '[.hooks.PostToolUse[] | select(.hooks[].command | test(\"pr-created-review.sh\")) | .matcher] | any(test(\"mcp__github__create_pull_request\"))' '$T/.claude/settings.json' >/dev/null"
 check "appends only missing .gitignore lines" "[ \"\$(grep -cx '.claude/state/' '$T/.gitignore')\" = 1 ] && grep -qx '.claude/settings.local.json' '$T/.gitignore'"
 check "ignores the backlog-loop log directory" "grep -qx '.loop-logs/' '$T/.gitignore'"
+check "stamps the template commit it synced from" "grep -qE \"^\$(git -C '$HERE' rev-parse HEAD)(-dirty)?\$\" '$T/.claude/template-version'"
 
 # --- idempotency: a second sync after committing changes nothing ---
 git -C "$T" add -A

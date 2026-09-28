@@ -108,6 +108,10 @@ It treats files three ways, so re-running it later is safe:
 | **Seeded** | `CLAUDE.md`, CI workflow, issue templates, `docs/ISSUE_GUIDE.md` | Copied only if missing. Yours to edit. The placeholder CI is added only to a repo with no workflows. |
 | **Merged** | `.claude/settings.json`, `.gitignore` | The template's deny rules, hooks, and ignore lines are added; yours are kept. |
 
+Each sync also writes `.claude/template-version`: the template commit your repo now
+matches (suffixed `-dirty` if the template clone had uncommitted changes). Commit
+it with the rest, so you can tell later how far behind the template a repo is.
+
 ## Running the backlog loop
 
 Write issues with the templates, give each exactly one priority label (`P0`–`P3`;
@@ -161,6 +165,9 @@ The guardrails are layered, from softest to hardest:
 - The push rule for git global options (`git -C <dir> push …`) also denies a few
   non-push commands, such as `git -C . commit -m "fix push flow"`. Commit without
   `-C`.
+- The rule that blocks pushing a release tag (`git push origin v1.2.3`, because tags
+  often trigger deploys) also blocks pushing any branch whose name starts with `v`.
+  The loop's `<type>/<issue>-<slug>` branch names never do.
 - The review hook finds the new PR's URL in `gh pr create`'s output. If you capture
   that output (`URL=$(gh pr create …)`), no review loop opens; start one by hand
   with `.claude/hooks/pr-review-state.sh seed <pr> <url>`.
@@ -200,7 +207,8 @@ Issues and pull requests are welcome. Run the tests before opening a PR:
 for t in scripts/test-*.sh; do "$t" || exit 1; done
 ```
 
-They are plain bash and need only `git` and `jq`; CI runs the same files.
+They are plain bash and need only `git` and `jq`; CI runs the same files, plus
+`shellcheck --severity=warning scripts/*.sh .claude/hooks/*.sh`.
 
 ## License
 
