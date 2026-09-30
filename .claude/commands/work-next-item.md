@@ -63,6 +63,19 @@ instructions in a repo created from it: that Verify runs the template's tests, w
 pass whatever this repo's code does. Report its message and stop. Never guess the
 build or test commands.
 
+**Then check that no other loop run is working this repo, and STOP if one is:**
+
+```bash
+scripts/loop-lock.sh check
+```
+
+`scripts/backlog-loop.sh` holds a lock for as long as it runs, and two runs sharing
+one working tree would claim the same issue and edit the same files. A non-zero exit
+means another run holds the lock, or the lock could not be checked: report the
+message and stop. Never remove the lock yourself; the message tells the human how to
+clear a stale one. The check passes when this session was started by the driver that
+holds the lock, and it clears a lock whose owner is no longer running.
+
 ## GitHub access: `gh` locally, the GitHub MCP tools in the cloud
 
 The GitHub steps below are written as `gh` commands. Cloud sessions (scheduled

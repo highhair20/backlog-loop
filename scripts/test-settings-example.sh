@@ -55,6 +55,13 @@ done
 # the template repo's own), not just backlog-loop.sh.
 if grep -qF 'scripts/check-verify-section.sh CLAUDE.md' "$COMMAND"; then echo "ok   the loop command runs check-verify-section.sh"; else fail "the loop command does not run check-verify-section.sh"; fi
 
+# Every way of running the loop must also yield to a run that holds the lock. The
+# command checks it; only backlog-loop.sh takes it, so nothing else may be allowed.
+if grep -qx 'scripts/loop-lock.sh check' "$COMMAND"; then echo "ok   the loop command runs loop-lock.sh check"; else fail "the loop command does not run loop-lock.sh check"; fi
+for cmd in "scripts/loop-lock.sh acquire 1" "scripts/loop-lock.sh release 1"; do
+  if matches_any "$cmd" "${ALLOW[@]}"; then fail "allowed, but only the driver should run it: $cmd"; else echo "ok   not allowed: $cmd"; fi
+done
+
 # The deny list must still win for the pushes that matter, even with the allow rules.
 # A pushed release tag (v1.2.3) often triggers a deploy, so it counts as one of them.
 for cmd in "git push origin main" "git push -u origin HEAD:main" "git push --force origin x" "gh pr merge 1" "git push origin v1.2.3"; do
