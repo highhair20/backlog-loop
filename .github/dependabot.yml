@@ -3,8 +3,9 @@
 # Add a block for each package ecosystem this repo uses.
 version: 2
 updates:
-  # Keeps the SHA-pinned actions in .github/workflows current: it updates the
-  # SHA and its "# vX.Y.Z" comment together, grouped into one weekly PR.
+  # Keeps the actions in .github/workflows current, grouped into one weekly PR.
+  # For an action pinned to a SHA it updates the SHA and its "# vX.Y.Z" comment
+  # together; for one pinned to a tag (@v4) it moves the tag.
   - package-ecosystem: github-actions
     directory: /
     schedule:
