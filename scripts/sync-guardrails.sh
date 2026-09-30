@@ -7,7 +7,7 @@
 #              review hooks, the backlog loop command and driver); a local edit
 #              there is drift, and drift is the bug. Repo specifics go in CLAUDE.md.
 #   seeded   — copied only when missing. Files each repo is expected to tailor
-#              (CLAUDE.md, CI, issue templates, the issue guide).
+#              (CLAUDE.md, CI, issue templates, the issue and CI guides).
 #   merged   — .claude/settings.json keeps the repo's own rules and hooks and
 #              gains the template's; .gitignore gains only missing lines.
 #
@@ -42,6 +42,7 @@ SEEDED=(
   .github/pull_request_template.md
   .github/dependabot.yml
   docs/BACKLOG.md
+  docs/CI_HARDENING.md
   .claude/agent-context/_common.md
   .claude/agent-context/pr-test-analyzer.md
   .claude/agent-context/silent-failure-hunter.md

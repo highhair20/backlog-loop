@@ -13,7 +13,7 @@
 |---|---|
 | `.claude/` | Settings (deny rules, hooks), the `/work-next-item` command, the PR review hooks, and the vendored reviewer agents with their context |
 | `.github/` | Issue forms, PR template, Dependabot, the placeholder `ci.yml` for new repos, and `template-self-test.yml`, this repo's CI |
-| `docs/` | `ISSUE_GUIDE.md` and `BACKLOG.md`, both seeded into repos |
+| `docs/` | `ISSUE_GUIDE.md`, `BACKLOG.md`, and `CI_HARDENING.md`, all seeded into repos |
 | `scripts/` | The loop and setup scripts, and a `test-*.sh` for each |
 | `templates/CLAUDE.md` | The project skeleton that new and synced repos get as their `CLAUDE.md` |
 

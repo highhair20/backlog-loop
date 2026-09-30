@@ -22,6 +22,20 @@ unpinned="$(grep -hE '^[[:space:]-]*uses:' "$ROOT"/.github/workflows/*.y*ml \
 check "every workflow action is pinned to a SHA with a version comment" "[ -z \"\$unpinned\" ]"
 [ -z "$unpinned" ] || printf '     unpinned: %s\n' "$unpinned" >&2
 
+# --- CI hardening guide: its snippets follow the same pinning rule ---
+# Repos copy these snippets into real workflows, so an unpinned one would teach
+# the habit this check forbids above.
+guide="$ROOT/docs/CI_HARDENING.md"
+guide_uses="$(grep -hE '^[[:space:]-]*uses:' "$guide" 2>/dev/null || true)"
+check "CI hardening guide has at least one action snippet to check" "[ -n \"\$guide_uses\" ]"
+guide_unpinned="$(printf '%s\n' "$guide_uses" | grep -vE 'uses:[[:space:]]*[^@[:space:]]+@[0-9a-f]{40}[[:space:]]+#[[:space:]]*v[0-9]' || true)"
+check "every action in the CI hardening guide is pinned to a SHA with a version comment" "[ -z \"\$guide_unpinned\" ]"
+[ -z "$guide_unpinned" ] || printf '     unpinned: %s\n' "$guide_unpinned" >&2
+# One "## N. " section per pattern the guide promises: tooling, own binaries,
+# coverage gate, uncached coverage, single source of truth.
+check "CI hardening guide has a section per pattern" "[ \"\$(grep -c '^## [1-5]\\. ' '$guide' 2>/dev/null)\" = 5 ]"
+check "placeholder CI step points to the hardening guide" "grep -q 'docs/CI_HARDENING.md' '$ROOT/.github/workflows/ci.yml'"
+
 # --- dependabot: updates the pinned actions ---
 check "dependabot.yml parses and updates github-actions" \
   "yaml 'd = YAML.load_file(ARGV[0]); exit(d[\"version\"] == 2 && d[\"updates\"].any? { |u| u[\"package-ecosystem\"] == \"github-actions\" } ? 0 : 1)' '$ROOT/.github/dependabot.yml'"
