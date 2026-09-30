@@ -32,10 +32,16 @@ setup() {
   printf '#!/usr/bin/env bash\ncat "%s/count"\n' "$dir" >"$dir/bin/gh"
   {
     printf '#!/usr/bin/env bash\ncd "%s" || exit 1\necho x >>calls\n' "$dir"
+    # The background-wait ceiling this session was given (#22).
+    printf 'echo "${CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS:-unset}" >>bgwait\n'
     printf 'scripts/loop-lock.sh check >>check-out 2>&1; echo $? >>check-rc\n'
     if [ "$2" = block ]; then
       # Gives up after 30s so a failed test cannot leave it running.
       printf ': >started\ni=0; while [ ! -e go ] && [ $i -lt 300 ]; do sleep 0.1; i=$((i + 1)); done\n'
+    fi
+    if [ "$2" = flaky ]; then
+      # Fails its first call with recognisable output, then makes progress.
+      printf 'if [ "$(wc -l <calls)" -eq 1 ]; then echo "first attempt boom"; exit 1; fi\necho "second attempt ok"\n'
     fi
     [ "$2" = stall ] || printf 'echo $(( $(cat count) - 1 )) >count\n'
     printf ': >finished\n'
@@ -71,6 +77,32 @@ check "stops when an iteration makes no progress" "[ $rc -ne 0 ]"
 check "does not retry a stalled loop" "[ \$(wc -l <'$S/calls') -eq 1 ]"
 check "explains the no-progress stop" "grep -q 'no progress' '$S/out'"
 check "releases the lock when it stops early" "[ ! -e '$S/.git/backlog-loop.lock' ]"
+
+check "gives claude a 45-minute background-wait ceiling by default" "[ \"\$(head -1 '$P/bgwait')\" = 2700000 ]"
+
+W="$(setup bgwait progress)"
+BG_WAIT_SECONDS=60 run "$W"
+check "BG_WAIT_SECONDS sets the ceiling (in ms)" "[ \"\$(head -1 '$W/bgwait')\" = 60000 ]"
+
+# Bash arithmetic reads a leading zero as octal: 0600 would become 384s, 08 an error.
+Z="$(setup zeropad progress)"
+BG_WAIT_SECONDS=0600 run "$Z"
+check "reads a zero-padded BG_WAIT_SECONDS as decimal" "[ \"\$(head -1 '$Z/bgwait')\" = 600000 ]"
+E="$(setup eight progress)"
+BG_WAIT_SECONDS=08 run "$E"; rc=$?
+check "accepts 08 (not a bad octal number)" "[ $rc -eq 0 ] && [ \"\$(head -1 '$E/bgwait')\" = 8000 ]"
+
+X="$(setup badwait progress)"
+BG_WAIT_SECONDS=soon run "$X"; rc=$?
+check "rejects a non-numeric BG_WAIT_SECONDS before any item" "[ $rc -ne 0 ] && [ ! -s '$X/calls' ]"
+
+F="$(setup flaky flaky)"
+BACKOFF_SECONDS=0 run "$F"; rc=$?
+flogs="$WORK/logs-flaky"
+check "a retried item still completes" "[ $rc -eq 0 ]"
+check "keeps the failed attempt's log" "grep -l 'first attempt boom' '$flogs'/item-*.log >/dev/null"
+check "writes the retry to its own log" "grep -l 'second attempt ok' '$flogs'/item-*.attempt2.log >/dev/null"
+check "names the failed attempt's log in the retry message" "grep -q 'attempt 1 failed (log: ' '$F/out'"
 
 N="$(setup noverify progress)"
 printf '## Verify\n```sh\n# test:\n```\n' >"$N/CLAUDE.md"

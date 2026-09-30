@@ -17,10 +17,12 @@ To write the issues it works, see [ISSUE_GUIDE.md](./ISSUE_GUIDE.md).
 
 `backlog-loop.sh` stops when the backlog is empty, when an item makes no progress,
 or after `MAX_ITEMS`. Its settings are environment variables: `MAX_ITEMS` (25),
-`PACE_SECONDS` (5), `MAX_RETRIES` (3), `BACKOFF_SECONDS` (300), `MODEL`, and
-`LOG_DIR` (`.loop-logs`). All loop state lives in git and issue labels, so it is
-safe to stop at any time and re-run later: the next iteration recovers whatever was
-in flight.
+`PACE_SECONDS` (5), `MAX_RETRIES` (3), `BACKOFF_SECONDS` (300), `MODEL`,
+`LOG_DIR` (`.loop-logs`), and `BG_WAIT_SECONDS` (2700): how long each session waits
+for its background reviewers and PR review before they are cut off. Each retry of
+an item writes its own log (`item-<time>-<n>.attempt2.log`, ...). All loop state
+lives in git and issue labels, so it is safe to stop at any time and re-run later:
+the next iteration recovers whatever was in flight.
 
 Only one `backlog-loop.sh` runs per clone: it holds `.git/backlog-loop.lock` while
 it works, and a second one refuses to start. A lock left by a crashed run is
