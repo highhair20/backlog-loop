@@ -118,7 +118,7 @@ It treats files three ways, so re-running it later is safe:
 
 | Kind | Files | On every sync |
 |---|---|---|
-| **Managed** | review hooks, `work-next-item.md`, `backlog-loop.sh`, `check-verify-section.sh`, `protect-main.sh`, `seed-labels.sh`, `setup.sh`, `vendor-agents.sh`, `settings.local.json.example` | Overwritten. These hold no project-specific content; put customisation in `CLAUDE.md`. |
+| **Managed** | review hooks, `work-next-item.md`, `backlog-loop.sh`, `check-verify-section.sh`, `loop-lock.sh`, `protect-main.sh`, `seed-labels.sh`, `setup.sh`, `vendor-agents.sh`, `settings.local.json.example` | Overwritten. These hold no project-specific content; put customisation in `CLAUDE.md`. |
 | **Seeded** | `CLAUDE.md` (the skeleton in `templates/`), CI workflow, issue forms, PR template, `dependabot.yml`, `docs/ISSUE_GUIDE.md`, `docs/BACKLOG.md`, the reviewer agents and their `.claude/agent-context/` | Copied only if missing. Yours to edit. Nothing is added beside an equivalent you already have: the placeholder CI only goes into a repo with no workflows, the issue forms only into one with no issue templates of its own, the PR template only if GitHub finds none anywhere, and `dependabot.yml` not beside a `dependabot.yaml`. `.editorconfig` is never synced; its indent defaults could change how editors treat existing code. |
 | **Merged** | `.claude/settings.json`, `.gitignore` | The template's deny rules, hooks, and ignore lines are added; yours are kept. |
 
@@ -150,6 +150,12 @@ keeps the two in step. The committed deny rules still win over any allow rule, s
 merges and pushes to `main` stay blocked. If a command is missing, the first item
 stops early and the driver reports "no progress"; that item's log in `.loop-logs/`
 names the refused command.
+
+**One driver at a time.** `backlog-loop.sh` holds a lock in the git directory
+(`.git/backlog-loop.lock`) while it runs, so a second driver in the same clone
+refuses to start, whatever its `LOG_DIR`. A lock left by a crashed or killed run is
+reclaimed automatically, because it records its owner's PID. If a run is refused and
+you know no loop is running, the message gives the `rm -rf` that clears the lock.
 
 The loop manages these status labels: `in-progress`, `in-review`, `blocked`,
 `needs-infra`, and `needs-attention` (it gave up and a human should look). See
@@ -209,6 +215,7 @@ docs/BACKLOG.md              operating the loop: drivers, one iteration, definit
 scripts/
   backlog-loop.sh            unattended driver
   check-verify-section.sh    refuses to run without Verify commands
+  loop-lock.sh               one loop run per clone; reclaims a crashed run's lock
   sync-guardrails.sh         update an existing repo from this template
   setup.sh                   check the repo is ready for the loop; --fix the safe parts
   vendor-agents.sh           rebuild .claude/agents/ from ECC plus .claude/agent-context/

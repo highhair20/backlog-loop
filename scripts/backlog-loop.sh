@@ -46,13 +46,13 @@ gh auth status >/dev/null 2>&1 || { echo "✗ gh is not authenticated. Run: gh a
 
 mkdir -p "$LOG_DIR"
 
-# Single-instance lock so this driver and an interactive /loop can't double-claim.
-LOCK="$LOG_DIR/.lock"
-if ! mkdir "$LOCK" 2>/dev/null; then
-  echo "✗ Another backlog-loop run holds the lock ($LOCK). Exiting." >&2
-  exit 1
-fi
-trap 'rmdir "$LOCK" 2>/dev/null' EXIT
+# Single-instance lock, so two drivers can't double-claim, and so a /work-next-item
+# started by hand while this runs stops at its own lock check. It reclaims a lock a
+# crashed run left behind. The sessions this driver starts run that same check;
+# BACKLOG_LOOP_PID tells them the lock they find is their own driver's.
+scripts/loop-lock.sh acquire $$ || exit 1
+trap 'scripts/loop-lock.sh release $$' EXIT
+export BACKLOG_LOOP_PID=$$
 
 # Count open, prioritized issues that still need loop work. in-progress counts
 # (Step 0 recovers it); blocked / needs-attention / in-review do not.
