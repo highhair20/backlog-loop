@@ -53,6 +53,14 @@ W="$(setup bgwait progress)"
 BG_WAIT_SECONDS=60 run "$W"
 check "BG_WAIT_SECONDS sets the ceiling (in ms)" "[ \"\$(head -1 '$W/bgwait')\" = 60000 ]"
 
+# Bash arithmetic reads a leading zero as octal: 0600 would become 384s, 08 an error.
+Z="$(setup zeropad progress)"
+BG_WAIT_SECONDS=0600 run "$Z"
+check "reads a zero-padded BG_WAIT_SECONDS as decimal" "[ \"\$(head -1 '$Z/bgwait')\" = 600000 ]"
+E="$(setup eight progress)"
+BG_WAIT_SECONDS=08 run "$E"; rc=$?
+check "accepts 08 (not a bad octal number)" "[ $rc -eq 0 ] && [ \"\$(head -1 '$E/bgwait')\" = 8000 ]"
+
 X="$(setup badwait progress)"
 BG_WAIT_SECONDS=soon run "$X"; rc=$?
 check "rejects a non-numeric BG_WAIT_SECONDS before any item" "[ $rc -ne 0 ] && [ ! -s '$X/calls' ]"

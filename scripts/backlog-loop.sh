@@ -39,6 +39,8 @@ BG_WAIT_SECONDS="${BG_WAIT_SECONDS:-2700}"
 case "$BG_WAIT_SECONDS" in
   ''|*[!0-9]*) echo "✗ BG_WAIT_SECONDS must be a whole number of seconds, got: $BG_WAIT_SECONDS" >&2; exit 1 ;;
 esac
+# Force base 10: bash arithmetic reads a leading zero as octal (0600 → 384, 08 → error).
+BG_WAIT_SECONDS=$((10#$BG_WAIT_SECONDS))
 
 # /work-next-item stops at once without a Verify section; fail here instead of
 # spending MAX_ITEMS invocations discovering that one at a time.
