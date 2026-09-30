@@ -95,7 +95,7 @@ L="$(setup livelock progress)"
 mkdir "$L/.git/backlog-loop.lock" && echo $$ >"$L/.git/backlog-loop.lock/pid"
 run "$L"; rc=$?
 check "refuses to start while a live run holds the lock" "[ $rc -ne 0 ] && [ ! -s '$L/calls' ] && grep -q 'holds the lock' '$L/out'"
-check "the refusal says how to clear a stale lock" "grep -qF 'rm -rf .git/backlog-loop.lock' '$L/out'"
+check "the refusal says how to clear a stale lock" "grep -qF 'rm -rf $L/.git/backlog-loop.lock' '$L/out'"
 check "a refused run leaves the holder's lock in place" "[ \"\$(cat '$L/.git/backlog-loop.lock/pid' 2>/dev/null)\" = $$ ]"
 
 # A lock whose owner is gone.

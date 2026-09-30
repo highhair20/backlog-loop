@@ -12,8 +12,7 @@
 #   scripts/loop-lock.sh acquire <pid>   take the lock for the running process <pid>
 #   scripts/loop-lock.sh release <pid>   drop the lock, if <pid> holds it
 #   scripts/loop-lock.sh check           may a run start here? (what /work-next-item asks)
-#   scripts/loop-lock.sh path            print the lock's path (relative to the repo root,
-#                                        or absolute in a linked worktree)
+#   scripts/loop-lock.sh path            print the lock's absolute path
 #
 # `check` passes when the lock is free, stale, or held by the driver that started
 # this session, which exports its PID as BACKLOG_LOOP_PID.
@@ -35,10 +34,12 @@ case "${1:-}" in
   *) usage ;;
 esac
 
-# Move to the repo root (parent of this script's directory), so the lock's path and
-# the `rm -rf` in the messages below are relative to it.
+# Move to the repo root (parent of this script's directory): the lock is this repo's,
+# wherever the script is called from.
 cd "$(CDPATH='' cd -- "$(dirname -- "$0")/.." && pwd)" || die "cannot find the repo root"
 git_dir="$(git rev-parse --git-common-dir 2>/dev/null)" || die "not a git repository: $PWD"
+# Absolute, so the `rm -rf` in the messages below is safe to paste from any directory.
+case "$git_dir" in /*) ;; *) git_dir="$PWD/$git_dir" ;; esac
 LOCK="$git_dir/backlog-loop.lock"
 
 # The PID recorded in the lock; nothing if there is none or it is not a number.
@@ -103,11 +104,27 @@ settle() {
     return 0
   fi
   [ -d "$LOCK" ] || return 0
-  # Either another run is reclaiming it right now, or one died part-way through.
-  echo "✗ A stale backlog-loop lock ($LOCK, from PID $pid) could not be reclaimed:" >&2
+  reclaim_blocked "$pid"
+  return 1
+}
+
+# Either another run is reclaiming the lock right now, or one died part-way through.
+reclaim_blocked() {
+  echo "✗ A stale backlog-loop lock ($LOCK, from PID $1) could not be reclaimed:" >&2
   echo "  another run has started reclaiming it, and may have crashed before finishing." >&2
   how_to_clear
-  return 1
+}
+
+# A lock that records the caller's own PID, $1. No earlier holder can still be
+# running under that PID, so the lock is stale, and the liveness test cannot say so:
+# it would find the caller. This is the normal case where a driver gets the same PID
+# on every start (a container's entrypoint), and a killed run would otherwise block
+# every restart. Claimed through the reclaim marker, so a run that judged the lock
+# stale before this process started cannot remove it afterwards.
+adopt() {
+  mkdir "$LOCK/reclaiming" 2>/dev/null || { reclaim_blocked "$1"; return 1; }
+  rmdir "$LOCK/reclaiming"
+  echo "↻ Reclaimed a stale backlog-loop lock: an earlier run left it under this PID ($1)." >&2
 }
 
 # Create the lock for PID $1. Returns 1 if the lock already exists.
@@ -118,6 +135,7 @@ take() {
 
 acquire() {
   take "$1" && return 0
+  if [ "$(owner)" = "$1" ]; then adopt "$1"; return; fi
   if [ -d "$LOCK" ]; then settle || return 1; fi
   take "$1" && return 0
   [ -d "$LOCK" ] || die "could not create $LOCK (is the git directory writable?)"
