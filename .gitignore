@@ -1,4 +1,4 @@
-# Per-machine Claude settings, PR review loop state, and backlog-loop logs/lock
+# Per-machine Claude settings, PR review loop state, and backlog-loop logs
 .claude/settings.local.json
 .claude/state/
 .loop-logs/

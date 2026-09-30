@@ -24,6 +24,11 @@ an item writes its own log (`item-<time>-<n>.attempt2.log`, ...). All loop state
 lives in git and issue labels, so it is safe to stop at any time and re-run later:
 the next iteration recovers whatever was in flight.
 
+Only one `backlog-loop.sh` runs per clone: it holds `.git/backlog-loop.lock` while
+it works, and a second one refuses to start. A lock left by a crashed run is
+reclaimed on the next start. If a run is refused and no loop is running, the message
+says how to clear the lock.
+
 Before a first unattended run, `scripts/setup.sh` checks that everything the loop
 needs is in place.
 
