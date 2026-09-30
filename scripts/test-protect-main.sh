@@ -38,6 +38,7 @@ check "reports the caller's bypass level" "grep -q pull_requests_only '$WORK/out
 
 EXISTING='[{"id": 7, "name": "other"}, {"id": 42, "name": "protect-main"}]' run o/r test; rc=$?
 check "updates the existing ruleset in place" "[ $rc -eq 0 ] && grep -q -- '-X PUT repos/o/r/rulesets/42' '$WORK/calls' && ! grep -q -- '-X POST' '$WORK/calls'"
+check "looks up only the repo's own rulesets, not inherited org ones" "grep -q 'repos/o/r/rulesets?includes_parents=false' '$WORK/calls'"
 
 run o/r; rc=$?
 check "works without required checks" "[ $rc -eq 0 ] && ! jq -e '.rules[] | select(.type == \"required_status_checks\")' '$WORK/body.json' >/dev/null"
