@@ -12,7 +12,8 @@
 #   scripts/loop-lock.sh acquire <pid>   take the lock for the running process <pid>
 #   scripts/loop-lock.sh release <pid>   drop the lock, if <pid> holds it
 #   scripts/loop-lock.sh check           may a run start here? (what /work-next-item asks)
-#   scripts/loop-lock.sh path            print the lock's path, relative to the repo root
+#   scripts/loop-lock.sh path            print the lock's path (relative to the repo root,
+#                                        or absolute in a linked worktree)
 #
 # `check` passes when the lock is free, stale, or held by the driver that started
 # this session, which exports its PID as BACKLOG_LOOP_PID.
@@ -47,17 +48,22 @@ owner() {
   is_pid "$pid" && echo "$pid"
 }
 
+# True if process $1 exists. `kill -0` alone also fails for a live process owned by
+# another user, which would get its lock reclaimed; `ps` sees those.
+is_running() { kill -0 "$1" 2>/dev/null || ps -p "$1" >/dev/null 2>&1; }
+
 how_to_clear() { echo "  If no backlog loop is running here, clear it: rm -rf $LOCK" >&2; }
 
 # Remove a lock whose owner, $1, is dead. Two runs may try at once, and a plain
 # remove-then-take would let the slower one delete the lock the faster one had just
 # taken. So a run first claims the removal with a marker directory (mkdir is atomic,
-# one run wins), then confirms the lock under the marker is still the dead owner's.
+# one run wins), then confirms the lock under the marker is still the dead owner's
+# (and still dead: a new run could have been given the same PID).
 # Returns 1, removing nothing, if another run got there first.
 reclaim() {
   local aside="$LOCK.stale.$$"
   mkdir "$LOCK/reclaiming" 2>/dev/null || return 1
-  if [ "$(owner)" != "$1" ]; then
+  if [ "$(owner)" != "$1" ] || is_running "$1"; then
     # The marker landed in a lock someone has since taken. If it cannot be removed
     # it is harmless there: that run's release deletes the whole lock.
     rmdir "$LOCK/reclaiming" 2>/dev/null
@@ -86,7 +92,7 @@ settle() {
     return 1
   fi
   [ "$pid" = "${1:-}" ] && return 0
-  if kill -0 "$pid" 2>/dev/null; then
+  if is_running "$pid"; then
     echo "✗ Another backlog-loop run holds the lock ($LOCK): PID $pid is running." >&2
     echo "  If PID $pid is not a backlog loop (a crashed run's PID can be reused)," >&2
     echo "  the lock is stale; clear it: rm -rf $LOCK" >&2
@@ -97,7 +103,9 @@ settle() {
     return 0
   fi
   [ -d "$LOCK" ] || return 0
-  echo "✗ A stale backlog-loop lock ($LOCK, from PID $pid) is being reclaimed by another run." >&2
+  # Either another run is reclaiming it right now, or one died part-way through.
+  echo "✗ A stale backlog-loop lock ($LOCK, from PID $pid) could not be reclaimed:" >&2
+  echo "  another run has started reclaiming it, and may have crashed before finishing." >&2
   how_to_clear
   return 1
 }

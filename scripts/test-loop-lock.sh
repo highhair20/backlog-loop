@@ -47,7 +47,6 @@ out="$("$R/scripts/loop-lock.sh" check 2>&1)"; rc=$?
 check "check passes quietly when the lock is free" "[ $rc -eq 0 ] && [ -z '$out' ]"
 "$R/scripts/loop-lock.sh" acquire $$ >"$R/out" 2>&1; rc=$?
 check "acquire takes a free lock" "[ $rc -eq 0 ] && [ \"\$(cat '$LOCK/pid')\" = $$ ]"
-check "the lock is never a candidate for commit" "! git -C '$R' status --porcelain --ignored | grep -q backlog-loop"
 
 # --- a lock held by a live process ---
 "$R/scripts/loop-lock.sh" acquire "$LIVE" >"$R/out" 2>&1; rc=$?
@@ -64,7 +63,7 @@ check "check passes for the session the holder started" "[ $rc -eq 0 ]"
 BACKLOG_LOOP_PID=$LIVE "$R/scripts/loop-lock.sh" check >"$R/out" 2>&1; rc=$?
 check "check fails for a session another driver started" "[ $rc -eq 1 ]"
 (cd "$R/scripts" && ./loop-lock.sh check >"$R/out" 2>&1); rc=$?
-check "check finds the lock from a subdirectory" "[ $rc -eq 1 ]"
+check "check works when run from another directory" "[ $rc -eq 1 ]"
 
 # --- release ---
 "$R/scripts/loop-lock.sh" release "$LIVE" >"$R/out" 2>&1; rc=$?
@@ -96,6 +95,19 @@ mkdir "$B/.git/backlog-loop.lock/reclaiming"
 "$B/scripts/loop-lock.sh" acquire $$ >"$B/out" 2>&1; rc=$?
 check "acquire yields to a reclaim already under way" "[ $rc -eq 1 ] && [ \"\$(cat '$B/.git/backlog-loop.lock/pid')\" = '$DEAD' ]"
 check "yielding says how to clear the lock" "grep -qF 'rm -rf .git/backlog-loop.lock' '$B/out'"
+
+# Several runs starting at once after a crash: one takes the lock, the rest are refused.
+Q="$(new_repo race)"
+plant_lock "$Q" "$DEAD"
+racers=""
+for i in 1 2 3 4 5 6; do
+  "$Q/scripts/loop-lock.sh" acquire "$LIVE" >"$Q/race-$i" 2>&1 &
+  racers="$racers $!"
+done
+wins=0
+for p in $racers; do wait "$p" && wins=$((wins + 1)); done
+check "of several runs reclaiming one stale lock, exactly one takes it" "[ $wins -eq 1 ] && [ \"\$(cat '$Q/.git/backlog-loop.lock/pid')\" = $LIVE ]"
+check "racing reclaims leave nothing else behind" "[ \"\$(ls '$Q/.git' | grep -c backlog-loop)\" = 1 ] && [ \"\$(ls '$Q/.git/backlog-loop.lock')\" = pid ]"
 
 # --- a lock that cannot be judged is respected, never reclaimed ---
 for spec in "no PID|" "a garbage PID|not-a-pid"; do

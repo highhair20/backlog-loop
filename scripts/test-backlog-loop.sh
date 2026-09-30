@@ -47,7 +47,13 @@ setup() {
 run() { PATH="$1/bin:$PATH" PACE_SECONDS=0 LOG_DIR="$WORK/logs-$(basename "$1")" "$1/scripts/backlog-loop.sh" >"$1/out" 2>&1; }
 
 # Wait up to 10s for file $1 to appear.
-wait_for() { local i=0; while [ ! -e "$1" ]; do [ "$i" -lt 100 ] || return 1; sleep 0.1; i=$((i + 1)); done; }
+wait_for() {
+  local i=0
+  while [ ! -e "$1" ]; do
+    [ "$i" -lt 100 ] || { echo "FAIL timed out waiting for $1" >&2; failures=$((failures + 1)); return 1; }
+    sleep 0.1; i=$((i + 1))
+  done
+}
 
 # A PID that is not running: a child that has already exited and been reaped.
 dead_pid() { (exit 0) & local p=$!; wait "$p"; echo "$p"; }
@@ -64,6 +70,7 @@ run "$S"; rc=$?
 check "stops when an iteration makes no progress" "[ $rc -ne 0 ]"
 check "does not retry a stalled loop" "[ \$(wc -l <'$S/calls') -eq 1 ]"
 check "explains the no-progress stop" "grep -q 'no progress' '$S/out'"
+check "releases the lock when it stops early" "[ ! -e '$S/.git/backlog-loop.lock' ]"
 
 N="$(setup noverify progress)"
 printf '## Verify\n```sh\n# test:\n```\n' >"$N/CLAUDE.md"
