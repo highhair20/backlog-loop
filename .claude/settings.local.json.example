@@ -11,6 +11,8 @@
       "Bash(gh pr view *)",
       "Bash(gh pr create *)",
       "Bash(git fetch *)",
+      "Bash(git merge --no-edit origin/main)",
+      "Bash(git merge --abort)",
       "Bash(git switch *)",
       "Bash(git pull *)",
       "Bash(git status *)",

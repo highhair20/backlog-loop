@@ -141,8 +141,29 @@ Then:
    `gh issue edit ${N} --remove-label in-progress --add-label in-review`.
 2. **A branch exists (remote or local-only) but no open PR** → work was underway.
    Resume *that* issue as this iteration (do not pick a new one): check out the branch
-   (fetch it first if it is remote-only; a local one keeps any uncommitted edits), bring
-   it to green (Step 5's gate), then continue from Step 6 (commit/push, review, PR).
+   (fetch it first if it is remote-only; a local one keeps any uncommitted edits).
+
+   Then bring it up to date with `main`: other PRs may have merged while it sat, and a
+   PR from a stale branch can be unmergeable. A merge needs a clean tree, so if
+   `git status --porcelain` lists anything, commit it first:
+   ```bash
+   git add -A
+   git commit -m "wip: resumed edits (#${N})"
+   ```
+   Then merge, never rebase (the branch may already be pushed, and force pushes are
+   denied):
+   ```bash
+   git fetch origin
+   git merge --no-edit origin/main
+   ```
+   If the merge conflicts, resolve it when the conflict is within this issue's scope
+   and Verify passes afterwards. Otherwise abort, and follow **Give up**, naming the
+   conflicting files in the comment:
+   ```bash
+   git merge --abort
+   ```
+   Then bring it to green (Step 5's gate), then continue from Step 6 (commit/push,
+   review, PR).
 3. **Neither a branch nor a PR** → nothing was actually done; release the claim so the
    issue becomes selectable again: `gh issue edit ${N} --remove-label in-progress`.
    If `git status --porcelain` is non-empty here, the edits belong to no branch: stash

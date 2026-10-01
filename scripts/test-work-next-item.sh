@@ -54,6 +54,16 @@ check "the comment gives the blocker and where the work is" "printf '%s' \"\$giv
 check "the comment never claims an unsaved cloud checkout is safe" "printf '%s' \"\$give_up\" | grep -q 'will be lost'"
 check "stops without deleting if the save fails, before any delete" "[ -n '$stop' ] && [ '$stop' -lt '$del_remote' ] && [ '$stop' -lt '$del_local' ]"
 
+# A resumed branch is brought up to date with main before more work (#26): a
+# branch that sat while other PRs merged can conflict, and its PR is unmergeable.
+step0="$(section 'Step 0')"
+merge="$(printf '%s\n' "$step0" | grep -n -m1 'git merge --no-edit origin/main' | cut -d: -f1)"
+green="$(printf '%s\n' "$step0" | grep -n -m1 'bring it to green' | cut -d: -f1)"
+check "Step 0 merges origin/main into a resumed branch" "[ -n '$merge' ]"
+check "it merges before bringing the branch to green" "[ -n '$merge' ] && [ -n '$green' ] && [ '$merge' -lt '$green' ]"
+check "a merge conflict it cannot resolve aborts and gives up" "printf '%s' \"\$step0\" | grep -q 'git merge --abort' && printf '%s' \"\$step0\" | grep -q 'Give up'"
+check "a resumed branch is never rebased (it may be pushed; force pushes are denied)" "! printf '%s' \"\$step0\" | grep -q 'git rebase'"
+
 # Step 0 must not mistake a preserved branch for work in flight.
 check "Step 0 always ignores abandoned/ branches" "section 'Step 0' | grep -q 'always ignore them'"
 # An abandoned/ branch outlives its attempt, so it cannot signal an interrupted
