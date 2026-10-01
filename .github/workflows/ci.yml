@@ -30,6 +30,7 @@ jobs:
       # new repo a green check that tests nothing. Replace this step with the
       # same build / lint / test commands listed under "Verify" in CLAUDE.md,
       # so CI and the backlog loop's definition of done cannot drift apart.
+      # Then see docs/CI_HARDENING.md for steps that keep a green check honest.
       - name: Verify (not configured)
         run: |
           echo "::error::CI is not configured. Replace this step with the Verify commands from CLAUDE.md."

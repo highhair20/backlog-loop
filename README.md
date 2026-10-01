@@ -89,7 +89,9 @@ It exits 0 once nothing is failing, so re-run it until it does. The steps it che
    because the loop may run several in one shell.
 2. **Configure CI.** Replace the failing placeholder step in
    `.github/workflows/ci.yml` with the same Verify commands, so CI and the loop
-   agree on what "green" means.
+   agree on what "green" means. Then see
+   [`docs/CI_HARDENING.md`](docs/CI_HARDENING.md) for steps that stop a green
+   check from hiding skipped tests, fetched tools, or flaky coverage.
 3. **Create the labels:** `scripts/seed-labels.sh` (or `setup.sh --fix`). It is
    safe to re-run.
 4. **Protect `main`:** `scripts/protect-main.sh <owner>/<repo> <ci-job-name>…`.
@@ -119,7 +121,7 @@ It treats files three ways, so re-running it later is safe:
 | Kind | Files | On every sync |
 |---|---|---|
 | **Managed** | review hooks, `work-next-item.md`, `backlog-loop.sh`, `check-verify-section.sh`, `loop-lock.sh`, `protect-main.sh`, `seed-labels.sh`, `setup.sh`, `vendor-agents.sh`, `settings.local.json.example` | Overwritten. These hold no project-specific content; put customisation in `CLAUDE.md`. |
-| **Seeded** | `CLAUDE.md` (the skeleton in `templates/`), CI workflow, issue forms, PR template, `dependabot.yml`, `docs/ISSUE_GUIDE.md`, `docs/BACKLOG.md`, the reviewer agents and their `.claude/agent-context/` | Copied only if missing. Yours to edit. Nothing is added beside an equivalent you already have: the placeholder CI only goes into a repo with no workflows, the issue forms only into one with no issue templates of its own, the PR template only if GitHub finds none anywhere, and `dependabot.yml` not beside a `dependabot.yaml`. `.editorconfig` is never synced; its indent defaults could change how editors treat existing code. |
+| **Seeded** | `CLAUDE.md` (the skeleton in `templates/`), CI workflow, issue forms, PR template, `dependabot.yml`, `docs/ISSUE_GUIDE.md`, `docs/BACKLOG.md`, `docs/CI_HARDENING.md`, the reviewer agents and their `.claude/agent-context/` | Copied only if missing. Yours to edit. Nothing is added beside an equivalent you already have: the placeholder CI only goes into a repo with no workflows, the issue forms only into one with no issue templates of its own, the PR template only if GitHub finds none anywhere, and `dependabot.yml` not beside a `dependabot.yaml`. `.editorconfig` is never synced; its indent defaults could change how editors treat existing code. |
 | **Merged** | `.claude/settings.json`, `.gitignore` | The template's deny rules, hooks, and ignore lines are added; yours are kept. |
 
 Each sync also writes `.claude/template-version`: the template commit your repo now
@@ -212,6 +214,7 @@ The guardrails are layered, from softest to hardest:
   workflows/template-self-test.yml   tests this template's scripts; inert in your repo
 docs/ISSUE_GUIDE.md          how to write issues the loop can work
 docs/BACKLOG.md              operating the loop: drivers, one iteration, definition of done, why each guardrail
+docs/CI_HARDENING.md         CI patterns that keep a green check honest, with snippets
 scripts/
   backlog-loop.sh            unattended driver
   check-verify-section.sh    refuses to run without Verify commands
