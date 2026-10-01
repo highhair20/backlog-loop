@@ -126,11 +126,11 @@ and re-run the script. To add one, add a context file named after the ECC agent,
 re-run, and add a row to `## Specialist reviewers` in `CLAUDE.md`.
 
 Ready-made contexts for stack reviewers (`go-reviewer`, `database-reviewer`,
-`typescript-reviewer`, `python-reviewer`) are in `templates/agent-context/`. None is
+`typescript-reviewer`, `python-reviewer`) are in `.claude/agent-context/optional/`. None is
 active until you enable it:
 
 ```sh
-cp templates/agent-context/go-reviewer.md .claude/agent-context/
+cp .claude/agent-context/optional/go-reviewer.md .claude/agent-context/
 scripts/vendor-agents.sh
 ```
 

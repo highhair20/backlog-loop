@@ -16,7 +16,7 @@
 | `docs/` | `ISSUE_GUIDE.md`, `BACKLOG.md`, and `CI_HARDENING.md`, all seeded into repos |
 | `scripts/` | The loop and setup scripts, and a `test-*.sh` for each |
 | `templates/CLAUDE.md` | The project skeleton that new and synced repos get as their `CLAUDE.md` |
-| `templates/agent-context/` | Optional stack reviewer contexts, seeded but inactive until a repo copies one into `.claude/agent-context/` |
+| `.claude/agent-context/optional/` | Optional stack reviewer contexts, seeded but inactive until a repo copies one into `.claude/agent-context/` |
 
 ## Verify
 

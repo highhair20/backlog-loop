@@ -76,7 +76,7 @@ check "seeds the reviewer agents, their context, and the ECC license" "[ -f '$T/
 seeds_stack_contexts() {
   local a
   for a in go-reviewer database-reviewer typescript-reviewer python-reviewer; do
-    cmp -s "$HERE/../templates/agent-context/$a.md" "$1/templates/agent-context/$a.md" || return 1
+    cmp -s "$HERE/../.claude/agent-context/optional/$a.md" "$1/.claude/agent-context/optional/$a.md" || return 1
     [ ! -e "$1/.claude/agent-context/$a.md" ] || return 1
   done
 }

@@ -85,25 +85,25 @@ M="$(target missing alpha)"
 run "$M" "$WORK/no-such-ecc"; rc=$?
 check "refuses without an ECC checkout" "[ $rc -ne 0 ] && grep -q 'ECC_ROOT' '$M/out'"
 
-# --- the optional stack reviewers in templates/agent-context/ ---
+# --- the optional stack reviewers in .claude/agent-context/optional/ ---
 # A repo enables one by copying it into .claude/agent-context/ and re-running, so
 # each must build with this repo's real _common.md. None is enabled here.
 for a in go-reviewer database-reviewer typescript-reviewer python-reviewer; do
-  check "templates/agent-context has a non-empty $a.md" "[ -s '$ROOT/templates/agent-context/$a.md' ]"
+  check ".claude/agent-context/optional has a non-empty $a.md" "[ -s '$ROOT/.claude/agent-context/optional/$a.md' ]"
   check "$a is not enabled in this repo" "[ ! -e '$ROOT/.claude/agent-context/$a.md' ] && [ ! -e '$ROOT/.claude/agents/$a.md' ]"
 done
-check "templates/agent-context has no _common.md of its own" "[ ! -e '$ROOT/templates/agent-context/_common.md' ]"
+check ".claude/agent-context/optional has no _common.md of its own" "[ ! -e '$ROOT/.claude/agent-context/optional/_common.md' ]"
 # The rule #33 asked for: migrations run with nobody watching.
-db="$ROOT/templates/agent-context/database-reviewer.md"
+db="$ROOT/.claude/agent-context/optional/database-reviewer.md"
 check "database-reviewer treats a missing down migration or a long lock as HIGH" \
   "grep -q 'unattended' '$db' && grep -q 'HIGH' '$db' && grep -q 'down migration' '$db' && grep -qi 'lock' '$db'"
 for doc in templates/CLAUDE.md docs/BACKLOG.md; do
   check "$doc says how to enable a stack reviewer" \
-    "grep -q 'templates/agent-context/' '$ROOT/$doc' && grep -q 'vendor-agents.sh' '$ROOT/$doc'"
+    "grep -q '.claude/agent-context/optional/' '$ROOT/$doc' && grep -q 'vendor-agents.sh' '$ROOT/$doc'"
 done
 
 shopt -s nullglob
-templates=("$ROOT"/templates/agent-context/*.md)
+templates=("$ROOT"/.claude/agent-context/optional/*.md)
 S="$(target stack)"
 cp "$ROOT/.claude/agent-context/_common.md" "$S/.claude/agent-context/"
 for tpl in ${templates[@]+"${templates[@]}"}; do

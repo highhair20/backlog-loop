@@ -32,7 +32,7 @@ context in `.claude/agent-context/`.
 
 To enable a stack reviewer (`go-reviewer`, `database-reviewer`,
 `typescript-reviewer`, `python-reviewer`), copy its context from
-`templates/agent-context/` into `.claude/agent-context/`, run
+`.claude/agent-context/optional/` into `.claude/agent-context/`, run
 `scripts/vendor-agents.sh`, and add a row below with the paths it covers. Each one is
 an extra agent run per item.
 
