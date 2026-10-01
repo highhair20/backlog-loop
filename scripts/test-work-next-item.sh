@@ -85,6 +85,15 @@ commit_line="$(line_of 'git add -A')"
 check "Give up saves only commits missing from origin/main" "printf '%s' \"\$give_up\" | grep -q 'git log --oneline origin/main..HEAD'"
 check "Give up checks for a half-done merge before committing" "[ -n '$check_line' ] && [ -n '$abort_line' ] && [ -n '$commit_line' ] && [ '$check_line' -lt '$commit_line' ] && [ '$abort_line' -lt '$commit_line' ]"
 
+# Give up must not delete a remote branch that holds commits it did not save
+# (#29 review, round 2): prove HEAD contains it first.
+guard="$(line_of 'git log --oneline HEAD..')"
+check "the remote branch is deleted only after proving HEAD contains it" "[ -n '$guard' ] && [ '$guard' -lt '$del_remote' ]"
+check "a remote branch with unsaved commits is kept and reported" "printf '%s' \"\$give_up\" | grep -q 'keep the remote branch: it is the only copy'"
+check "an exit of 1 from the MERGE_HEAD check is not a failure" "printf '%s' \"\$give_up\" | grep -q 'which is the normal case, not a failure'"
+mh0="$(printf '%s\n' "$step0" | grep -n -m1 'MERGE_HEAD' | cut -d: -f1)"
+check "Step 0 aborts an interrupted merge before its wip commit" "[ -n '$mh0' ] && [ -n '$leftover' ] && [ '$mh0' -lt '$leftover' ]"
+
 # Step 0 must not mistake a preserved branch for work in flight.
 check "Step 0 always ignores abandoned/ branches" "section 'Step 0' | grep -q 'always ignore them'"
 # An abandoned/ branch outlives its attempt, so it cannot signal an interrupted
