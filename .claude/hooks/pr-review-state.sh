@@ -45,6 +45,9 @@ REVIEW_GRACE_SECONDS=$((20 * 60))
 # How long the PR-state lookup may take. The gate hook has a 10s budget; a hook
 # killed for overrunning it cannot warn, so enforcement would drop silently.
 PR_STATE_TIMEOUT=3
+# And one budget for a whole gate tick, since it may check several loops in turn:
+# no lookup starts after this many seconds; the rest count as not checked.
+PR_STATE_BUDGET=5
 
 # Derived from this script's own location, never from the environment or cwd.
 # CLAUDE_PROJECT_DIR is set only for hook processes, so `seed` (a hook) resolved
@@ -231,6 +234,7 @@ emit_status() {
   dir=$(state_dir)
   [ -d "$dir" ] || exit 0
   now=$(now_epoch)
+  tick_start=$now
 
   for f in "$dir"/*.json; do
     [ -e "$f" ] || continue
@@ -313,7 +317,13 @@ emit_status() {
     # Only the gate checks: status is read-only and makes no network call.
     url=$(jq -r '.url // ""' "$f")
     pstate=OPEN
-    [ "$mutate" = yes ] && pstate=$(pr_state "$url")
+    if [ "$mutate" = yes ]; then
+      if [ "$(( $(now_epoch) - tick_start ))" -lt "$PR_STATE_BUDGET" ]; then
+        pstate=$(pr_state "$url")
+      else
+        pstate=FAIL
+      fi
+    fi
     case "$pstate" in
       MERGED) gone_message "$(jq -r .pr "$f")" "$url" MERGED | emit WARN
               [ "$mutate" = yes ] && rm -f "$f"; continue ;;

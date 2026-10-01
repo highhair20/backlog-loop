@@ -127,6 +127,16 @@ check "gate, gh hangs: returns well inside the hook's 10s timeout" "[ $took -lt 
 check "gate, gh hangs: warns that the state was not checked" "jq -e '.reason | test(\"not checked\")' '$WORK/gate-hang/out' >/dev/null"
 check "gate, gh hangs: still enforces the loop" "blocks gate-hang"
 
+# The 3s limit is per lookup, so several open loops could still overrun the
+# hook's 10s budget (#32 review). The whole tick shares one budget.
+setup gate-many
+for n in 13 14 15; do "$WORK/gate-many/.claude/hooks/pr-review-state.sh" seed "$n" "https://github.com/o/r/pull/$n" s; done
+start=$(date +%s)
+gate gate-many hang
+took=$(( $(date +%s) - start ))
+check "gate, gh hangs with 4 loops open: still returns inside the hook's 10s timeout" "[ $took -lt 9 ]"
+check "gate, gh hangs with 4 loops open: still enforces them" "blocks gate-many"
+
 # An empty URL must never reach gh: 'gh pr view \"\"' resolves the PR of whatever
 # branch is checked out, which can be an unrelated PR.
 setup gate-nourl
