@@ -46,7 +46,9 @@ needs is in place.
    incomplete.
 5. **Branch** as `<type>/<number>-<slug>`, and **implement test-first** until every
    `## Verify` command in `CLAUDE.md` passes. After about three failed cycles it
-   gives up: `needs-attention`, a comment saying why, and the branch deleted.
+   gives up: any work is pushed to an `abandoned/<number>-<sha>` branch, the issue's
+   own branch is deleted, and the issue gets `needs-attention` and a comment saying
+   why and where the work is.
 6. **Commit and push**, then run the **specialist reviewers** listed in `CLAUDE.md`
    whose paths match. CRITICAL and HIGH findings get one fix round; the rest go in
    the PR body.

@@ -39,7 +39,8 @@ DENY=(); while IFS= read -r -d "" l; do DENY+=("$l"); done < <(jq -r '.permissio
 # `git …` spans in prose. Placeholders (<number>, ${N}) are made concrete.
 CMDS=(); while IFS= read -r -d "" l; do CMDS+=("$l"); done < <(
   {
-    awk '/^```/ { f = !f; next } f && /^(gh |git |scripts\/)/ { sub(/[[:space:]]*\\$/, ""); print }' "$COMMAND"
+    # Fences may be indented (code blocks inside list items, as in Give up).
+    awk '/^[[:space:]]*```/ { f = !f; next } f { sub(/^[[:space:]]+/, "") } f && /^(gh |git |scripts\/)/ { sub(/[[:space:]]*\\$/, ""); print }' "$COMMAND"
     grep -oE '`(gh|git) [^`]+`' "$COMMAND" | tr -d '`'
   } | sed -E 's/<[a-z/ -]+>/x/g; s/\$\{N\}/1/g; s/\$N/1/g' | sort -u | read_lines
 )
