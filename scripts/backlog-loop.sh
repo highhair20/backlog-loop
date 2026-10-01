@@ -44,6 +44,7 @@ if [ "${BACKLOG_LOOP_STAGED:+$BACKLOG_LOOP_STAGED/backlog-loop.sh}" != "$0" ]; t
   fi
   # execfail: if the re-exec itself fails, fall through and clean up.
   shopt -s execfail
+  # shellcheck disable=SC2093  # deliberate: with execfail, a failed exec falls through to the cleanup below
   BACKLOG_LOOP_STAGED="$stage" BACKLOG_LOOP_ROOT="$root" exec bash "$stage/backlog-loop.sh" "$@"
   rm -rf "$stage"
   echo "✗ could not re-run the driver from $stage" >&2
