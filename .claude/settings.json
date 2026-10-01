@@ -49,11 +49,11 @@
       "Bash(git push -f*)",
       "Bash(git push * -f*)",
       "Bash(git push *--force*)",
-      "Bash(git push *--tags*)",
+      "Bash(git push *--tag*)",
       "Bash(git push *--mirror*)",
       "Bash(git push *refs/tags/*)",
       "Bash(git push * v*)",
-      "Bash(git push *--follow-tags*)",
+      "Bash(git push *--follow*)",
       "Bash(git push *+v*)",
       "Bash(git -* push*)"
     ]
