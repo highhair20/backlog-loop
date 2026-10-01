@@ -86,7 +86,8 @@ gap shows up as a 404 or a dead queue in prod, long after the PR that caused it.
 The script below reads the `unit: [...]` list from each workflow's matrix and
 compares the two sets. Keep each list on one line so the script can read it; it
 fails when either list is missing or empty, since two empty lists would
-otherwise compare equal.
+otherwise compare equal. If a workflow has several `unit:` lists (one per job),
+the script compares the union of each file's lists, not job by job.
 
 ```bash
 #!/usr/bin/env bash
@@ -100,10 +101,13 @@ PROD="${2:-.github/workflows/deploy-prod.yml}"
 
 units() { # units <workflow>: its unit names, one per line, sorted
   local list
-  list="$(sed -nE 's/^[[:space:]]*unit:[[:space:]]*\[(.*)\][[:space:]]*(#.*)?$/\1/p' "$1")"
+  list="$(sed -nE 's/^[[:space:]]*unit:[[:space:]]*\[([^]]*)\][[:space:]]*(#.*)?$/\1/p' "$1")"
   printf '%s\n' "$list" | tr ',' '\n' | tr -d "[:blank:]\"'" | awk 'NF' | sort -u
 }
 
+for f in "$DEV" "$PROD"; do
+  [ -f "$f" ] || { echo "no such workflow: $f" >&2; exit 1; }
+done
 dev="$(units "$DEV")"
 prod="$(units "$PROD")"
 [ -n "$dev" ] || { echo "no 'unit: [...]' list in $DEV" >&2; exit 1; }

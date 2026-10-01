@@ -98,7 +98,24 @@ check "parity fails a unit missing from prod" "! parity_rc '        unit: [api, 
 check "parity fails a unit missing from dev" "! parity_rc '        unit: [api]' '        unit: [api, worker]'"
 check "parity fails when neither workflow has a unit list" "! parity_rc '        os: [linux]' '        os: [linux]'"
 check "parity fails an empty unit list" "! parity_rc '        unit: []' '        unit: []'"
-check "parity fails a missing workflow file" "! bash -c \"\$parity\" parity /nonexistent/dev.yml /nonexistent/prod.yml >/dev/null 2>&1"
+# shellcheck disable=SC2034  # read inside check's eval string
+missing_out="$(bash -c "$parity" parity /nonexistent/dev.yml /nonexistent/prod.yml 2>&1)"
+missing_rc=$?
+check "parity fails a missing workflow file, naming it" "[ '$missing_rc' -ne 0 ] && printf '%s' \"\$missing_out\" | grep -q 'no such workflow: /nonexistent/dev.yml'"
+check "parity reads a list whose comment holds brackets" "parity_rc '        unit: [api]  # see [docs]' '        unit: [api]'"
+# The guide's own two workflow snippets must pass its own script.
+snippets_rc() {
+  local d; d="$(mktemp -d)"
+  awk '/^```yaml/{ n++; y = 1; next } y && /^```/{ y = 0 } y && n == 1' "$deploy" >"$d/dev.yml"
+  awk '/^```yaml/{ n++; y = 1; next } y && /^```/{ y = 0 } y && n == 2' "$deploy" >"$d/prod.yml"
+  bash -c "$parity" parity "$d/dev.yml" "$d/prod.yml" >/dev/null 2>&1
+  local rc=$?; rm -rf "$d"; return "$rc"
+}
+check "the guide's dev and prod snippets pass its parity script" "snippets_rc"
+# The guide cites these deny rules; it must stop being true only by failing here.
+for rule in 'Bash(git push * v*)' 'Bash(git push *--tags*)' 'Bash(git push *refs/tags/*)'; do
+  check "settings.json denies $rule, as the deploy guide says" "jq -e --arg r '$rule' '.permissions.deny | index(\$r)' '$ROOT/.claude/settings.json' >/dev/null"
+done
 
 check "README's file list includes the deploy guide" "grep -qE '^docs/DEPLOYING\\.md[[:space:]]' '$ROOT/README.md'"
 check "README links the deploy guide" "grep -qF '(docs/DEPLOYING.md)' '$ROOT/README.md'"
