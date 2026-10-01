@@ -93,6 +93,14 @@ for a in go-reviewer database-reviewer typescript-reviewer python-reviewer; do
   check "$a is not enabled in this repo" "[ ! -e '$ROOT/.claude/agent-context/$a.md' ] && [ ! -e '$ROOT/.claude/agents/$a.md' ]"
 done
 check "templates/agent-context has no _common.md of its own" "[ ! -e '$ROOT/templates/agent-context/_common.md' ]"
+# The rule #33 asked for: migrations run with nobody watching.
+db="$ROOT/templates/agent-context/database-reviewer.md"
+check "database-reviewer treats a missing down migration or a long lock as HIGH" \
+  "grep -q 'unattended' '$db' && grep -q 'HIGH' '$db' && grep -q 'down migration' '$db' && grep -qi 'lock' '$db'"
+for doc in templates/CLAUDE.md docs/BACKLOG.md; do
+  check "$doc says how to enable a stack reviewer" \
+    "grep -q 'templates/agent-context/' '$ROOT/$doc' && grep -q 'vendor-agents.sh' '$ROOT/$doc'"
+done
 
 shopt -s nullglob
 templates=("$ROOT"/templates/agent-context/*.md)
@@ -105,6 +113,7 @@ for tpl in ${templates[@]+"${templates[@]}"}; do
 done
 run "$S"; rc=$?
 check "builds every template context" "[ $rc -eq 0 ] && [ ${#templates[@]} -gt 0 ]"
+[ "$rc" -eq 0 ] || cat "$S/out" >&2
 for tpl in ${templates[@]+"${templates[@]}"}; do
   a="$(basename "$tpl" .md)"
   check "template $a.md builds into an agent with its context and the common rules" \
