@@ -17,10 +17,17 @@ To write the issues it works, see [ISSUE_GUIDE.md](./ISSUE_GUIDE.md).
 
 `backlog-loop.sh` stops when the backlog is empty, when an item makes no progress,
 or after `MAX_ITEMS`. Its settings are environment variables: `MAX_ITEMS` (25),
-`PACE_SECONDS` (5), `MAX_RETRIES` (3), `BACKOFF_SECONDS` (300), `MODEL`, and
-`LOG_DIR` (`.loop-logs`). All loop state lives in git and issue labels, so it is
-safe to stop at any time and re-run later: the next iteration recovers whatever was
-in flight.
+`PACE_SECONDS` (5), `MAX_RETRIES` (3), `BACKOFF_SECONDS` (300), `MODEL`,
+`LOG_DIR` (`.loop-logs`), and `BG_WAIT_SECONDS` (2700): how long each session waits
+for its background reviewers and PR review before they are cut off. Each retry of
+an item writes its own log (`item-<time>-<n>.attempt2.log`, ...). All loop state
+lives in git and issue labels, so it is safe to stop at any time and re-run later:
+the next iteration recovers whatever was in flight.
+
+Only one `backlog-loop.sh` runs per clone: it holds `.git/backlog-loop.lock` while
+it works, and a second one refuses to start. A lock left by a crashed run is
+reclaimed on the next start. If a run is refused and no loop is running, the message
+says how to clear the lock.
 
 Before a first unattended run, `scripts/setup.sh` checks that everything the loop
 needs is in place.
@@ -39,7 +46,9 @@ needs is in place.
    incomplete.
 5. **Branch** as `<type>/<number>-<slug>`, and **implement test-first** until every
    `## Verify` command in `CLAUDE.md` passes. After about three failed cycles it
-   gives up: `needs-attention`, a comment saying why, and the branch deleted.
+   gives up: any work is pushed to an `abandoned/<number>-<sha>` branch, the issue's
+   own branch is deleted, and the issue gets `needs-attention` and a comment saying
+   why and where the work is.
 6. **Commit and push**, then run the **specialist reviewers** listed in `CLAUDE.md`
    whose paths match. CRITICAL and HIGH findings get one fix round; the rest go in
    the PR body.

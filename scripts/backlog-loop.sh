@@ -21,6 +21,9 @@
 #   BACKOFF_SECONDS  base backoff between retries          (default 300)
 #   MODEL            optional model for claude -p          (default: inherit config)
 #   LOG_DIR          per-item log directory                (default .loop-logs)
+#   BG_WAIT_SECONDS  how long claude -p waits for background agents (the
+#                    specialist reviewers, the PR review) before killing them
+#                                                          (default 2700 = 45 min)
 #
 set -uo pipefail
 
@@ -32,6 +35,12 @@ PACE_SECONDS="${PACE_SECONDS:-5}"
 MAX_RETRIES="${MAX_RETRIES:-3}"
 BACKOFF_SECONDS="${BACKOFF_SECONDS:-300}"
 LOG_DIR="${LOG_DIR:-.loop-logs}"
+BG_WAIT_SECONDS="${BG_WAIT_SECONDS:-2700}"
+case "$BG_WAIT_SECONDS" in
+  ''|*[!0-9]*) echo "✗ BG_WAIT_SECONDS must be a whole number of seconds, got: $BG_WAIT_SECONDS" >&2; exit 1 ;;
+esac
+# Force base 10: bash arithmetic reads a leading zero as octal (0600 → 384, 08 → error).
+BG_WAIT_SECONDS=$((10#$BG_WAIT_SECONDS))
 
 # /work-next-item stops at once without a Verify section; fail here instead of
 # spending MAX_ITEMS invocations discovering that one at a time.
@@ -46,13 +55,13 @@ gh auth status >/dev/null 2>&1 || { echo "✗ gh is not authenticated. Run: gh a
 
 mkdir -p "$LOG_DIR"
 
-# Single-instance lock so this driver and an interactive /loop can't double-claim.
-LOCK="$LOG_DIR/.lock"
-if ! mkdir "$LOCK" 2>/dev/null; then
-  echo "✗ Another backlog-loop run holds the lock ($LOCK). Exiting." >&2
-  exit 1
-fi
-trap 'rmdir "$LOCK" 2>/dev/null' EXIT
+# Single-instance lock, so two drivers can't double-claim, and so a /work-next-item
+# started by hand while this runs stops at its own lock check. It reclaims a lock a
+# crashed run left behind. The sessions this driver starts run that same check;
+# BACKLOG_LOOP_PID tells them the lock they find is their own driver's.
+scripts/loop-lock.sh acquire $$ || exit 1
+trap 'scripts/loop-lock.sh release $$' EXIT
+export BACKLOG_LOOP_PID=$$
 
 # Count open, prioritized issues that still need loop work. in-progress counts
 # (Step 0 recovers it); blocked / needs-attention / in-review do not.
@@ -68,11 +77,18 @@ work_remaining() {
 # governed by permissions: the committed .claude/settings.json denies merges and
 # main pushes, and .claude/settings.local.json must allow every gh/git command
 # /work-next-item runs plus the Verify commands (see README), or items stop early.
+#
+# claude -p kills background tasks 600s after the main turn by default, which cut
+# the reviewers and the PR review off mid-run (#22). Give them a finite ceiling so
+# a hung agent still cannot stall the driver forever.
 run_item() {
+  local ceiling_ms=$(( BG_WAIT_SECONDS * 1000 ))
   if [ -n "${MODEL:-}" ]; then
-    claude -p "/work-next-item" --permission-mode acceptEdits --model "$MODEL" >"$1" 2>&1
+    CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS="$ceiling_ms" \
+      claude -p "/work-next-item" --permission-mode acceptEdits --model "$MODEL" >"$1" 2>&1
   else
-    claude -p "/work-next-item" --permission-mode acceptEdits >"$1" 2>&1
+    CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS="$ceiling_ms" \
+      claude -p "/work-next-item" --permission-mode acceptEdits >"$1" 2>&1
   fi
 }
 
@@ -100,12 +116,16 @@ while [ "$count" -lt "$MAX_ITEMS" ]; do
 
   count=$((count + 1))
   ts="$(date +%Y%m%d-%H%M%S)"
-  log="$LOG_DIR/item-$ts.log"
+  # The item number keeps names unique even when two items start in the same second.
+  base="$LOG_DIR/item-$ts-$count"
+  log="$base.log"
   echo "▶ [$count/$MAX_ITEMS] $remaining actionable item(s) remain → /work-next-item (log: $log)"
 
   attempt=0
   while :; do
     attempt=$((attempt + 1))
+    # Each attempt gets its own log, so a retry cannot erase why the last one failed.
+    [ "$attempt" -eq 1 ] || log="$base.attempt$attempt.log"
     if run_item "$log"; then
       break
     fi
@@ -115,7 +135,7 @@ while [ "$count" -lt "$MAX_ITEMS" ]; do
       exit 2
     fi
     backoff=$(( BACKOFF_SECONDS * attempt ))
-    echo "  attempt ${attempt} failed; backing off ${backoff}s before retry…" >&2
+    echo "  attempt ${attempt} failed (log: $log); backing off ${backoff}s before retry…" >&2
     sleep "$backoff"
   done
 

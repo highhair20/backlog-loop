@@ -39,7 +39,8 @@ DENY=(); while IFS= read -r -d "" l; do DENY+=("$l"); done < <(jq -r '.permissio
 # `git …` spans in prose. Placeholders (<number>, ${N}) are made concrete.
 CMDS=(); while IFS= read -r -d "" l; do CMDS+=("$l"); done < <(
   {
-    awk '/^```/ { f = !f; next } f && /^(gh |git |scripts\/)/ { sub(/[[:space:]]*\\$/, ""); print }' "$COMMAND"
+    # Fences may be indented (code blocks inside list items, as in Give up).
+    awk '/^[[:space:]]*```/ { f = !f; next } f { sub(/^[[:space:]]+/, "") } f && /^(gh |git |scripts\/)/ { sub(/[[:space:]]*\\$/, ""); print }' "$COMMAND"
     grep -oE '`(gh|git) [^`]+`' "$COMMAND" | tr -d '`'
   } | sed -E 's/<[a-z/ -]+>/x/g; s/\$\{N\}/1/g; s/\$N/1/g' | sort -u | read_lines
 )
@@ -54,6 +55,13 @@ done
 # Every way of running the loop must refuse a CLAUDE.md the checker rejects (such as
 # the template repo's own), not just backlog-loop.sh.
 if grep -qF 'scripts/check-verify-section.sh CLAUDE.md' "$COMMAND"; then echo "ok   the loop command runs check-verify-section.sh"; else fail "the loop command does not run check-verify-section.sh"; fi
+
+# Every way of running the loop must also yield to a run that holds the lock. The
+# command checks it; only backlog-loop.sh takes it, so nothing else may be allowed.
+if grep -qx 'scripts/loop-lock.sh check' "$COMMAND"; then echo "ok   the loop command runs loop-lock.sh check"; else fail "the loop command does not run loop-lock.sh check"; fi
+for cmd in "scripts/loop-lock.sh acquire 1" "scripts/loop-lock.sh release 1"; do
+  if matches_any "$cmd" "${ALLOW[@]}"; then fail "allowed, but only the driver should run it: $cmd"; else echo "ok   not allowed: $cmd"; fi
+done
 
 # The deny list must still win for the pushes that matter, even with the allow rules.
 # A pushed release tag (v1.2.3) often triggers a deploy, so it counts as one of them.

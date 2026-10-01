@@ -24,6 +24,7 @@
       "Bash(git push -u origin *)",
       "Bash(git push origin *)",
       "Bash(scripts/check-verify-section.sh *)",
+      "Bash(scripts/loop-lock.sh check)",
       "Bash(*/.claude/hooks/pr-review-state.sh *)",
       "Bash(.claude/hooks/pr-review-state.sh *)",
       "Bash(git remote get-url *)"

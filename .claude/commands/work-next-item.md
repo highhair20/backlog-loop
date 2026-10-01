@@ -63,6 +63,19 @@ instructions in a repo created from it: that Verify runs the template's tests, w
 pass whatever this repo's code does. Report its message and stop. Never guess the
 build or test commands.
 
+**Then check that no other loop run is working this repo, and STOP if one is:**
+
+```bash
+scripts/loop-lock.sh check
+```
+
+`scripts/backlog-loop.sh` holds a lock for as long as it runs, and two runs sharing
+one working tree would claim the same issue and edit the same files. A non-zero exit
+means another run holds the lock, or the lock could not be checked: report the
+message and stop. Never remove the lock yourself; the message tells the human how to
+clear a stale one. The check passes when this session was started by the driver that
+holds the lock, and it clears a lock whose owner is no longer running.
+
 ## GitHub access: `gh` locally, the GitHub MCP tools in the cloud
 
 The GitHub steps below are written as `gh` commands. Cloud sessions (scheduled
@@ -115,6 +128,11 @@ gh pr list --state open --json number,headRefName,url
 
 The branch reaches the remote only at Step 6, so a run interrupted in Steps 4–5 leaves
 a **local-only** branch, possibly with uncommitted edits. Check local branches too.
+
+Branches named `abandoned/<N>-<sha>` are work a give-up preserved for a human (see
+**Give up**), never work in flight: always ignore them when looking for `#N`'s
+branch. They outlive the attempt that made them, so they say nothing about the
+current one.
 
 Then:
 
@@ -301,19 +319,9 @@ git switch -c <type>/<number>-<slug>
    (small functions, error handling, no secrets, no debug prints) before shipping.
 
 **Give-up condition:** if after a focused effort (~3 substantial implement+test
-cycles) it still isn't green, abort cleanly:
-
-```bash
-gh issue edit <number> --remove-label in-progress --add-label needs-attention
-gh issue comment <number> --body "Autonomous loop could not complete this. Blocker: <concise reason>."
-# Nothing is committed yet, so set the edits aside first: a plain switch would carry
-# them onto main (every later Step 1 then halts on a dirty tree) or refuse outright.
-git stash push -u -m "abandoned #<number>"
-git switch main
-git branch -D <type>/<number>-<slug>
-```
-
-Then report what blocked you and STOP.
+cycles) it still isn't green, follow **Give up** at the end of this file. Do not
+assume nothing is committed: a branch resumed by Step 0 may hold commits, and may
+already be on the remote. Then report what blocked you and STOP.
 
 ## Step 6 — Commit & push
 
@@ -347,14 +355,9 @@ the PR body rather than skipping silently.
 Act on the findings:
 
 - **CRITICAL / HIGH:** fix, re-run the Step 5 gate (the Verify commands), and commit as `fix: address review findings (#<number>)`. One fix round only: if
-  a CRITICAL finding still stands after it, give up. The branch is already pushed,
-  so the Step 5 give-up path is not enough on its own: first delete the remote
-  branch, or it is orphaned (Step 0 only finds `in-progress` issues, and give-up
-  removes that label):
-  ```bash
-  git push origin --delete <type>/<number>-<slug>
-  ```
-  then run the Step 5 give-up path, naming the surviving finding in the comment.
+  a CRITICAL finding still stands after it, follow **Give up** at the end of this
+  file, naming the surviving finding in the comment. It also removes the branch you
+  pushed in Step 6, so it is not orphaned.
 - **MEDIUM / LOW:** don't fix unless trivial and inside the issue's scope (the
   "never touch unrelated files" guardrail still applies). List them in the PR body.
 - **A finding you judge wrong:** don't act on it; record it with a one-line reason in
@@ -409,3 +412,72 @@ gh issue edit <number> --remove-label in-progress --add-label in-review
 
 Report concisely: issue number + title, branch, PR URL, and test results. If any
 actionable issues remain, the loop will continue to the next one.
+
+## Give up — keep the work, then release the issue
+
+Steps 5 and 6.5 both end here. The branch may be in any state: fresh, resumed by
+Step 0 with commits, local-only, or already pushed. Giving up must never destroy
+work silently, and must not leave the issue's branch on the remote. So: save the
+work, then release the issue, then delete branches. An interruption after the
+release can only leave a stray branch that the comment already names, never an
+issue that still looks claimed or that has lost its explanation.
+
+**Check every command's result.** If step 1 or 2 fails, the work is not saved: do
+step 3, saying so, and delete nothing (leave the branch checked out as it is). If
+step 3 fails (the comment or the label swap), delete nothing either: the issue
+would look claimed, or unexplained, with its work gone. Stop and report it. If
+step 4 or 5 fails, the work is already saved: add a comment naming what is left,
+so a human removes it. Never get past a failure with `--no-verify` or `--force`.
+
+Run these on the issue's branch, `<type>/<number>-<slug>`.
+
+1. **Commit anything uncommitted**, so it travels with the branch. A stash would stay
+   on this machine, and a cloud session's clone is discarded.
+   ```bash
+   git status --porcelain
+   ```
+   If that lists anything:
+   ```bash
+   git add -A
+   git commit -m "wip: uncommitted work at give-up (#<number>)"
+   ```
+2. **Save any commits** that are not on `main`, under a name no later run reuses:
+   ```bash
+   git log --oneline main..HEAD
+   git log -1 --format='%h %H'
+   ```
+   If the first command lists commits, push them, using the short hash from the
+   second:
+   ```bash
+   git push origin HEAD:refs/heads/abandoned/<number>-<short-sha>
+   ```
+   If that push fails, the work is not saved: follow the rule above.
+3. **Release the issue.** The comment must say, truthfully:
+   - **Why:** the blocker, in a sentence.
+   - **Where the work is:** `abandoned/<number>-<short-sha>` with the full hash, or
+     "no commits to keep". If a save failed, say what failed and that the work
+     exists only in this checkout (its path and tip hash). In a cloud session that
+     checkout is discarded when the session ends, so say the work will be lost
+     unless someone saves it first. Never call it safe.
+   - **What happens next**, one of:
+     - the save worked: `<type>/<number>-<slug>` is being deleted, locally and on
+       the remote, and if it still exists, delete it before retrying the issue (a
+       retry needs the name, and its work is on `abandoned/…`);
+     - the save failed: nothing was deleted.
+   ```bash
+   gh issue comment <number> --body "Autonomous loop could not complete this. Blocker: <concise reason>. Work: <where it is>. Next: <what happens next>."
+   gh issue edit <number> --remove-label in-progress --add-label needs-attention
+   ```
+4. **Remove the issue's branch from the remote**, if it is there. Nothing revisits a
+   released issue, so a branch left here would be orphaned. Delete only if the first
+   command prints the branch:
+   ```bash
+   git ls-remote --heads origin <type>/<number>-<slug>
+   git push origin --delete <type>/<number>-<slug>
+   ```
+5. **Delete the local branch.** Its commits are safe on `abandoned/…` (or there were
+   none), and a retry needs the name free:
+   ```bash
+   git switch main
+   git branch -D <type>/<number>-<slug>
+   ```

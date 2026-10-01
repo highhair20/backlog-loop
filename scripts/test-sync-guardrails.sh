@@ -66,6 +66,8 @@ echo "# local edit" >>"$T/.claude/hooks/pr-review-gate.sh"
 git -C "$T" -c user.name=t -c user.email=t@t commit -qam drift
 "$SYNC" "$T" >/dev/null 2>&1
 check "copies the generic loop command and driver" "[ -f '$T/.claude/commands/work-next-item.md' ] && [ -x '$T/scripts/backlog-loop.sh' ] && [ -x '$T/scripts/check-verify-section.sh' ]"
+# The driver and the command both call it; without it neither starts.
+check "copies loop-lock.sh, executable" "[ -x '$T/scripts/loop-lock.sh' ]"
 check "copies vendor-agents.sh, executable" "[ -x '$T/scripts/vendor-agents.sh' ]"
 check "seeds the reviewer agents, their context, and the ECC license" "[ -f '$T/.claude/agents/pr-test-analyzer.md' ] && [ -f '$T/.claude/agents/silent-failure-hunter.md' ] && [ -f '$T/.claude/agent-context/_common.md' ] && [ -f '$T/.claude/agents/LICENSE.ECC' ]"
 check "seeds the backlog operator doc" "[ -f '$T/docs/BACKLOG.md' ]"
