@@ -421,6 +421,11 @@ work silently, and must not leave the issue's branch on the remote. So: save the
 work first, delete branches second, swap the labels last. An interrupted give-up
 then leaves the issue `in-progress`, and Step 0 finishes it.
 
+**Check every command's result.** If step 1 or 2 fails, the work is not saved: run
+no later step except 5, and leave the branch checked out as it is. If step 3 or 4
+fails, the work is already saved: carry on, and name what could not be deleted in
+the comment. Never get past a failure with `--no-verify` or `--force`.
+
 Run these on the issue's branch, `<type>/<number>-<slug>`.
 
 1. **Commit anything uncommitted**, so it travels with the branch. A stash would stay
@@ -443,8 +448,7 @@ Run these on the issue's branch, `<type>/<number>-<slug>`.
    ```bash
    git push origin HEAD:refs/heads/abandoned/<number>-<short-sha>
    ```
-   **If that push fails, stop deleting.** Leave the branch as it is, skip to step 5,
-   and say in the comment that the work exists only on this machine's local branch.
+   If that push fails, the work is not saved: follow the rule above.
 3. **Remove the issue's branch from the remote**, if it is there, so it is not
    orphaned (Step 0 only looks at `in-progress` issues). Delete only if the first
    command prints the branch:
@@ -458,10 +462,15 @@ Run these on the issue's branch, `<type>/<number>-<slug>`.
    git switch main
    git branch -D <type>/<number>-<slug>
    ```
-5. **Release the issue, labels last.** The comment names where the work is:
-   `abandoned/<number>-<short-sha>` and the full hash, "only on the local branch"
-   if the save failed, or "no commits to keep".
+5. **Release the issue, labels last.** The comment must say, truthfully:
+   - **Where the work is:** `abandoned/<number>-<short-sha>` with the full hash, or
+     "no commits to keep". If a save failed, say what failed and that the work
+     exists only in this checkout (its path and tip hash). In a cloud session that
+     checkout is discarded when the session ends, so say the work will be lost
+     unless someone saves it first. Never call it safe.
+   - **What could not be deleted**, if step 3 or 4 failed, so a human removes it:
+     once the issue leaves `in-progress`, nothing revisits it.
    ```bash
-   gh issue comment <number> --body "Autonomous loop could not complete this. Blocker: <concise reason>. Work: <where it is>."
+   gh issue comment <number> --body "Autonomous loop could not complete this. Blocker: <concise reason>. Work: <where it is>. <Not deleted: <branch>, if any.>"
    gh issue edit <number> --remove-label in-progress --add-label needs-attention
    ```
