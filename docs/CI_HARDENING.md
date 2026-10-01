@@ -10,6 +10,11 @@ Each section states the principle first, then the failure it prevents, then a
 snippet for a step in your `verify` job. Snippets marked with a stack (Node, Go)
 show that stack; the principle carries over to others.
 
+**The snippets rely on GitHub Actions' default shell**, `bash -eo pipefail`: a
+failing command, including one inside a pipe, fails the step. If you move a
+snippet into a Makefile, a hook, or a step with another `shell:`, start it with
+`set -euo pipefail`, or its failures stop counting.
+
 **Pin every action to a commit SHA**, with the version in a comment, as the
 template's own workflows do. A tag can be moved to other code; a SHA cannot.
 Dependabot (`.github/dependabot.yml`) updates the SHA and the comment together.
@@ -79,6 +84,13 @@ variation, a hard 80% gate fails healthy PRs until people stop trusting it. A
     COVERAGE_FLOOR: 76
   run: |
     total="$(cat coverage-total.txt)"
+    # awk compares a non-number as a string, so "null" (what jq prints for a
+    # missing field) would pass both checks below. Refuse anything else first.
+    case "$total" in
+      ''|*[!0-9.]*|*.*.*)
+        echo "::error::coverage-total.txt holds '${total}', not a percentage."
+        exit 1 ;;
+    esac
     echo "Coverage: ${total}% (target ${COVERAGE_TARGET}%, floor ${COVERAGE_FLOOR}%)"
     if awk -v t="$total" -v f="$COVERAGE_FLOOR" 'BEGIN { exit !(t < f) }'; then
       echo "::error::Coverage ${total}% is below the ${COVERAGE_FLOOR}% floor."
@@ -113,7 +125,8 @@ cache to disable; this only writes the total for the gate.
 - name: Test with coverage
   run: |
     ./node_modules/.bin/jest --ci --coverage --coverageReporters=json-summary
-    jq '.total.lines.pct' coverage/coverage-summary.json > coverage-total.txt
+    # -e: a missing field fails here, instead of writing "null" for the gate.
+    jq -e '.total.lines.pct' coverage/coverage-summary.json > coverage-total.txt
 ```
 
 ## 5. Guard a single source of truth

@@ -35,6 +35,34 @@ check "every action in the CI hardening guide is pinned to a SHA with a version 
 # coverage gate, uncached coverage, single source of truth.
 check "CI hardening guide has a section per pattern" "[ \"\$(grep -c '^## [1-5]\\. ' '$guide' 2>/dev/null)\" = 5 ]"
 check "placeholder CI step points to the hardening guide" "grep -q 'docs/CI_HARDENING.md' '$ROOT/.github/workflows/ci.yml'"
+# Each pattern section states its principle, then the failure it prevents, then a
+# copy-ready snippet. A heading alone must not pass.
+for n in 1 2 3 4 5; do
+  sec="$(awk -v h="## $n. " '/^## /{ on = (index($0, h) == 1) } on' "$guide" 2>/dev/null)"
+  p="$(printf '%s\n' "$sec" | grep -n -m1 '^\*\*Principle:\*\*' | cut -d: -f1)"
+  v="$(printf '%s\n' "$sec" | grep -n -m1 '^\*\*Prevents:\*\*' | cut -d: -f1)"
+  y="$(printf '%s\n' "$sec" | grep -n -m1 '^```yaml' | cut -d: -f1)"
+  check "pattern $n: principle, then what it prevents, then a YAML snippet" "[ -n '$p' ] && [ -n '$v' ] && [ -n '$y' ] && [ '$p' -lt '$v' ] && [ '$v' -lt '$y' ]"
+done
+
+# Run the guide's coverage gate itself: it is the snippet whose logic can pass
+# silently. A value that is not a number (jq prints "null" for a missing field)
+# must fail it, as must a value below the floor.
+gate="$(awk '/^## 3\. /{ s = 1 } s && /^## 4\. /{ exit } s && /^```yaml/{ y = 1; next } y && /^```/{ exit } y && r { sub(/^    /, ""); print } y && /run: \|/{ r = 1 }' "$guide" 2>/dev/null)"
+check "extracted the coverage gate's script from the guide" "printf '%s' \"\$gate\" | grep -q 'COVERAGE_FLOOR'"
+gate_rc() { # gate_rc <coverage value>: exit status of the guide's gate with that total
+  local d; d="$(mktemp -d)"
+  printf '%s\n' "$1" >"$d/coverage-total.txt"
+  (cd "$d" && COVERAGE_TARGET=80 COVERAGE_FLOOR=76 bash -eo pipefail -c "$gate") >/dev/null 2>&1
+  local rc=$?; rm -rf "$d"; return "$rc"
+}
+check "the gate passes coverage above the target" "gate_rc 85"
+check "the gate passes coverage between floor and target (warning only)" "gate_rc 78"
+check "the gate fails coverage below the floor" "! gate_rc 70"
+check "the gate fails a non-numeric total (jq's null)" "! gate_rc null"
+check "the gate fails an empty total" "! gate_rc ''"
+check "the Jest snippet makes jq fail on a missing field" "grep -q 'jq -e ' '$guide'"
+
 # The README's file list is how a reader finds the guide (#14 acceptance criterion).
 check "README's file list includes the hardening guide" "grep -qE '^docs/CI_HARDENING\\.md[[:space:]]' '$ROOT/README.md'"
 
