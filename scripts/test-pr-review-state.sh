@@ -23,6 +23,7 @@ cat >"$WORK/fake/gh" <<'EOF'
 #!/usr/bin/env bash
 echo "$*" >>"$FAKE_GH_LOG"
 if [ "$FAKE_GH_STATE" = fail ]; then echo "HTTP 502" >&2; exit 1; fi
+if [ "$FAKE_GH_STATE" = hang ]; then sleep 30; echo OPEN; exit 0; fi
 echo "$FAKE_GH_STATE"
 EOF
 chmod +x "$WORK/fake/gh"
@@ -113,6 +114,32 @@ setup gate-reviewing
 "$WORK/gate-reviewing/.claude/hooks/pr-review-state.sh" reviewing 12 >/dev/null
 gate gate-reviewing MERGED
 check "gate, review in flight: stays quiet without calling gh" "rc_is gate-reviewing 0 && [ ! -s '$WORK/gate-reviewing/out' ] && [ ! -f '$WORK/gate-reviewing/gh.log' ]"
+
+# --- review findings (#19 PR review) -------------------------------------
+
+# A stalled gh must not eat the gate's 10s hook budget: the hook would be killed
+# before it could warn, and enforcement would drop silently every turn.
+setup gate-hang
+start=$(date +%s)
+gate gate-hang hang
+took=$(( $(date +%s) - start ))
+check "gate, gh hangs: returns well inside the hook's 10s timeout" "[ $took -lt 8 ]"
+check "gate, gh hangs: warns that the state was not checked" "jq -e '.reason | test(\"not checked\")' '$WORK/gate-hang/out' >/dev/null"
+check "gate, gh hangs: still enforces the loop" "blocks gate-hang"
+
+# An empty URL must never reach gh: 'gh pr view \"\"' resolves the PR of whatever
+# branch is checked out, which can be an unrelated PR.
+setup gate-nourl
+jq '.url = ""' "$(state_file gate-nourl)" >"$WORK/gate-nourl/s.tmp" && mv "$WORK/gate-nourl/s.tmp" "$(state_file gate-nourl)"
+gate gate-nourl MERGED
+check "gate, no URL: does not call gh" "[ ! -f '$WORK/gate-nourl/gh.log' ]"
+check "gate, no URL: treats the state as unchecked and keeps enforcing" "blocks gate-nourl && jq -e '.reason | test(\"not checked\")' '$WORK/gate-nourl/out' >/dev/null"
+
+# status is read-only: it must not call gh, and must not close the loop.
+setup status-merged
+run status-merged MERGED "$WORK/status-merged/.claude/hooks/pr-review-state.sh" status s
+check "status: makes no network call" "[ ! -f '$WORK/status-merged/gh.log' ]"
+check "status: leaves the loop in place" "[ -f '$(state_file status-merged)' ] && out_has status-merged 'BLOCK|'"
 
 # --- instructions ---------------------------------------------------------
 

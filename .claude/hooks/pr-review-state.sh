@@ -42,6 +42,9 @@ TTL_SECONDS=$((24 * 60 * 60))
 # How long a review may be in flight before the gate stops believing in it. The
 # observed reviews took 6-9 minutes, so this is generous but not open-ended.
 REVIEW_GRACE_SECONDS=$((20 * 60))
+# How long the PR-state lookup may take. The gate hook has a 10s budget; a hook
+# killed for overrunning it cannot warn, so enforcement would drop silently.
+PR_STATE_TIMEOUT=3
 
 # Derived from this script's own location, never from the environment or cwd.
 # CLAUDE_PROJECT_DIR is set only for hook processes, so `seed` (a hook) resolved
@@ -89,10 +92,23 @@ write_state() {
 # CLOSED; FAIL if the lookup failed; NOGH where there is no gh (cloud sessions).
 # A PR merged while its review ran must close the loop: fixes pushed to its
 # branch after the merge never reach main (#19, where PR #8's fixes were lost).
+#
+# An empty URL is FAIL without calling gh: 'gh pr view ""' resolves the PR of
+# whatever branch is checked out, which can be an unrelated PR. The lookup is cut
+# off after PR_STATE_TIMEOUT seconds (FAIL), since macOS has no timeout(1).
 pr_state() {
   command -v gh >/dev/null 2>&1 || { echo NOGH; return; }
-  local s
-  s=$(gh pr view "$1" --json state --jq .state 2>/dev/null) || { echo FAIL; return; }
+  [ -n "${1:-}" ] || { echo FAIL; return; }
+  local out pid watch rc s
+  out=$(mktemp) || { echo FAIL; return; }
+  gh pr view "$1" --json state --jq .state >"$out" 2>/dev/null &
+  pid=$!
+  ( sleep "$PR_STATE_TIMEOUT"; kill "$pid" 2>/dev/null ) >/dev/null 2>&1 &
+  watch=$!
+  wait "$pid"; rc=$?
+  kill "$watch" 2>/dev/null; wait "$watch" 2>/dev/null
+  s=$(cat "$out"); rm -f "$out"
+  [ "$rc" -eq 0 ] || { echo FAIL; return; }
   case "$s" in OPEN | MERGED | CLOSED) echo "$s" ;; *) echo FAIL ;; esac
 }
 
@@ -294,8 +310,11 @@ emit_status() {
     # Right before blocking, check the PR is still open: a PR merged while its
     # review ran must not hold the turn for fixes that cannot reach main. A failed
     # or impossible lookup warns and keeps enforcing; it never blocks or wedges.
+    # Only the gate checks: status is read-only and makes no network call.
     url=$(jq -r '.url // ""' "$f")
-    case "$(pr_state "$url")" in
+    pstate=OPEN
+    [ "$mutate" = yes ] && pstate=$(pr_state "$url")
+    case "$pstate" in
       MERGED) gone_message "$(jq -r .pr "$f")" "$url" MERGED | emit WARN
               [ "$mutate" = yes ] && rm -f "$f"; continue ;;
       CLOSED) gone_message "$(jq -r .pr "$f")" "$url" CLOSED | emit WARN
