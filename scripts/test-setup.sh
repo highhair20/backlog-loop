@@ -102,6 +102,7 @@ ci_case warns  "a YAML comment is not a match" "make test" "      # make test" "
 ci_case warns  "a run-block comment is not a match" "make test" "      - run: |" "          # make test" "          echo hi"
 ci_case warns  "a step name is not a match" "make test" "      - name: make test" "        run: echo hi"
 ci_case warns  "a shell comment is not a match" "make test" "      - run: echo hi # make test"
+ci_case warns  "a separator inside a comment is not a match" "make test" "      - run: echo hi # a && make test"
 ci_case warns  "regex metacharacters match literally" "scripts/run.sh" "      - run: scripts/runXsh"
 ci_case passes "run: value" "make test" "      - run: make test"
 ci_case passes "run: under a named step" "make test" "      - name: Test" "        run: make test"
@@ -110,6 +111,11 @@ ci_case passes "followed by &&" "make test" "      - run: make test && echo done
 ci_case passes "followed by a comment" "make test" "      - run: make test # the suite"
 ci_case passes "after a shell separator" "make test" "      - run: npm ci && make test"
 ci_case passes "with regex metacharacters" "shellcheck --severity=warning scripts/*.sh" "      - run: shellcheck --severity=warning scripts/*.sh"
+ci_case passes "with Windows line endings" "make test" "$(printf '      - run: make test\r')"
+# A command run only by a second workflow still counts.
+printf 'jobs:\n  e2e:\n    steps:\n      - run: make test\n' >"$M/.github/workflows/other.yml"
+ci_case passes "run by another workflow" "make test" "      - run: echo hi"
+rm "$M/.github/workflows/other.yml"
 
 X="$(fresh_repo fix)"
 run "$X" --fix; rc=$?

@@ -57,7 +57,7 @@ verify_commands() {
 
 # Whether a workflow runs this exact command (a heuristic, not a YAML parse). It must
 # start a run: value, a line of a run: | block, or follow a shell separator, and end
-# at end of line, whitespace, or a separator. Comment lines never count. Compares
+# at end of line, whitespace, or a separator. Comments never count. Compares
 # strings rather than building a regex, since commands hold regex metacharacters.
 workflows_run() { # workflows_run <command> <workflow>...
   local cmd="$1"; shift
@@ -70,6 +70,7 @@ workflows_run() { # workflows_run <command> <workflow>...
         after = substr($0, p + n, 1)
         if (after != "" && after !~ /[[:space:];&|]/) continue
         before = substr($0, 1, p - 1)
+        if (before ~ /(^|[[:space:]])#/) continue # inside a trailing comment
         sub(/[[:space:]]+$/, "", before)
         if (before ~ /^[[:space:]]*(-[[:space:]]+)?(run:)?$/ || before ~ /[;&|]$/) { found = 1; exit }
       }
