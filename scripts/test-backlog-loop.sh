@@ -4,12 +4,13 @@
 set -uo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ROOT_OF_TEMPLATE="$(cd "$HERE/.." && pwd)"
 WORK="$(mktemp -d)"
 BG=""
 trap '[ -z "$BG" ] || kill "$BG" 2>/dev/null; touch "$WORK"/*/go 2>/dev/null; rm -rf "$WORK"' EXIT
 
 # When the loop itself runs these tests, the driver's PID is in the environment.
-unset BACKLOG_LOOP_PID
+unset BACKLOG_LOOP_PID BACKLOG_LOOP_STAGED BACKLOG_LOOP_ROOT
 
 failures=0
 check() { if eval "$2"; then echo "ok   $1"; else echo "FAIL $1" >&2; failures=$((failures + 1)); fi; }
@@ -34,6 +35,7 @@ setup() {
     printf '#!/usr/bin/env bash\ncd "%s" || exit 1\necho x >>calls\n' "$dir"
     # The background-wait ceiling this session was given (#22).
     printf 'echo "${CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS:-unset}" >>bgwait\n'
+    printf 'echo "${BACKLOG_LOOP_STAGED:-unset} ${BACKLOG_LOOP_ROOT:-unset}" >>staging-env\n'
     printf 'scripts/loop-lock.sh check >>check-out 2>&1; echo $? >>check-rc\n'
     if [ "$2" = block ]; then
       # Gives up after 30s so a failed test cannot leave it running.
@@ -116,6 +118,18 @@ TMPDIR="$B/tmp" run "$B"; rc=$?
 check "survives its sessions replacing or deleting its scripts" "[ $rc -eq 0 ] && [ \$(wc -l <'$B/calls') -eq 3 ]"
 check "releases the lock after its scripts vanished from the checkout" "[ ! -e '$B/.git/backlog-loop.lock' ]"
 check "removes its private copy on exit" "[ -z \"\$(ls -A '$B/tmp')\" ]"
+check "its sessions do not inherit the staging variables" "[ \"\$(sort -u '$B/staging-env')\" = 'unset unset' ]"
+
+# An early exit (a bad setting, before the lock) must not leave the copy behind.
+Q="$(setup earlyexit progress)"
+mkdir -p "$Q/tmp"
+TMPDIR="$Q/tmp" BG_WAIT_SECONDS=soon run "$Q"; rc=$?
+check "an early exit removes the private copy too" "[ $rc -ne 0 ] && [ -z \"\$(ls -A '$Q/tmp')\" ]"
+
+# Variables inherited from an outer driver must not skip staging or retarget it.
+I="$(setup inherited progress)"
+BACKLOG_LOOP_STAGED="$WORK" BACKLOG_LOOP_ROOT="$ROOT_OF_TEMPLATE" run "$I"; rc=$?
+check "inherited staging variables do not redirect a nested driver" "[ $rc -eq 0 ] && [ \$(wc -l <'$I/calls') -eq 3 ] && [ ! -e '$I/.git/backlog-loop.lock' ]"
 
 N="$(setup noverify progress)"
 printf '## Verify\n```sh\n# test:\n```\n' >"$N/CLAUDE.md"

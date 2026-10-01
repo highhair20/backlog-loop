@@ -32,7 +32,7 @@ set -uo pipefail
 # driver: bash reads a script as it goes, and the exit trap runs loop-lock.sh. So
 # copy the driver and the helpers it calls to a temp dir and re-run from there,
 # with the repo root passed explicitly. The copy is removed on exit.
-if [ -z "${BACKLOG_LOOP_STAGED:-}" ]; then
+if [ "${BACKLOG_LOOP_STAGED:+$BACKLOG_LOOP_STAGED/backlog-loop.sh}" != "$0" ]; then
   root="$(CDPATH='' cd -- "$(dirname -- "$0")/.." && pwd)" || exit 1
   # An explicit template: macOS's bare `mktemp -d` ignores TMPDIR.
   stage="$(mktemp -d "${TMPDIR:-/tmp}/backlog-loop.XXXXXX")" || { echo "✗ could not create a temp dir for the driver" >&2; exit 1; }
@@ -42,9 +42,17 @@ if [ -z "${BACKLOG_LOOP_STAGED:-}" ]; then
     echo "✗ could not copy the driver's scripts from $root/scripts" >&2
     exit 1
   fi
+  # execfail: if the re-exec itself fails, fall through and clean up.
+  shopt -s execfail
   BACKLOG_LOOP_STAGED="$stage" BACKLOG_LOOP_ROOT="$root" exec bash "$stage/backlog-loop.sh" "$@"
+  rm -rf "$stage"
+  echo "✗ could not re-run the driver from $stage" >&2
+  exit 1
 fi
 HERE="$BACKLOG_LOOP_STAGED"
+# Remove the private copy on any exit from here on, early ones included; the lock
+# release is added to this trap once the lock is taken.
+trap 'rm -rf "$HERE"' EXIT
 cd "$BACKLOG_LOOP_ROOT" || exit 1
 
 MAX_ITEMS="${MAX_ITEMS:-25}"
@@ -61,11 +69,7 @@ BG_WAIT_SECONDS=$((10#$BG_WAIT_SECONDS))
 
 # /work-next-item stops at once without a Verify section; fail here instead of
 # spending MAX_ITEMS invocations discovering that one at a time.
-"$HERE/check-verify-section.sh" CLAUDE.md || { rm -rf "$HERE"; exit 1; }
-
-# Remove the private copy on any exit from here on; the lock is added to this
-# trap once it is taken.
-trap 'rm -rf "$HERE"' EXIT
+"$HERE/check-verify-section.sh" CLAUDE.md || exit 1
 
 # A missing tool would otherwise look like a usage limit: run_item fails, and the
 # driver backs off for MAX_RETRIES rounds before giving up.
@@ -101,14 +105,16 @@ work_remaining() {
 #
 # claude -p kills background tasks 600s after the main turn by default, which cut
 # the reviewers and the PR review off mid-run (#22). Give them a finite ceiling so
-# a hung agent still cannot stall the driver forever.
+# a hung agent still cannot stall the driver forever. The staging variables are
+# stripped (#25): a session's Verify may run nested drivers and lock checks, which
+# must act on their own fixtures, not on this repo.
 run_item() {
   local ceiling_ms=$(( BG_WAIT_SECONDS * 1000 ))
   if [ -n "${MODEL:-}" ]; then
-    CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS="$ceiling_ms" \
+    env -u BACKLOG_LOOP_STAGED -u BACKLOG_LOOP_ROOT CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS="$ceiling_ms" \
       claude -p "/work-next-item" --permission-mode acceptEdits --model "$MODEL" >"$1" 2>&1
   else
-    CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS="$ceiling_ms" \
+    env -u BACKLOG_LOOP_STAGED -u BACKLOG_LOOP_ROOT CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS="$ceiling_ms" \
       claude -p "/work-next-item" --permission-mode acceptEdits >"$1" 2>&1
   fi
 }
