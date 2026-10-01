@@ -140,9 +140,49 @@ Then:
    swap didn't. Just fix the state and move on to a new item:
    `gh issue edit ${N} --remove-label in-progress --add-label in-review`.
 2. **A branch exists (remote or local-only) but no open PR** → work was underway.
-   Resume *that* issue as this iteration (do not pick a new one): check out the branch
-   (fetch it first if it is remote-only; a local one keeps any uncommitted edits), bring
-   it to green (Step 5's gate), then continue from Step 6 (commit/push, review, PR).
+   Resume *that* issue as this iteration (do not pick a new one). First, if an earlier
+   run stopped in the middle of a merge (`git rev-parse -q --verify MERGE_HEAD` prints
+   a hash; no output means none is in progress), abort it: git refuses to change
+   branches during a merge, and its conflict markers must not be committed as work.
+   The merges below redo it.
+   ```bash
+   git merge --abort
+   ```
+   Then check out the branch (fetch it first if it is remote-only; a local one keeps
+   any uncommitted edits).
+
+   A merge needs a clean tree, so if `git status --porcelain` lists anything, commit
+   it first:
+   ```bash
+   git add -A
+   git commit -m "wip: resumed edits (#${N})"
+   ```
+   If the branch exists both locally and on the remote, merge the pushed copy in, so
+   commits that exist only there are kept even if the two have diverged:
+   ```bash
+   git pull --no-rebase --no-edit origin <type>/${N}-<slug>
+   ```
+   Then bring it up to date with `main`: other PRs may have merged while it sat, and a
+   PR from a stale branch can be unmergeable. Merge, never rebase (the branch may
+   already be pushed, and force pushes are denied):
+   ```bash
+   git fetch origin
+   git merge --no-edit origin/main
+   ```
+   Either merge can conflict; both are handled the same way, below.
+   If the fetch fails, stop and report it: never merge against a stale
+   `origin/main`. If the merge fails without starting one (`git status --porcelain`
+   lists no conflicted paths; for example, unrelated histories), there is nothing to
+   abort: follow **Give up**, quoting the error.
+
+   If the merge conflicts, resolve it when the conflict is within this issue's scope
+   and Verify passes afterwards. Otherwise abort, and follow **Give up**, naming the
+   conflicting files in the comment:
+   ```bash
+   git merge --abort
+   ```
+   Then bring it to green (Step 5's gate), then continue from Step 6 (commit/push,
+   review, PR).
 3. **Neither a branch nor a PR** → nothing was actually done; release the claim so the
    issue becomes selectable again: `gh issue edit ${N} --remove-label in-progress`.
    If `git status --porcelain` is non-empty here, the edits belong to no branch: stash
@@ -432,18 +472,27 @@ so a human removes it. Never get past a failure with `--no-verify` or `--force`.
 Run these on the issue's branch, `<type>/<number>-<slug>`.
 
 1. **Commit anything uncommitted**, so it travels with the branch. A stash would stay
-   on this machine, and a cloud session's clone is discarded.
+   on this machine, and a cloud session's clone is discarded. First make sure a merge
+   from Step 0 is not half done: committing it would save conflict markers as if they
+   were work. A merge is in progress only if this prints a hash. No output (exit 1)
+   means no merge is in progress, which is the normal case, not a failure:
    ```bash
-   git status --porcelain
+   git rev-parse -q --verify MERGE_HEAD
    ```
-   If that lists anything:
+   If it does, abort the merge, and say in the comment that the merge was abandoned.
+   (Abort only then: a line of `=======` can look like a conflict marker in a file
+   that is not being merged, and aborting with no merge in progress fails.)
+   ```bash
+   git merge --abort
+   ```
+   Then, if `git status --porcelain` still lists anything:
    ```bash
    git add -A
    git commit -m "wip: uncommitted work at give-up (#<number>)"
    ```
 2. **Save any commits** that are not on `main`, under a name no later run reuses:
    ```bash
-   git log --oneline main..HEAD
+   git log --oneline origin/main..HEAD
    git log -1 --format='%h %H'
    ```
    If the first command lists commits, push them, using the short hash from the
@@ -461,20 +510,31 @@ Run these on the issue's branch, `<type>/<number>-<slug>`.
      unless someone saves it first. Never call it safe.
    - **What happens next**, one of:
      - the save worked: `<type>/<number>-<slug>` is being deleted, locally and on
-       the remote, and if it still exists, delete it before retrying the issue (a
+       the remote (unless the remote copy holds commits not saved here; step 4 then
+       keeps it and says so), and if it still exists, delete it before retrying the issue (a
        retry needs the name, and its work is on `abandoned/…`);
      - the save failed: nothing was deleted.
    ```bash
    gh issue comment <number> --body "Autonomous loop could not complete this. Blocker: <concise reason>. Work: <where it is>. Next: <what happens next>."
    gh issue edit <number> --remove-label in-progress --add-label needs-attention
    ```
-4. **Remove the issue's branch from the remote**, if it is there. Nothing revisits a
-   released issue, so a branch left here would be orphaned. Delete only if the first
-   command prints the branch:
+4. **Remove the issue's branch from the remote**, if it is there and holds nothing
+   that was not saved. Nothing revisits a released issue, so a branch left here would
+   be orphaned; but it may hold commits that never reached this checkout (a pushed copy
+   that diverged, or a pull that failed or was aborted). So first prove that every
+   commit on it is already in `HEAD`, which step 2 saved. The first command prints the
+   remote branch's hash, if it exists; the second must succeed and print nothing:
    ```bash
    git ls-remote --heads origin <type>/<number>-<slug>
+   git log --oneline HEAD..<remote-hash>
+   ```
+   Only then delete it:
+   ```bash
    git push origin --delete <type>/<number>-<slug>
    ```
+   If the second command prints commits, or fails (those commits were never fetched),
+   keep the remote branch: it is the only copy of them. Say so in a follow-up comment,
+   naming the branch, so a human can look at it.
 5. **Delete the local branch.** Its commits are safe on `abandoned/…` (or there were
    none), and a retry needs the name free:
    ```bash

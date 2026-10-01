@@ -54,6 +54,48 @@ check "the comment gives the blocker and where the work is" "printf '%s' \"\$giv
 check "the comment never claims an unsaved cloud checkout is safe" "printf '%s' \"\$give_up\" | grep -q 'will be lost'"
 check "stops without deleting if the save fails, before any delete" "[ -n '$stop' ] && [ '$stop' -lt '$del_remote' ] && [ '$stop' -lt '$del_local' ]"
 
+# A resumed branch is brought up to date with main before more work (#26): a
+# branch that sat while other PRs merged can conflict, and its PR is unmergeable.
+step0="$(section 'Step 0')"
+merge="$(printf '%s\n' "$step0" | grep -n -m1 'git merge --no-edit origin/main' | cut -d: -f1)"
+green="$(printf '%s\n' "$step0" | grep -n -m1 'bring it to green' | cut -d: -f1)"
+check "Step 0 merges origin/main into a resumed branch" "[ -n '$merge' ]"
+check "it merges before bringing the branch to green" "[ -n '$merge' ] && [ -n '$green' ] && [ '$merge' -lt '$green' ]"
+# Only the conflict paragraph counts: Step 0 mentions Give up elsewhere too.
+# shellcheck disable=SC2034  # read inside check's eval string
+conflict="$(printf '%s\n' "$step0" | awk '/If the merge conflicts/{ on = 1 } on { print } on && /git merge --abort/{ exit }')"
+check "a merge conflict it cannot resolve aborts and gives up" "printf '%s' \"\$conflict\" | grep -q 'git merge --abort' && printf '%s' \"\$conflict\" | grep -q 'Give up' && printf '%s' \"\$conflict\" | grep -q 'conflicting files'"
+check "a resumed branch is never rebased (it may be pushed; force pushes are denied)" "! printf '%s' \"\$step0\" | grep -q 'git rebase'"
+
+check "a failed fetch stops instead of merging a stale main" "printf '%s' \"\$step0\" | grep -q 'If the fetch fails, stop'"
+check "a merge that never started is not 'aborted'" "printf '%s' \"\$step0\" | grep -q 'there is nothing to'"
+# A diverged pushed copy is merged in, never required to fast-forward: Give up
+# would otherwise delete the commits that exist only on the remote (#29 review).
+check "a resumed branch merges its own pushed copy" "printf '%s' \"\$step0\" | grep -q 'git pull --no-rebase --no-edit origin'"
+check "it never requires a fast-forward of the pushed copy" "! printf '%s' \"\$step0\" | grep -q 'ff-only'"
+leftover="$(printf '%s\n' "$step0" | grep -n -m1 'wip: resumed edits' | cut -d: -f1)"
+pullc="$(printf '%s\n' "$step0" | grep -n -m1 'git pull --no-rebase' | cut -d: -f1)"
+check "leftover edits are committed before the pull" "[ -n '$leftover' ] && [ -n '$pullc' ] && [ '$leftover' -lt '$pullc' ]"
+
+# Give up must never commit a half-done merge: conflict markers would be saved as
+# if they were work (#26 review).
+check_line="$(line_of 'MERGE_HEAD')"
+abort_line="$(line_of 'git merge --abort')"
+commit_line="$(line_of 'git add -A')"
+check "Give up saves only commits missing from origin/main" "printf '%s' \"\$give_up\" | grep -q 'git log --oneline origin/main..HEAD'"
+check "Give up checks for a half-done merge before committing" "[ -n '$check_line' ] && [ -n '$abort_line' ] && [ -n '$commit_line' ] && [ '$check_line' -lt '$commit_line' ] && [ '$abort_line' -lt '$commit_line' ]"
+
+# Give up must not delete a remote branch that holds commits it did not save
+# (#29 review, round 2): prove HEAD contains it first.
+guard="$(line_of 'git log --oneline HEAD..')"
+check "the remote branch is deleted only after proving HEAD contains it" "[ -n '$guard' ] && [ '$guard' -lt '$del_remote' ]"
+check "a remote branch with unsaved commits is kept and reported" "printf '%s' \"\$give_up\" | grep -q 'keep the remote branch: it is the only copy'"
+check "an exit of 1 from the MERGE_HEAD check is not a failure" "printf '%s' \"\$give_up\" | grep -q 'which is the normal case, not a failure'"
+mh0="$(printf '%s\n' "$step0" | grep -n -m1 'MERGE_HEAD' | cut -d: -f1)"
+checkout="$(printf '%s\n' "$step0" | grep -n -m1 'check out the branch' | cut -d: -f1)"
+# Before the checkout, not just the commit: git refuses to switch branches mid-merge.
+check "Step 0 aborts an interrupted merge before checking out the branch" "[ -n '$mh0' ] && [ -n '$checkout' ] && [ '$mh0' -lt '$checkout' ] && [ '$mh0' -lt '$leftover' ]"
+
 # Step 0 must not mistake a preserved branch for work in flight.
 check "Step 0 always ignores abandoned/ branches" "section 'Step 0' | grep -q 'always ignore them'"
 # An abandoned/ branch outlives its attempt, so it cannot signal an interrupted
