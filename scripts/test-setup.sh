@@ -19,7 +19,7 @@ fresh_repo() {
   local dir="$WORK/$1"
   mkdir -p "$dir/scripts" "$dir/.claude" "$dir/.github/workflows" "$dir/.fake/bin" "$dir/templates"
   git -C "$dir" init -q -b main
-  cp "$ROOT"/scripts/{setup,check-verify-section,seed-labels,protect-main}.sh "$dir/scripts/"
+  cp "$ROOT"/scripts/{setup,check-verify-section,seed-labels,protect-main,gh-auth-check}.sh "$dir/scripts/"
   cp "$ROOT/templates/CLAUDE.md" "$dir/templates/"
   cp "$ROOT/templates/CLAUDE.md" "$dir/"
   cp "$ROOT/.github/workflows/ci.yml" "$dir/.github/workflows/"
@@ -29,7 +29,8 @@ fresh_repo() {
   cat >"$dir/.fake/bin/gh" <<FAKE
 #!/usr/bin/env bash
 case "\$*" in
-  "auth status"*) exit \${FAKE_AUTH_RC:-0} ;;
+  "auth status") exit \${FAKE_BARE_AUTH_RC:-\${FAKE_AUTH_RC:-0}} ;;
+  "auth status --hostname ghe.example.com") exit \${FAKE_AUTH_RC:-0} ;;
   "repo view"*) echo o/r ;;
   "label list"*) cat "$dir/.fake/labels" ;;
   "label create"*) echo "\$3" >>"$dir/.fake/labels" ;;
@@ -90,6 +91,17 @@ check "--fix still fails on what it cannot fix" "[ $rc -eq 1 ] && grep -q 'Verif
 A="$(configured_repo noauth)"
 FAKE_AUTH_RC=1 run "$A"; rc=$?
 check "a logged-out gh fails with the login command" "[ $rc -eq 1 ] && grep -q 'gh auth login' '$A/.fake/out'"
+
+# Only the host origin points at counts (#15): bare `gh auth status` fails when any
+# stored host has a stale token.
+G="$(configured_repo stalehost)"
+git -C "$G" remote add origin https://ghe.example.com/o/r.git
+FAKE_BARE_AUTH_RC=1 run "$G"; rc=$?
+check "a stale token for another host does not fail the GitHub checks" "[ $rc -eq 0 ] && grep -q 'gh authenticated' '$G/.fake/out' && grep -q 'every loop label exists' '$G/.fake/out'"
+H="$(configured_repo hostloggedout)"
+git -C "$H" remote add origin https://ghe.example.com/o/r.git
+FAKE_AUTH_RC=1 FAKE_BARE_AUTH_RC=0 run "$H"; rc=$?
+check "the repo's own host logged out still fails, naming that host" "[ $rc -eq 1 ] && grep -q 'gh auth login --hostname ghe.example.com' '$H/.fake/out'"
 
 S="$(configured_repo stale)"
 echo 0000000000000000000000000000000000000000 >"$S/.claude/template-version"

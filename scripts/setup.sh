@@ -182,8 +182,11 @@ check_github() {
     info "skipped: needs gh and jq"
     return 1
   fi
-  if ! gh auth status >/dev/null 2>&1; then
-    bad "gh is not authenticated" "gh auth login"
+  # Only the login for origin's host counts; a stale token for another host must
+  # not fail these checks (#15).
+  local host
+  if ! host="$(scripts/gh-auth-check.sh)"; then
+    bad "gh is not authenticated${host:+ to $host}" "gh auth login${host:+ --hostname $host}"
     return 1
   fi
   ok "gh authenticated"
