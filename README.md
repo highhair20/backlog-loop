@@ -90,8 +90,9 @@ It exits 0 once nothing is failing, so re-run it until it does. The steps it che
 2. **Configure CI.** Replace the failing placeholder step in
    `.github/workflows/ci.yml` with the same Verify commands, so CI and the loop
    agree on what "green" means. `setup.sh` warns about any Verify command that no
-   workflow runs as a whole command, on a `run:` line or a line of a `run: |` block
-   (a longer command, a step name, or a comment does not count). Then see
+   workflow runs as a whole command: `run: make test`, a line of a `run: |` block,
+   or after `&&` all count; `make test-e2e`, a step name, or a comment does not.
+   It is a heuristic, not a YAML parse. Then see
    [`docs/CI_HARDENING.md`](docs/CI_HARDENING.md) for steps that stop a green
    check from hiding skipped tests, fetched tools, or flaky coverage.
 3. **Create the labels:** `scripts/seed-labels.sh` (or `setup.sh --fix`). It is
