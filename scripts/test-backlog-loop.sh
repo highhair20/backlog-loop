@@ -25,7 +25,7 @@ setup() {
   local dir="$WORK/$1"
   mkdir -p "$dir/scripts" "$dir/bin"
   git -C "$dir" init -q -b main
-  cp "$HERE/backlog-loop.sh" "$HERE/check-verify-section.sh" "$HERE/loop-lock.sh" "$dir/scripts/"
+  cp "$HERE/backlog-loop.sh" "$HERE/check-verify-section.sh" "$HERE/loop-lock.sh" "$HERE/gh-auth-check.sh" "$dir/scripts/"
   printf '## Verify\n```sh\nmake test\n```\n' >"$dir/CLAUDE.md"
   echo 3 >"$dir/count"
   : >"$dir/calls"
@@ -147,6 +147,20 @@ A="$(setup noauth progress)"
 printf '#!/usr/bin/env bash\n[ "$1" = auth ] && exit 1\ncat "%s/count"\n' "$A" >"$A/bin/gh"
 run "$A"; rc=$?
 check "refuses to start when gh is not authenticated" "[ $rc -ne 0 ] && [ ! -s '$A/calls' ] && grep -q 'gh auth login' '$A/out'"
+
+# Only the host origin points at counts (#15): bare `gh auth status` fails when any
+# stored host has a stale token.
+G="$(setup stalehost progress)"
+git -C "$G" remote add origin https://ghe.example.com/o/r.git
+printf '#!/usr/bin/env bash\n[ "$*" = "auth status --hostname ghe.example.com" ] && exit 0\n[ "$1" = auth ] && exit 1\ncat "%s/count"\n' "$G" >"$G/bin/gh"
+run "$G"; rc=$?
+check "a stale token for another host does not stop the loop" "[ $rc -eq 0 ] && [ \$(wc -l <'$G/calls') -eq 3 ]"
+
+H="$(setup hostloggedout progress)"
+git -C "$H" remote add origin https://ghe.example.com/o/r.git
+printf '#!/usr/bin/env bash\n[ "$*" = "auth status" ] && exit 0\n[ "$1" = auth ] && exit 1\ncat "%s/count"\n' "$H" >"$H/bin/gh"
+run "$H"; rc=$?
+check "refuses to start when the repo's own host is logged out" "[ $rc -ne 0 ] && [ ! -s '$H/calls' ] && grep -q 'gh auth login --hostname ghe.example.com' '$H/out'"
 
 # --- the single-instance lock ---
 # A lock a live process holds (this test script stands in for the other run).

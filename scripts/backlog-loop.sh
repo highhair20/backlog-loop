@@ -37,7 +37,7 @@ if [ "${BACKLOG_LOOP_STAGED:+$BACKLOG_LOOP_STAGED/backlog-loop.sh}" != "$0" ]; t
   # An explicit template: macOS's bare `mktemp -d` ignores TMPDIR.
   stage="$(mktemp -d "${TMPDIR:-/tmp}/backlog-loop.XXXXXX")" || { echo "✗ could not create a temp dir for the driver" >&2; exit 1; }
   if ! cp "$root/scripts/backlog-loop.sh" "$root/scripts/loop-lock.sh" \
-          "$root/scripts/check-verify-section.sh" "$stage/"; then
+          "$root/scripts/check-verify-section.sh" "$root/scripts/gh-auth-check.sh" "$stage/"; then
     rm -rf "$stage"
     echo "✗ could not copy the driver's scripts from $root/scripts" >&2
     exit 1
@@ -77,7 +77,12 @@ BG_WAIT_SECONDS=$((10#$BG_WAIT_SECONDS))
 for tool in claude gh; do
   command -v "$tool" >/dev/null || { echo "✗ $tool not found on PATH. Install it, then re-run." >&2; exit 1; }
 done
-gh auth status >/dev/null 2>&1 || { echo "✗ gh is not authenticated. Run: gh auth login" >&2; exit 1; }
+# Only the login for origin's host counts; a stale token for another host must not
+# stop the loop (#15).
+if ! gh_host="$("$HERE/gh-auth-check.sh")"; then
+  echo "✗ gh is not authenticated${gh_host:+ to $gh_host}. Run: gh auth login${gh_host:+ --hostname $gh_host}" >&2
+  exit 1
+fi
 
 mkdir -p "$LOG_DIR"
 

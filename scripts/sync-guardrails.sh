@@ -26,6 +26,7 @@ MANAGED=(
   .claude/commands/work-next-item.md
   scripts/backlog-loop.sh
   scripts/check-verify-section.sh
+  scripts/gh-auth-check.sh
   scripts/loop-lock.sh
   scripts/protect-main.sh
   scripts/seed-labels.sh
