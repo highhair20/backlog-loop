@@ -55,6 +55,29 @@ verify_commands() {
   ' CLAUDE.md
 }
 
+# Whether a workflow runs this exact command (a heuristic, not a YAML parse). It must
+# start a run: value, a line of a run: | block, or follow a shell separator, and end
+# at end of line, whitespace, or a separator. Comment lines never count. Compares
+# strings rather than building a regex, since commands hold regex metacharacters.
+workflows_run() { # workflows_run <command> <workflow>...
+  local cmd="$1"; shift
+  VERIFY_CMD="$cmd" awk '
+    BEGIN { cmd = ENVIRON["VERIFY_CMD"]; n = length(cmd) }
+    /^[[:space:]]*#/ { next }
+    {
+      for (p = 1; p + n - 1 <= length($0); p++) {
+        if (substr($0, p, n) != cmd) continue
+        after = substr($0, p + n, 1)
+        if (after != "" && after !~ /[[:space:];&|]/) continue
+        before = substr($0, 1, p - 1)
+        sub(/[[:space:]]+$/, "", before)
+        if (before ~ /^[[:space:]]*(-[[:space:]]+)?(run:)?$/ || before ~ /[;&|]$/) { found = 1; exit }
+      }
+    }
+    END { exit !found }
+  ' "$@"
+}
+
 is_template_own_claude_md() {
   grep -qF "$TEMPLATE_MARKER" CLAUDE.md || return 1
   ! git remote get-url origin 2>/dev/null | grep -qE "$TEMPLATE_ORIGIN_RE"
@@ -131,7 +154,7 @@ check_ci() {
   local cmd count=0 missing=0
   while IFS= read -r cmd; do
     count=$((count + 1))
-    grep -qF -- "$cmd" "${workflows[@]}" && continue
+    workflows_run "$cmd" "${workflows[@]}" && continue
     warn "Verify command not found in any workflow: $cmd" "run the same command in CI, so CI and the loop agree on what green means"
     missing=$((missing + 1))
   done < <(verify_commands)

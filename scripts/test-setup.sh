@@ -81,6 +81,36 @@ run "$D"; rc=$?
 check "Verify/CI drift is a warning, not a failure" "[ $rc -eq 0 ]"
 check "names the Verify command CI does not run" "grep -q 'not found in any workflow: make lint' '$D/.fake/out'"
 
+# The drift check matches whole commands that a workflow runs, not substrings.
+# ci_case <warns|passes> <description> <Verify command> <workflow line>...
+M="$(configured_repo match)"
+ci_case() {
+  local expect="$1" desc="$2" cmd="$3"; shift 3
+  printf '# acme\n\n## Verify\n\n```sh\n%s\n```\n' "$cmd" >"$M/CLAUDE.md"
+  printf 'jobs:\n  verify:\n    steps:\n' >"$M/.github/workflows/ci.yml"
+  printf '%s\n' "$@" >>"$M/.github/workflows/ci.yml"
+  run "$M"; rc=$?
+  if [ "$expect" = warns ]; then
+    check "drift: $desc" "[ $rc -eq 0 ] && grep -qF 'not found in any workflow: $cmd' '$M/.fake/out'"
+  else
+    check "no drift: $desc" "[ $rc -eq 0 ] && grep -q 'CI runs every Verify command' '$M/.fake/out'"
+  fi
+}
+ci_case warns  "a longer command is not a match" "make test" "      - run: make test-e2e"
+ci_case warns  "a plural is not a match" "make test" "      - run: make tests"
+ci_case warns  "a YAML comment is not a match" "make test" "      # make test" "      - run: echo hi"
+ci_case warns  "a run-block comment is not a match" "make test" "      - run: |" "          # make test" "          echo hi"
+ci_case warns  "a step name is not a match" "make test" "      - name: make test" "        run: echo hi"
+ci_case warns  "a shell comment is not a match" "make test" "      - run: echo hi # make test"
+ci_case warns  "regex metacharacters match literally" "scripts/run.sh" "      - run: scripts/runXsh"
+ci_case passes "run: value" "make test" "      - run: make test"
+ci_case passes "run: under a named step" "make test" "      - name: Test" "        run: make test"
+ci_case passes "a line in a run: | block" "make test" "      - run: |" "          make lint" "          make test"
+ci_case passes "followed by &&" "make test" "      - run: make test && echo done"
+ci_case passes "followed by a comment" "make test" "      - run: make test # the suite"
+ci_case passes "after a shell separator" "make test" "      - run: npm ci && make test"
+ci_case passes "with regex metacharacters" "shellcheck --severity=warning scripts/*.sh" "      - run: shellcheck --severity=warning scripts/*.sh"
+
 X="$(fresh_repo fix)"
 run "$X" --fix; rc=$?
 check "--fix creates every missing label" "[ \"\$(sort '$X/.fake/labels')\" = \"\$(printf '%s\n' \"\$ALL_LABELS\" | sort)\" ]"
