@@ -32,7 +32,8 @@ done
 # A stash stays on one machine, and a cloud session's clone is thrown away.
 check "nothing is stashed on give-up" "! printf '%s' \"\$give_up\" | grep -q 'git stash'"
 
-# Order inside Give up: save commits, then delete branches, then swap labels.
+# Order inside Give up: save the work, then release the issue, then delete branches.
+# Releasing before deleting means an interruption can only leave a stray branch.
 line_of() { printf '%s\n' "$give_up" | grep -n -m1 -- "$1" | cut -d: -f1; }
 save="$(line_of 'refs/heads/abandoned/')"
 del_remote="$(line_of 'git push origin --delete')"
@@ -40,17 +41,21 @@ del_local="$(line_of 'git branch -D')"
 labels="$(line_of '--add-label needs-attention')"
 check "pushes the work to an abandoned/ branch" "[ -n '$save' ]"
 check "saves the work before deleting any branch" "[ -n '$save' ] && [ -n '$del_remote' ] && [ -n '$del_local' ] && [ '$save' -lt '$del_remote' ] && [ '$save' -lt '$del_local' ]"
-check "swaps the labels last" "[ -n '$labels' ] && [ '$labels' -gt '$del_remote' ] && [ '$labels' -gt '$del_local' ]"
+check "releases the issue after saving, before deleting" "[ -n '$labels' ] && [ '$labels' -gt '$save' ] && [ '$labels' -lt '$del_remote' ] && [ '$labels' -lt '$del_local' ]"
 stop="$(line_of 'push fails')"
 rule="$(line_of 'Check every command')"
 check "states the failure rule before any step" "[ -n '$rule' ] && [ '$rule' -lt '$save' ]"
 check "the rule stops deleting when a save fails" "printf '%s' \"\$give_up\" | grep -q 'If step 1 or 2 fails, the work is not saved'"
-check "the comment reports what could not be deleted" "printf '%s' \"\$give_up\" | grep -q 'What could not be deleted'"
+check "a failed delete is reported in a comment" "printf '%s' \"\$give_up\" | grep -q 'add a comment naming what is left'"
+check "the comment gives the blocker and where the work is" "printf '%s' \"\$give_up\" | grep -q 'Blocker: <concise reason>. Work: <where it is>'"
 check "the comment never claims an unsaved cloud checkout is safe" "printf '%s' \"\$give_up\" | grep -q 'will be lost'"
 check "stops without deleting if the save fails, before any delete" "[ -n '$stop' ] && [ '$stop' -lt '$del_remote' ] && [ '$stop' -lt '$del_local' ]"
 
 # Step 0 must not mistake a preserved branch for work in flight.
-check "Step 0 knows about abandoned/ branches" "section 'Step 0' | grep -q 'abandoned/'"
+check "Step 0 always ignores abandoned/ branches" "section 'Step 0' | grep -q 'always ignore them'"
+# An abandoned/ branch outlives its attempt, so it cannot signal an interrupted
+# give-up: acting on it would delete a later retry's unsaved work (#24 review).
+check "Step 0 never resumes a give-up from an abandoned/ branch" "! section 'Step 0' | grep -qi 'finish it from'"
 
 echo
 if [ "$failures" -eq 0 ]; then echo "all tests passed"; else echo "$failures test(s) failed" >&2; exit 1; fi

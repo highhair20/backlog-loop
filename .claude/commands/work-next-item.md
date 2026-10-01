@@ -130,9 +130,9 @@ The branch reaches the remote only at Step 6, so a run interrupted in Steps 4–
 a **local-only** branch, possibly with uncommitted edits. Check local branches too.
 
 Branches named `abandoned/<N>-<sha>` are work a give-up preserved for a human (see
-**Give up**), never work in flight: ignore them when looking for `#N`'s branch. One
-exception: if `#N` is still `in-progress` and an `abandoned/<N>-…` branch exists, a
-give-up was interrupted after saving the work. Finish it from **Give up** step 3.
+**Give up**), never work in flight: always ignore them when looking for `#N`'s
+branch. They outlive the attempt that made them, so they say nothing about the
+current one.
 
 Then:
 
@@ -418,13 +418,14 @@ actionable issues remain, the loop will continue to the next one.
 Steps 5 and 6.5 both end here. The branch may be in any state: fresh, resumed by
 Step 0 with commits, local-only, or already pushed. Giving up must never destroy
 work silently, and must not leave the issue's branch on the remote. So: save the
-work first, delete branches second, swap the labels last. An interrupted give-up
-then leaves the issue `in-progress`, and Step 0 finishes it.
+work, then release the issue, then delete branches. An interruption after the
+release can only leave a stray branch that the comment already names, never an
+issue that still looks claimed or that has lost its explanation.
 
-**Check every command's result.** If step 1 or 2 fails, the work is not saved: run
-no later step except 5, and leave the branch checked out as it is. If step 3 or 4
-fails, the work is already saved: carry on, and name what could not be deleted in
-the comment. Never get past a failure with `--no-verify` or `--force`.
+**Check every command's result.** If step 1 or 2 fails, the work is not saved: do
+step 3, saying so, and delete nothing (leave the branch checked out as it is). If
+step 4 or 5 fails, the work is already saved: add a comment naming what is left,
+so a human removes it. Never get past a failure with `--no-verify` or `--force`.
 
 Run these on the issue's branch, `<type>/<number>-<slug>`.
 
@@ -449,28 +450,29 @@ Run these on the issue's branch, `<type>/<number>-<slug>`.
    git push origin HEAD:refs/heads/abandoned/<number>-<short-sha>
    ```
    If that push fails, the work is not saved: follow the rule above.
-3. **Remove the issue's branch from the remote**, if it is there, so it is not
-   orphaned (Step 0 only looks at `in-progress` issues). Delete only if the first
-   command prints the branch:
-   ```bash
-   git ls-remote --heads origin <type>/<number>-<slug>
-   git push origin --delete <type>/<number>-<slug>
-   ```
-4. **Delete the local branch.** Its commits are safe on `abandoned/…` (or there were
-   none), and a retry needs the name free:
-   ```bash
-   git switch main
-   git branch -D <type>/<number>-<slug>
-   ```
-5. **Release the issue, labels last.** The comment must say, truthfully:
+3. **Release the issue.** The comment must say, truthfully:
+   - **Why:** the blocker, in a sentence.
    - **Where the work is:** `abandoned/<number>-<short-sha>` with the full hash, or
      "no commits to keep". If a save failed, say what failed and that the work
      exists only in this checkout (its path and tip hash). In a cloud session that
      checkout is discarded when the session ends, so say the work will be lost
      unless someone saves it first. Never call it safe.
-   - **What could not be deleted**, if step 3 or 4 failed, so a human removes it:
-     once the issue leaves `in-progress`, nothing revisits it.
+   - **What happens next:** that `<type>/<number>-<slug>` is about to be deleted,
+     locally and on the remote, unless the save failed.
    ```bash
-   gh issue comment <number> --body "Autonomous loop could not complete this. Blocker: <concise reason>. Work: <where it is>. <Not deleted: <branch>, if any.>"
+   gh issue comment <number> --body "Autonomous loop could not complete this. Blocker: <concise reason>. Work: <where it is>. Next: <type>/<number>-<slug> is being deleted."
    gh issue edit <number> --remove-label in-progress --add-label needs-attention
+   ```
+4. **Remove the issue's branch from the remote**, if it is there. Nothing revisits a
+   released issue, so a branch left here would be orphaned. Delete only if the first
+   command prints the branch:
+   ```bash
+   git ls-remote --heads origin <type>/<number>-<slug>
+   git push origin --delete <type>/<number>-<slug>
+   ```
+5. **Delete the local branch.** Its commits are safe on `abandoned/…` (or there were
+   none), and a retry needs the name free:
+   ```bash
+   git switch main
+   git branch -D <type>/<number>-<slug>
    ```
