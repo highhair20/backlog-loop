@@ -11,7 +11,7 @@ HOLDERS=""  # more of them, for the race test
 trap '[ -z "$LIVE$HOLDERS" ] || { kill $LIVE $HOLDERS; wait $LIVE $HOLDERS; } 2>/dev/null; chmod -R u+w "$WORK" 2>/dev/null; rm -rf "$WORK"' EXIT
 
 # When the loop itself runs these tests, the driver's PID is in the environment.
-unset BACKLOG_LOOP_PID
+unset BACKLOG_LOOP_PID BACKLOG_LOOP_STAGED BACKLOG_LOOP_ROOT
 
 failures=0
 check() { if eval "$2"; then echo "ok   $1"; else echo "FAIL $1" >&2; failures=$((failures + 1)); fi; }
