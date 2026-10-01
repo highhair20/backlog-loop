@@ -132,7 +132,10 @@ jq -n --arg url "$url" --arg pr "$pr" --arg helper "$here/pr-review-state.sh" '{
       "prefer a measurement over an argument. For each finding you reject, run:\n" +
       "     \($helper) reject \($pr) \"<finding>\" \"<why it is wrong>\"\n" +
       "   so later rounds do not re-raise it.\n" +
-      "3. Fix what survives, then close the round with the number of CONFIRMED " +
+      "3. Fix what survives. Before pushing fixes, check the PR is still open " +
+      "(`gh pr view \($url) --json state`): a PR merged while its review ran " +
+      "has a branch that no longer reaches main, so fixes pushed there are lost; " +
+      "put them in a new PR from main instead. Then close the round with the number of CONFIRMED " +
       "CRITICAL/HIGH findings it produced:\n" +
       "     \($helper) record \($pr) <count>\n" +
       "4. Zero blocking findings closes the loop. Otherwise push the fixes and " +

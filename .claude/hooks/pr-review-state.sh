@@ -84,6 +84,24 @@ write_state() {
   fi
 }
 
+# The PR's state on GitHub, looked up by the URL the loop was seeded with, so it
+# names the right repo even from another repo's session. Prints OPEN, MERGED, or
+# CLOSED; FAIL if the lookup failed; NOGH where there is no gh (cloud sessions).
+# A PR merged while its review ran must close the loop: fixes pushed to its
+# branch after the merge never reach main (#19, where PR #8's fixes were lost).
+pr_state() {
+  command -v gh >/dev/null 2>&1 || { echo NOGH; return; }
+  local s
+  s=$(gh pr view "$1" --json state --jq .state 2>/dev/null) || { echo FAIL; return; }
+  case "$s" in OPEN | MERGED | CLOSED) echo "$s" ;; *) echo FAIL ;; esac
+}
+
+# The loud message for a PR that left OPEN while its loop ran.
+gone_message() { # gone_message <pr> <url> <MERGED|CLOSED>
+  local how; how=$(printf '%s' "$3" | tr '[:upper:]' '[:lower:]')
+  printf 'WARNING: PR %s (%s) was %s while its review loop was open. Fixes pushed to its branch after that do not reach main: put them in a new PR from main. Review loop closed.\n' "$1" "$2" "$how"
+}
+
 require_state() {
   [ -f "$1" ] || { echo "no review loop open for PR $2" >&2; exit 1; }
 }
@@ -143,6 +161,14 @@ cmd_record() {
       exit 2 ;;
   esac
   f=$(file_for "$pr"); require_state "$f" "$pr"
+  url=$(jq -r '.url // ""' "$f")
+  state=$(pr_state "$url")
+  case "$state" in
+    MERGED | CLOSED)
+      rm -f "$f"
+      gone_message "$pr" "$url" "$state"
+      return 0 ;;
+  esac
   write_state "$f" --argjson blocking "$blocking" --arg now "$(now_iso)" '
     .round += 1
     | .gate_blocks = 0
@@ -154,6 +180,10 @@ cmd_record() {
                  else "needs_review" end)
   '
   jq -r '"PR \(.pr): round \(.round) recorded, \(.last_blocking) blocking -> \(.status)"' "$f"
+  case "$state" in
+    FAIL) echo "Note: PR $pr's state was not checked (the gh lookup failed); recorded as if it is still open." ;;
+    NOGH) echo "Note: gh is not available, so PR $pr's state was not checked; recorded as if it is still open." ;;
+  esac
 }
 
 cmd_reject() {
@@ -260,6 +290,19 @@ emit_status() {
       [ "$mutate" = yes ] && write_state "$f" --arg now "$(now_iso)" \
         '.status = "needs_review" | .reviewing_count = 0 | .updated_at = $now'
     fi
+
+    # Right before blocking, check the PR is still open: a PR merged while its
+    # review ran must not hold the turn for fixes that cannot reach main. A failed
+    # or impossible lookup warns and keeps enforcing; it never blocks or wedges.
+    url=$(jq -r '.url // ""' "$f")
+    case "$(pr_state "$url")" in
+      MERGED) gone_message "$(jq -r .pr "$f")" "$url" MERGED | emit WARN
+              [ "$mutate" = yes ] && rm -f "$f"; continue ;;
+      CLOSED) gone_message "$(jq -r .pr "$f")" "$url" CLOSED | emit WARN
+              [ "$mutate" = yes ] && rm -f "$f"; continue ;;
+      FAIL) jq -r '"PR \(.pr)'"'"'s state was not checked (the gh lookup failed); treating it as still open."' "$f" | emit WARN ;;
+      NOGH) jq -r '"gh is not available, so PR \(.pr)'"'"'s state was not checked; treating it as still open."' "$f" | emit WARN ;;
+    esac
 
     [ "$mutate" = yes ] && write_state "$f" '.gate_blocks += 1'
 
