@@ -3,6 +3,7 @@
     "allow": [
       "Bash(command -v gh)",
       "Bash(gh auth status*)",
+      "Bash(scripts/gh-auth-check.sh)",
       "Bash(gh issue list *)",
       "Bash(gh issue view *)",
       "Bash(gh issue edit *)",
