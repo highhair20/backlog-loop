@@ -42,6 +42,12 @@ TTL_SECONDS=$((24 * 60 * 60))
 # How long a review may be in flight before the gate stops believing in it. The
 # observed reviews took 6-9 minutes, so this is generous but not open-ended.
 REVIEW_GRACE_SECONDS=$((20 * 60))
+# How long the PR-state lookup may take. The gate hook has a 10s budget; a hook
+# killed for overrunning it cannot warn, so enforcement would drop silently.
+PR_STATE_TIMEOUT=3
+# And one budget for a whole gate tick, since it may check several loops in turn:
+# no lookup starts after this many seconds; the rest count as not checked.
+PR_STATE_BUDGET=5
 
 # Derived from this script's own location, never from the environment or cwd.
 # CLAUDE_PROJECT_DIR is set only for hook processes, so `seed` (a hook) resolved
@@ -82,6 +88,37 @@ write_state() {
     echo "pr-review-state: failed to update $(basename "$f")" >&2
     exit 1
   fi
+}
+
+# The PR's state on GitHub, looked up by the URL the loop was seeded with, so it
+# names the right repo even from another repo's session. Prints OPEN, MERGED, or
+# CLOSED; FAIL if the lookup failed; NOGH where there is no gh (cloud sessions).
+# A PR merged while its review ran must close the loop: fixes pushed to its
+# branch after the merge never reach main (#19, where PR #8's fixes were lost).
+#
+# An empty URL is FAIL without calling gh: 'gh pr view ""' resolves the PR of
+# whatever branch is checked out, which can be an unrelated PR. The lookup is cut
+# off after PR_STATE_TIMEOUT seconds (FAIL), since macOS has no timeout(1).
+pr_state() {
+  command -v gh >/dev/null 2>&1 || { echo NOGH; return; }
+  [ -n "${1:-}" ] || { echo FAIL; return; }
+  local out pid watch rc s
+  out=$(mktemp) || { echo FAIL; return; }
+  gh pr view "$1" --json state --jq .state >"$out" 2>/dev/null &
+  pid=$!
+  ( sleep "$PR_STATE_TIMEOUT"; kill "$pid" 2>/dev/null ) >/dev/null 2>&1 &
+  watch=$!
+  wait "$pid"; rc=$?
+  kill "$watch" 2>/dev/null; wait "$watch" 2>/dev/null
+  s=$(cat "$out"); rm -f "$out"
+  [ "$rc" -eq 0 ] || { echo FAIL; return; }
+  case "$s" in OPEN | MERGED | CLOSED) echo "$s" ;; *) echo FAIL ;; esac
+}
+
+# The loud message for a PR that left OPEN while its loop ran.
+gone_message() { # gone_message <pr> <url> <MERGED|CLOSED>
+  local how; how=$(printf '%s' "$3" | tr '[:upper:]' '[:lower:]')
+  printf 'WARNING: PR %s (%s) was %s while its review loop was open. Fixes pushed to its branch after that do not reach main: put them in a new PR from main. Review loop closed.\n' "$1" "$2" "$how"
 }
 
 require_state() {
@@ -143,6 +180,14 @@ cmd_record() {
       exit 2 ;;
   esac
   f=$(file_for "$pr"); require_state "$f" "$pr"
+  url=$(jq -r '.url // ""' "$f")
+  state=$(pr_state "$url")
+  case "$state" in
+    MERGED | CLOSED)
+      rm -f "$f"
+      gone_message "$pr" "$url" "$state"
+      return 0 ;;
+  esac
   write_state "$f" --argjson blocking "$blocking" --arg now "$(now_iso)" '
     .round += 1
     | .gate_blocks = 0
@@ -154,6 +199,10 @@ cmd_record() {
                  else "needs_review" end)
   '
   jq -r '"PR \(.pr): round \(.round) recorded, \(.last_blocking) blocking -> \(.status)"' "$f"
+  case "$state" in
+    FAIL) echo "Note: PR $pr's state was not checked (the gh lookup failed); recorded as if it is still open." ;;
+    NOGH) echo "Note: gh is not available, so PR $pr's state was not checked; recorded as if it is still open." ;;
+  esac
 }
 
 cmd_reject() {
@@ -185,6 +234,7 @@ emit_status() {
   dir=$(state_dir)
   [ -d "$dir" ] || exit 0
   now=$(now_epoch)
+  tick_start=$now
 
   for f in "$dir"/*.json; do
     [ -e "$f" ] || continue
@@ -260,6 +310,28 @@ emit_status() {
       [ "$mutate" = yes ] && write_state "$f" --arg now "$(now_iso)" \
         '.status = "needs_review" | .reviewing_count = 0 | .updated_at = $now'
     fi
+
+    # Right before blocking, check the PR is still open: a PR merged while its
+    # review ran must not hold the turn for fixes that cannot reach main. A failed
+    # or impossible lookup warns and keeps enforcing; it never blocks or wedges.
+    # Only the gate checks: status is read-only and makes no network call.
+    url=$(jq -r '.url // ""' "$f")
+    pstate=OPEN
+    if [ "$mutate" = yes ]; then
+      if [ "$(( $(now_epoch) - tick_start ))" -lt "$PR_STATE_BUDGET" ]; then
+        pstate=$(pr_state "$url")
+      else
+        pstate=FAIL
+      fi
+    fi
+    case "$pstate" in
+      MERGED) gone_message "$(jq -r .pr "$f")" "$url" MERGED | emit WARN
+              [ "$mutate" = yes ] && rm -f "$f"; continue ;;
+      CLOSED) gone_message "$(jq -r .pr "$f")" "$url" CLOSED | emit WARN
+              [ "$mutate" = yes ] && rm -f "$f"; continue ;;
+      FAIL) jq -r '"PR \(.pr)'"'"'s state was not checked (the gh lookup failed); treating it as still open."' "$f" | emit WARN ;;
+      NOGH) jq -r '"gh is not available, so PR \(.pr)'"'"'s state was not checked; treating it as still open."' "$f" | emit WARN ;;
+    esac
 
     [ "$mutate" = yes ] && write_state "$f" '.gate_blocks += 1'
 
