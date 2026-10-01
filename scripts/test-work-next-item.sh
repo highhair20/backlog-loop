@@ -61,8 +61,22 @@ merge="$(printf '%s\n' "$step0" | grep -n -m1 'git merge --no-edit origin/main' 
 green="$(printf '%s\n' "$step0" | grep -n -m1 'bring it to green' | cut -d: -f1)"
 check "Step 0 merges origin/main into a resumed branch" "[ -n '$merge' ]"
 check "it merges before bringing the branch to green" "[ -n '$merge' ] && [ -n '$green' ] && [ '$merge' -lt '$green' ]"
-check "a merge conflict it cannot resolve aborts and gives up" "printf '%s' \"\$step0\" | grep -q 'git merge --abort' && printf '%s' \"\$step0\" | grep -q 'Give up'"
+# Only the conflict paragraph counts: Step 0 mentions Give up elsewhere too.
+# shellcheck disable=SC2034  # read inside check's eval string
+conflict="$(printf '%s\n' "$step0" | awk '/If the merge conflicts/{ on = 1 } on { print } on && /git merge --abort/{ exit }')"
+check "a merge conflict it cannot resolve aborts and gives up" "printf '%s' \"\$conflict\" | grep -q 'git merge --abort' && printf '%s' \"\$conflict\" | grep -q 'Give up' && printf '%s' \"\$conflict\" | grep -q 'conflicting files'"
 check "a resumed branch is never rebased (it may be pushed; force pushes are denied)" "! printf '%s' \"\$step0\" | grep -q 'git rebase'"
+
+check "a failed fetch stops instead of merging a stale main" "printf '%s' \"\$step0\" | grep -q 'If the fetch fails, stop'"
+check "a merge that never started is not 'aborted'" "printf '%s' \"\$step0\" | grep -q 'there is nothing to'"
+check "a resumed branch is first brought up to its own pushed copy" "printf '%s' \"\$step0\" | grep -q 'git pull --ff-only origin'"
+
+# Give up must never commit a half-done merge: conflict markers would be saved as
+# if they were work (#26 review).
+check_line="$(line_of 'git diff --check')"
+abort_line="$(line_of 'git merge --abort')"
+commit_line="$(line_of 'git add -A')"
+check "Give up checks for a half-done merge before committing" "[ -n '$check_line' ] && [ -n '$abort_line' ] && [ -n '$commit_line' ] && [ '$check_line' -lt '$commit_line' ] && [ '$abort_line' -lt '$commit_line' ]"
 
 # Step 0 must not mistake a preserved branch for work in flight.
 check "Step 0 always ignores abandoned/ branches" "section 'Step 0' | grep -q 'always ignore them'"

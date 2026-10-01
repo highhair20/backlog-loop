@@ -141,7 +141,12 @@ Then:
    `gh issue edit ${N} --remove-label in-progress --add-label in-review`.
 2. **A branch exists (remote or local-only) but no open PR** → work was underway.
    Resume *that* issue as this iteration (do not pick a new one): check out the branch
-   (fetch it first if it is remote-only; a local one keeps any uncommitted edits).
+   (fetch it first if it is remote-only; a local one keeps any uncommitted edits). If
+   it exists both locally and on the remote, bring the local copy up to the pushed one
+   first; if this fails, the two have diverged: follow **Give up** and say so.
+   ```bash
+   git pull --ff-only origin <type>/${N}-<slug>
+   ```
 
    Then bring it up to date with `main`: other PRs may have merged while it sat, and a
    PR from a stale branch can be unmergeable. A merge needs a clean tree, so if
@@ -156,6 +161,11 @@ Then:
    git fetch origin
    git merge --no-edit origin/main
    ```
+   If the fetch fails, stop and report it: never merge against a stale
+   `origin/main`. If the merge fails without starting one (`git status --porcelain`
+   lists no conflicted paths; for example, unrelated histories), there is nothing to
+   abort: follow **Give up**, quoting the error.
+
    If the merge conflicts, resolve it when the conflict is within this issue's scope
    and Verify passes afterwards. Otherwise abort, and follow **Give up**, naming the
    conflicting files in the comment:
@@ -453,11 +463,21 @@ so a human removes it. Never get past a failure with `--no-verify` or `--force`.
 Run these on the issue's branch, `<type>/<number>-<slug>`.
 
 1. **Commit anything uncommitted**, so it travels with the branch. A stash would stay
-   on this machine, and a cloud session's clone is discarded.
+   on this machine, and a cloud session's clone is discarded. First make sure a merge
+   from Step 0 is not half done: committing it would save conflict markers as if they
+   were work.
    ```bash
    git status --porcelain
+   git diff --check
+   git diff --cached --check
    ```
-   If that lists anything:
+   If `git status --porcelain` lists conflicted paths (`UU`, `AA`, `DD`, `AU`, `UA`,
+   `DU`, `UD`), or either `--check` reports conflict markers, abort the merge, and
+   say in the comment that the merge with `main` was abandoned:
+   ```bash
+   git merge --abort
+   ```
+   Then, if `git status --porcelain` still lists anything:
    ```bash
    git add -A
    git commit -m "wip: uncommitted work at give-up (#<number>)"
