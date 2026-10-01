@@ -69,13 +69,20 @@ check "a resumed branch is never rebased (it may be pushed; force pushes are den
 
 check "a failed fetch stops instead of merging a stale main" "printf '%s' \"\$step0\" | grep -q 'If the fetch fails, stop'"
 check "a merge that never started is not 'aborted'" "printf '%s' \"\$step0\" | grep -q 'there is nothing to'"
-check "a resumed branch is first brought up to its own pushed copy" "printf '%s' \"\$step0\" | grep -q 'git pull --ff-only origin'"
+# A diverged pushed copy is merged in, never required to fast-forward: Give up
+# would otherwise delete the commits that exist only on the remote (#29 review).
+check "a resumed branch merges its own pushed copy" "printf '%s' \"\$step0\" | grep -q 'git pull --no-rebase --no-edit origin'"
+check "it never requires a fast-forward of the pushed copy" "! printf '%s' \"\$step0\" | grep -q 'ff-only'"
+leftover="$(printf '%s\n' "$step0" | grep -n -m1 'wip: resumed edits' | cut -d: -f1)"
+pullc="$(printf '%s\n' "$step0" | grep -n -m1 'git pull --no-rebase' | cut -d: -f1)"
+check "leftover edits are committed before the pull" "[ -n '$leftover' ] && [ -n '$pullc' ] && [ '$leftover' -lt '$pullc' ]"
 
 # Give up must never commit a half-done merge: conflict markers would be saved as
 # if they were work (#26 review).
-check_line="$(line_of 'git diff --check')"
+check_line="$(line_of 'MERGE_HEAD')"
 abort_line="$(line_of 'git merge --abort')"
 commit_line="$(line_of 'git add -A')"
+check "Give up saves only commits missing from origin/main" "printf '%s' \"\$give_up\" | grep -q 'git log --oneline origin/main..HEAD'"
 check "Give up checks for a half-done merge before committing" "[ -n '$check_line' ] && [ -n '$abort_line' ] && [ -n '$commit_line' ] && [ '$check_line' -lt '$commit_line' ] && [ '$abort_line' -lt '$commit_line' ]"
 
 # Step 0 must not mistake a preserved branch for work in flight.

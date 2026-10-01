@@ -141,26 +141,27 @@ Then:
    `gh issue edit ${N} --remove-label in-progress --add-label in-review`.
 2. **A branch exists (remote or local-only) but no open PR** → work was underway.
    Resume *that* issue as this iteration (do not pick a new one): check out the branch
-   (fetch it first if it is remote-only; a local one keeps any uncommitted edits). If
-   it exists both locally and on the remote, bring the local copy up to the pushed one
-   first; if this fails, the two have diverged: follow **Give up** and say so.
-   ```bash
-   git pull --ff-only origin <type>/${N}-<slug>
-   ```
+   (fetch it first if it is remote-only; a local one keeps any uncommitted edits).
 
-   Then bring it up to date with `main`: other PRs may have merged while it sat, and a
-   PR from a stale branch can be unmergeable. A merge needs a clean tree, so if
-   `git status --porcelain` lists anything, commit it first:
+   A merge needs a clean tree, so if `git status --porcelain` lists anything, commit
+   it first:
    ```bash
    git add -A
    git commit -m "wip: resumed edits (#${N})"
    ```
-   Then merge, never rebase (the branch may already be pushed, and force pushes are
-   denied):
+   If the branch exists both locally and on the remote, merge the pushed copy in, so
+   commits that exist only there are kept even if the two have diverged:
+   ```bash
+   git pull --no-rebase --no-edit origin <type>/${N}-<slug>
+   ```
+   Then bring it up to date with `main`: other PRs may have merged while it sat, and a
+   PR from a stale branch can be unmergeable. Merge, never rebase (the branch may
+   already be pushed, and force pushes are denied):
    ```bash
    git fetch origin
    git merge --no-edit origin/main
    ```
+   Either merge can conflict; both are handled the same way, below.
    If the fetch fails, stop and report it: never merge against a stale
    `origin/main`. If the merge fails without starting one (`git status --porcelain`
    lists no conflicted paths; for example, unrelated histories), there is nothing to
@@ -465,15 +466,13 @@ Run these on the issue's branch, `<type>/<number>-<slug>`.
 1. **Commit anything uncommitted**, so it travels with the branch. A stash would stay
    on this machine, and a cloud session's clone is discarded. First make sure a merge
    from Step 0 is not half done: committing it would save conflict markers as if they
-   were work.
+   were work. A merge is in progress only if this prints a hash:
    ```bash
-   git status --porcelain
-   git diff --check
-   git diff --cached --check
+   git rev-parse -q --verify MERGE_HEAD
    ```
-   If `git status --porcelain` lists conflicted paths (`UU`, `AA`, `DD`, `AU`, `UA`,
-   `DU`, `UD`), or either `--check` reports conflict markers, abort the merge, and
-   say in the comment that the merge with `main` was abandoned:
+   If it does, abort the merge, and say in the comment that the merge was abandoned.
+   (Abort only then: a line of `=======` can look like a conflict marker in a file
+   that is not being merged, and aborting with no merge in progress fails.)
    ```bash
    git merge --abort
    ```
@@ -484,7 +483,7 @@ Run these on the issue's branch, `<type>/<number>-<slug>`.
    ```
 2. **Save any commits** that are not on `main`, under a name no later run reuses:
    ```bash
-   git log --oneline main..HEAD
+   git log --oneline origin/main..HEAD
    git log -1 --format='%h %H'
    ```
    If the first command lists commits, push them, using the short hash from the
