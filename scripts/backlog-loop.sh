@@ -27,8 +27,25 @@
 #
 set -uo pipefail
 
-# Move to the repo root (parent of this script's directory).
-cd "$(CDPATH='' cd -- "$(dirname -- "$0")/.." && pwd)" || exit 1
+# Run from a private copy (#25). The sessions this driver starts switch branches in
+# this checkout, which can delete these scripts or replace this one under a running
+# driver: bash reads a script as it goes, and the exit trap runs loop-lock.sh. So
+# copy the driver and the helpers it calls to a temp dir and re-run from there,
+# with the repo root passed explicitly. The copy is removed on exit.
+if [ -z "${BACKLOG_LOOP_STAGED:-}" ]; then
+  root="$(CDPATH='' cd -- "$(dirname -- "$0")/.." && pwd)" || exit 1
+  # An explicit template: macOS's bare `mktemp -d` ignores TMPDIR.
+  stage="$(mktemp -d "${TMPDIR:-/tmp}/backlog-loop.XXXXXX")" || { echo "✗ could not create a temp dir for the driver" >&2; exit 1; }
+  if ! cp "$root/scripts/backlog-loop.sh" "$root/scripts/loop-lock.sh" \
+          "$root/scripts/check-verify-section.sh" "$stage/"; then
+    rm -rf "$stage"
+    echo "✗ could not copy the driver's scripts from $root/scripts" >&2
+    exit 1
+  fi
+  BACKLOG_LOOP_STAGED="$stage" BACKLOG_LOOP_ROOT="$root" exec bash "$stage/backlog-loop.sh" "$@"
+fi
+HERE="$BACKLOG_LOOP_STAGED"
+cd "$BACKLOG_LOOP_ROOT" || exit 1
 
 MAX_ITEMS="${MAX_ITEMS:-25}"
 PACE_SECONDS="${PACE_SECONDS:-5}"
@@ -44,7 +61,11 @@ BG_WAIT_SECONDS=$((10#$BG_WAIT_SECONDS))
 
 # /work-next-item stops at once without a Verify section; fail here instead of
 # spending MAX_ITEMS invocations discovering that one at a time.
-scripts/check-verify-section.sh CLAUDE.md || exit 1
+"$HERE/check-verify-section.sh" CLAUDE.md || { rm -rf "$HERE"; exit 1; }
+
+# Remove the private copy on any exit from here on; the lock is added to this
+# trap once it is taken.
+trap 'rm -rf "$HERE"' EXIT
 
 # A missing tool would otherwise look like a usage limit: run_item fails, and the
 # driver backs off for MAX_RETRIES rounds before giving up.
@@ -59,8 +80,8 @@ mkdir -p "$LOG_DIR"
 # started by hand while this runs stops at its own lock check. It reclaims a lock a
 # crashed run left behind. The sessions this driver starts run that same check;
 # BACKLOG_LOOP_PID tells them the lock they find is their own driver's.
-scripts/loop-lock.sh acquire $$ || exit 1
-trap 'scripts/loop-lock.sh release $$' EXIT
+"$HERE/loop-lock.sh" acquire $$ || exit 1
+trap '"$HERE/loop-lock.sh" release $$; rm -rf "$HERE"' EXIT
 export BACKLOG_LOOP_PID=$$
 
 # Count open, prioritized issues that still need loop work. in-progress counts

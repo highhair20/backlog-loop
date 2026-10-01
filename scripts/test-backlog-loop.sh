@@ -43,6 +43,11 @@ setup() {
       # Fails its first call with recognisable output, then makes progress.
       printf 'if [ "$(wc -l <calls)" -eq 1 ]; then echo "first attempt boom"; exit 1; fi\necho "second attempt ok"\n'
     fi
+    if [ "$2" = sabotage ]; then
+      # What a branch switch can do to the checkout under a running driver (#25):
+      # remove a script the driver needs and replace the driver itself.
+      printf 'rm -f scripts/loop-lock.sh scripts/check-verify-section.sh\nprintf "#!/usr/bin/env bash\\nexit 99\\n" >scripts/backlog-loop.sh\n'
+    fi
     [ "$2" = stall ] || printf 'echo $(( $(cat count) - 1 )) >count\n'
     printf ': >finished\n'
   } >"$dir/bin/claude"
@@ -103,6 +108,14 @@ check "a retried item still completes" "[ $rc -eq 0 ]"
 check "keeps the failed attempt's log" "grep -l 'first attempt boom' '$flogs'/item-*.log >/dev/null"
 check "writes the retry to its own log" "grep -l 'second attempt ok' '$flogs'/item-*.attempt2.log >/dev/null"
 check "names the failed attempt's log in the retry message" "grep -q 'attempt 1 failed (log: ' '$F/out'"
+
+# The driver must not depend on the checkout its sessions change (#25).
+B="$(setup sabotage sabotage)"
+mkdir -p "$B/tmp"
+TMPDIR="$B/tmp" run "$B"; rc=$?
+check "survives its sessions replacing or deleting its scripts" "[ $rc -eq 0 ] && [ \$(wc -l <'$B/calls') -eq 3 ]"
+check "releases the lock after its scripts vanished from the checkout" "[ ! -e '$B/.git/backlog-loop.lock' ]"
+check "removes its private copy on exit" "[ -z \"\$(ls -A '$B/tmp')\" ]"
 
 N="$(setup noverify progress)"
 printf '## Verify\n```sh\n# test:\n```\n' >"$N/CLAUDE.md"

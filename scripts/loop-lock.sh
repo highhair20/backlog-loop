@@ -36,7 +36,10 @@ esac
 
 # Move to the repo root (parent of this script's directory): the lock is this repo's,
 # wherever the script is called from.
-cd "$(CDPATH='' cd -- "$(dirname -- "$0")/.." && pwd)" || die "cannot find the repo root"
+# The repo root: backlog-loop.sh passes it explicitly, because it runs this script
+# from a private copy outside the repo (#25). Otherwise, the parent of this
+# script's directory.
+cd "${BACKLOG_LOOP_ROOT:-$(CDPATH='' cd -- "$(dirname -- "$0")/.." && pwd)}" || die "cannot find the repo root"
 git_dir="$(git rev-parse --git-common-dir 2>/dev/null)" || die "not a git repository: $PWD"
 # Absolute, so the `rm -rf` in the messages below is safe to paste from any directory.
 case "$git_dir" in /*) ;; *) git_dir="$PWD/$git_dir" ;; esac
