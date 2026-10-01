@@ -35,6 +35,8 @@ check "every action in the CI hardening guide is pinned to a SHA with a version 
 # coverage gate, uncached coverage, single source of truth.
 check "CI hardening guide has a section per pattern" "[ \"\$(grep -c '^## [1-5]\\. ' '$guide' 2>/dev/null)\" = 5 ]"
 check "placeholder CI step points to the hardening guide" "grep -q 'docs/CI_HARDENING.md' '$ROOT/.github/workflows/ci.yml'"
+# The README's file list is how a reader finds the guide (#14 acceptance criterion).
+check "README's file list includes the hardening guide" "grep -qE '^docs/CI_HARDENING\\.md[[:space:]]' '$ROOT/README.md'"
 
 # --- dependabot: updates the pinned actions ---
 check "dependabot.yml parses and updates github-actions" \
