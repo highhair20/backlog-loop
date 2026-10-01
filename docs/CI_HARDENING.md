@@ -105,9 +105,12 @@ variation, a hard 80% gate fails healthy PRs until people stop trusting it. A
 
 **Principle:** a coverage number must come from tests that ran in this job.
 
-**Prevents:** a stale, higher number. Go caches test results, and a cached run
-reports the old result instead of running the tests, so coverage can look
-unchanged after a change that lowered it.
+**Prevents:** a pass for tests that never ran. Go caches test results keyed on
+the code and the inputs it can see; a cache hit replays the old pass and its
+coverage. That is sound for unchanged code, but not for tests that depend on
+what the cache cannot see: a database or container, the network, the clock. A
+flaky or broken integration test can stay green from a cached run, especially
+when the runner restores `GOCACHE` between jobs.
 
 **Snippet (Go):** `-count=1` disables the test cache for this run.
 
@@ -139,8 +142,8 @@ file "just for now"; later one copy changes and the other ships stale.
 
 **Snippet (any stack):** set `VALUE` to the constant and `HOME_FILE` to the one
 file it belongs in. `git grep` searches tracked files only, so build output and
-dependencies are skipped. The workflows are excluded, since this step names the
-value.
+dependencies are skipped. The workflow holding this step is excluded, since it
+names the value; every other file, other workflows included, is searched.
 
 ```yaml
 - name: Single source of truth
@@ -148,7 +151,7 @@ value.
     VALUE: "the-constant-value"
     HOME_FILE: src/config/constants.ts
   run: |
-    files="$(git grep -lF -- "$VALUE" -- ':!.github/workflows/' || true)"
+    files="$(git grep -lF -- "$VALUE" -- ':!.github/workflows/ci.yml' || true)"
     if [ "$files" != "$HOME_FILE" ]; then
       echo "::error::'$VALUE' must appear only in $HOME_FILE. Found in:"
       printf '%s\n' "${files:-<nowhere>}"
