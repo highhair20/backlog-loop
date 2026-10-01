@@ -130,6 +130,14 @@ cp "$ROOT/CLAUDE.md" "$O/CLAUDE.md"
 run "$O" --fix; rc=$?
 check "--fix refuses when a backup already exists" "[ $rc -eq 1 ] && cmp -s '$ROOT/CLAUDE.md' '$O/CLAUDE.md' && cmp -s '$O/.fake/edited' '$O/CLAUDE.md.template-own'"
 
+# A machine's own allowlist predates rules the example gained later (#30 review):
+# name each missing rule, or an unattended run stops at the command it needs.
+M="$(configured_repo stale-allow)"
+jq '.permissions.allow -= ["Bash(gh issue list *)"]' "$M/.claude/settings.local.json" >"$M/s.tmp" && mv "$M/s.tmp" "$M/.claude/settings.local.json"
+run "$M"; rc=$?
+check "warns about allow rules the example has and the local file lacks" "[ $rc -eq 0 ] && grep -q 'missing 1 allow rule' '$M/.fake/out' && grep -qF 'Bash(gh issue list *)' '$M/.fake/out'"
+check "a local file with every example rule gets no such warning" "! grep -q 'missing .* allow rule' '$C/.fake/out'"
+
 run "$C" --bogus; rc=$?
 check "rejects an unknown argument" "[ $rc -eq 2 ]"
 

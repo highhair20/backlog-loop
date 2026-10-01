@@ -90,7 +90,8 @@ The helper checks gh's login for the host origin points at, resolving SSH aliase
 and `ssh.github.com`. It is the same check the driver and `setup.sh` run, so they
 cannot disagree. Do not check with `gh auth status` yourself: on its own it exits 1
 when any account on any stored host has a stale token, even one this repo never
-uses.
+uses. If the helper does not exist ("No such file": this checkout predates it),
+stop and report that, rather than reading it as gh being unusable.
 
 If that succeeds, run the `gh` commands as written. Otherwise do each GitHub
 operation with the MCP tool in this table. Git itself (fetch, branch, commit, push)

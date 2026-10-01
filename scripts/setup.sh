@@ -138,10 +138,29 @@ check_ci() {
   [ "$count" -eq 0 ] || [ "$missing" -gt 0 ] || ok "CI runs every Verify command"
 }
 
+# Sync updates the example but never this machine's own allowlist, so a rule the
+# loop gained later (a new helper, a new git command) is missing here, and an
+# unattended run stops at the command it needs. Name each missing rule.
+check_local_allow_rules() {
+  [ -f "$LOCAL_SETTINGS.example" ] || return 0
+  local missing count
+  if ! missing="$(jq -r --slurpfile mine "$LOCAL_SETTINGS" \
+      '(.permissions.allow // []) - ($mine[0].permissions.allow // []) | .[]' \
+      "$LOCAL_SETTINGS.example" 2>/dev/null)"; then
+    warn "could not compare $LOCAL_SETTINGS with its example (invalid JSON?)"
+    return 0
+  fi
+  [ -n "$missing" ] || { ok "$LOCAL_SETTINGS has every rule the example allows"; return 0; }
+  count="$(printf '%s\n' "$missing" | grep -c .)"
+  warn "$LOCAL_SETTINGS is missing $count allow rule(s) the example has: $(printf '%s\n' "$missing" | paste -sd ' ' -)" \
+    "add them to its allow list; an unattended run stops at the first command it is not allowed"
+}
+
 check_local_settings() {
   echo "Unattended runs"
   if [ -f "$LOCAL_SETTINGS" ]; then
     ok "$LOCAL_SETTINGS exists"
+    check_local_allow_rules
   elif [ ! -f "$LOCAL_SETTINGS.example" ]; then
     warn "no $LOCAL_SETTINGS, and no example to start from" "re-run sync-guardrails.sh from the template"
   elif [ "$fix" -eq 1 ]; then
