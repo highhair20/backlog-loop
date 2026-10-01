@@ -30,6 +30,7 @@ jobs:
     runs-on: ubuntu-latest
     environment: dev
     strategy:
+      fail-fast: false
       matrix:
         unit: [api, worker, scheduler]
     steps:
@@ -39,6 +40,8 @@ jobs:
 
 `deploy.sh` stands for whatever deploys one unit in your stack. If your cloud
 login uses OIDC, the job also needs `id-token: write` under `permissions`.
+`fail-fast: false` lets the other units finish when one fails; the default
+cancels them partway through their deploys.
 
 ## Prod deploys on a `v*` tag a human pushes
 
@@ -59,6 +62,7 @@ jobs:
     runs-on: ubuntu-latest
     environment: prod
     strategy:
+      fail-fast: false
       matrix:
         unit: [api, worker, scheduler]
     steps:
@@ -66,13 +70,14 @@ jobs:
       - run: ./deploy.sh "${{ matrix.unit }}" prod
 ```
 
-**The loop cannot push tags.** `.claude/settings.json` denies `git push * v*`,
+**The loop is denied tag pushes.** `.claude/settings.json` denies `git push * v*`,
 `git push --tags`, and any push to `refs/tags/`. A tag push would be a prod
 deploy, and the loop's work is unreviewed until you merge it; tagging is the
 step where you decide that reviewed code goes live. Like every deny rule, these
-match command text, so they are a filter, not a wall (see the README's Limits).
-For a hard block, add a GitHub tag ruleset on `v*` that only you can bypass, or
-require a reviewer on the `prod` environment.
+match command text, so they are a filter, not a wall (see the README's Limits):
+`git push --follow-tags origin <branch>` and `git push origin +v1.4.0` both push a
+tag without matching them. For a hard block, add a GitHub tag ruleset on `v*`
+that only you can bypass, or require a reviewer on the `prod` environment.
 
 ## Keep the workflows in step: a parity test
 
