@@ -424,6 +424,8 @@ issue that still looks claimed or that has lost its explanation.
 
 **Check every command's result.** If step 1 or 2 fails, the work is not saved: do
 step 3, saying so, and delete nothing (leave the branch checked out as it is). If
+step 3 fails (the comment or the label swap), delete nothing either: the issue
+would look claimed, or unexplained, with its work gone. Stop and report it. If
 step 4 or 5 fails, the work is already saved: add a comment naming what is left,
 so a human removes it. Never get past a failure with `--no-verify` or `--force`.
 
@@ -457,10 +459,13 @@ Run these on the issue's branch, `<type>/<number>-<slug>`.
      exists only in this checkout (its path and tip hash). In a cloud session that
      checkout is discarded when the session ends, so say the work will be lost
      unless someone saves it first. Never call it safe.
-   - **What happens next:** that `<type>/<number>-<slug>` is about to be deleted,
-     locally and on the remote, unless the save failed.
+   - **What happens next**, one of:
+     - the save worked: `<type>/<number>-<slug>` is being deleted, locally and on
+       the remote, and if it still exists, delete it before retrying the issue (a
+       retry needs the name, and its work is on `abandoned/…`);
+     - the save failed: nothing was deleted.
    ```bash
-   gh issue comment <number> --body "Autonomous loop could not complete this. Blocker: <concise reason>. Work: <where it is>. Next: <type>/<number>-<slug> is being deleted."
+   gh issue comment <number> --body "Autonomous loop could not complete this. Blocker: <concise reason>. Work: <where it is>. Next: <what happens next>."
    gh issue edit <number> --remove-label in-progress --add-label needs-attention
    ```
 4. **Remove the issue's branch from the remote**, if it is there. Nothing revisits a
