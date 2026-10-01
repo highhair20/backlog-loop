@@ -11,6 +11,10 @@ trap '[ -z "$BG" ] || kill "$BG" 2>/dev/null; touch "$WORK"/*/go 2>/dev/null; rm
 
 # When the loop itself runs these tests, the driver's PID is in the environment.
 unset BACKLOG_LOOP_PID BACKLOG_LOOP_STAGED BACKLOG_LOOP_ROOT
+# The driver's settings too: a loop started as `MAX_ITEMS=2 scripts/backlog-loop.sh`
+# passes them to every session, and its Verify then ran these nested drivers
+# with a cap of 2 against 3-issue fixtures (#41).
+unset MAX_ITEMS PACE_SECONDS MAX_RETRIES BACKOFF_SECONDS MODEL LOG_DIR BG_WAIT_SECONDS
 
 failures=0
 check() { if eval "$2"; then echo "ok   $1"; else echo "FAIL $1" >&2; failures=$((failures + 1)); fi; }
