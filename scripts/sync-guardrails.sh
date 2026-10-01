@@ -51,6 +51,12 @@ SEEDED=(
   .claude/agents/pr-test-analyzer.md
   .claude/agents/silent-failure-hunter.md
   .claude/agents/LICENSE.ECC
+  # Optional stack reviewers: inert here, outside .claude/agent-context/, until a
+  # repo copies one in and re-runs vendor-agents.sh.
+  templates/agent-context/database-reviewer.md
+  templates/agent-context/go-reviewer.md
+  templates/agent-context/python-reviewer.md
+  templates/agent-context/typescript-reviewer.md
 )
 # Not synced: .editorconfig. New repos get it from the template, but its indent
 # defaults would silently change how editors treat an existing repo's code.

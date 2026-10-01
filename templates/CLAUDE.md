@@ -28,8 +28,13 @@ several in one shell (use `npm --prefix web test`, `tsc -p web`, and so on).
 `/work-next-item` Step 6.5 runs each reviewer whose paths match the branch's changes
 and fixes its CRITICAL/HIGH findings before opening the PR. The agents live in
 `.claude/agents/`, built by `scripts/vendor-agents.sh`; give each one this repo's
-context in `.claude/agent-context/`. Add rows for stack-specific reviewers; each one
-is an extra agent run per item.
+context in `.claude/agent-context/`.
+
+To enable a stack reviewer (`go-reviewer`, `database-reviewer`,
+`typescript-reviewer`, `python-reviewer`), copy its context from
+`templates/agent-context/` into `.claude/agent-context/`, run
+`scripts/vendor-agents.sh`, and add a row below with the paths it covers. Each one is
+an extra agent run per item.
 
 | Changed paths | Agent (`subagent_type`) | Focus |
 |---|---|---|
