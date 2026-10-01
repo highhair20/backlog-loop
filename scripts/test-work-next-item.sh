@@ -92,7 +92,9 @@ check "the remote branch is deleted only after proving HEAD contains it" "[ -n '
 check "a remote branch with unsaved commits is kept and reported" "printf '%s' \"\$give_up\" | grep -q 'keep the remote branch: it is the only copy'"
 check "an exit of 1 from the MERGE_HEAD check is not a failure" "printf '%s' \"\$give_up\" | grep -q 'which is the normal case, not a failure'"
 mh0="$(printf '%s\n' "$step0" | grep -n -m1 'MERGE_HEAD' | cut -d: -f1)"
-check "Step 0 aborts an interrupted merge before its wip commit" "[ -n '$mh0' ] && [ -n '$leftover' ] && [ '$mh0' -lt '$leftover' ]"
+checkout="$(printf '%s\n' "$step0" | grep -n -m1 'check out the branch' | cut -d: -f1)"
+# Before the checkout, not just the commit: git refuses to switch branches mid-merge.
+check "Step 0 aborts an interrupted merge before checking out the branch" "[ -n '$mh0' ] && [ -n '$checkout' ] && [ '$mh0' -lt '$checkout' ] && [ '$mh0' -lt '$leftover' ]"
 
 # Step 0 must not mistake a preserved branch for work in flight.
 check "Step 0 always ignores abandoned/ branches" "section 'Step 0' | grep -q 'always ignore them'"

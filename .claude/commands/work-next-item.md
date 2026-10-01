@@ -140,15 +140,17 @@ Then:
    swap didn't. Just fix the state and move on to a new item:
    `gh issue edit ${N} --remove-label in-progress --add-label in-review`.
 2. **A branch exists (remote or local-only) but no open PR** → work was underway.
-   Resume *that* issue as this iteration (do not pick a new one): check out the branch
-   (fetch it first if it is remote-only; a local one keeps any uncommitted edits).
-
-   If an earlier run stopped in the middle of a merge (`git rev-parse -q --verify
-   MERGE_HEAD` prints a hash; no output means none is in progress), abort it first, so
-   its conflict markers are not committed as work; the merges below redo it:
+   Resume *that* issue as this iteration (do not pick a new one). First, if an earlier
+   run stopped in the middle of a merge (`git rev-parse -q --verify MERGE_HEAD` prints
+   a hash; no output means none is in progress), abort it: git refuses to change
+   branches during a merge, and its conflict markers must not be committed as work.
+   The merges below redo it.
    ```bash
    git merge --abort
    ```
+   Then check out the branch (fetch it first if it is remote-only; a local one keeps
+   any uncommitted edits).
+
    A merge needs a clean tree, so if `git status --porcelain` lists anything, commit
    it first:
    ```bash
