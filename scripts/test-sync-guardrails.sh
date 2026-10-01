@@ -74,6 +74,7 @@ check "copies vendor-agents.sh, executable" "[ -x '$T/scripts/vendor-agents.sh' 
 check "seeds the reviewer agents, their context, and the ECC license" "[ -f '$T/.claude/agents/pr-test-analyzer.md' ] && [ -f '$T/.claude/agents/silent-failure-hunter.md' ] && [ -f '$T/.claude/agent-context/_common.md' ] && [ -f '$T/.claude/agents/LICENSE.ECC' ]"
 check "seeds the backlog operator doc" "[ -f '$T/docs/BACKLOG.md' ]"
 check "seeds the CI hardening guide" "cmp -s '$HERE/../docs/CI_HARDENING.md' '$T/docs/CI_HARDENING.md'"
+check "seeds the deploy guide" "cmp -s '$HERE/../docs/DEPLOYING.md' '$T/docs/DEPLOYING.md'"
 check "copies setup.sh and seed-labels.sh, executable" "[ -x '$T/scripts/setup.sh' ] && [ -x '$T/scripts/seed-labels.sh' ]"
 check "copies protect-main.sh and the allowlist example" "[ -x '$T/scripts/protect-main.sh' ] && [ -f '$T/.claude/settings.local.json.example' ]"
 check "does not make the command file executable" "[ ! -x '$T/.claude/commands/work-next-item.md' ]"
@@ -158,6 +159,13 @@ mkdir -p "$H/docs" && echo "# our CI notes" >"$H/docs/CI_HARDENING.md"
 git -C "$H" add -A && git -C "$H" -c user.name=t -c user.email=t@t commit -qm guide
 "$SYNC" "$H" >/dev/null 2>&1
 check "leaves an existing CI_HARDENING.md alone" "grep -qx '# our CI notes' '$H/docs/CI_HARDENING.md'"
+
+# --- a repo's own deploy guide is kept ---
+P="$(new_target owndeploy)"
+mkdir -p "$P/docs" && echo "# our deploy notes" >"$P/docs/DEPLOYING.md"
+git -C "$P" add -A && git -C "$P" -c user.name=t -c user.email=t@t commit -qm deploy
+"$SYNC" "$P" >/dev/null 2>&1
+check "leaves an existing DEPLOYING.md alone" "grep -qx '# our deploy notes' '$P/docs/DEPLOYING.md'"
 
 # --- placeholder CI is not added next to an existing workflow ---
 W="$(new_target hasci)"

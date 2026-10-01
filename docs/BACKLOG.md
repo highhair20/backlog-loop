@@ -81,7 +81,8 @@ PR body. Typical ones:
 **Turn each check into a test where you can.** A test that asserts two
 configurations agree (router against gateway config, dev deploy workflow against
 prod) fails inside the loop's own Verify step, before a PR exists. A checklist item
-only fails if someone reads it.
+only fails if someone reads it. [DEPLOYING.md](./DEPLOYING.md) has a parity test for
+the deploy workflows.
 
 ### Tests must exercise the acceptance criteria
 
@@ -108,7 +109,9 @@ exactly this.
 
 - `.claude/settings.json` is committed, so every session sees its deny rules,
   including cloud sessions. They block merging, pushes to `main`, force and tag
-  pushes, and GitHub MCP tools that write files. Deny beats any allow rule.
+  pushes, and GitHub MCP tools that write files. Deny beats any allow rule. Tag
+  pushes are blocked because a `v*` tag deploys prod in the pattern
+  [DEPLOYING.md](./DEPLOYING.md) describes.
 - `.claude/settings.local.json` is per-machine and gitignored. It allows the
   commands an unattended run needs; start from `.claude/settings.local.json.example`
   and add the Verify commands.
