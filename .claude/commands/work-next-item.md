@@ -129,6 +129,11 @@ gh pr list --state open --json number,headRefName,url
 The branch reaches the remote only at Step 6, so a run interrupted in Steps 4–5 leaves
 a **local-only** branch, possibly with uncommitted edits. Check local branches too.
 
+Branches named `abandoned/<N>-<sha>` are work a give-up preserved for a human (see
+**Give up**), never work in flight: ignore them when looking for `#N`'s branch. One
+exception: if `#N` is still `in-progress` and an `abandoned/<N>-…` branch exists, a
+give-up was interrupted after saving the work. Finish it from **Give up** step 3.
+
 Then:
 
 1. **An open PR already exists from that branch** → the work finished but the label
@@ -314,19 +319,9 @@ git switch -c <type>/<number>-<slug>
    (small functions, error handling, no secrets, no debug prints) before shipping.
 
 **Give-up condition:** if after a focused effort (~3 substantial implement+test
-cycles) it still isn't green, abort cleanly:
-
-```bash
-gh issue edit <number> --remove-label in-progress --add-label needs-attention
-gh issue comment <number> --body "Autonomous loop could not complete this. Blocker: <concise reason>."
-# Nothing is committed yet, so set the edits aside first: a plain switch would carry
-# them onto main (every later Step 1 then halts on a dirty tree) or refuse outright.
-git stash push -u -m "abandoned #<number>"
-git switch main
-git branch -D <type>/<number>-<slug>
-```
-
-Then report what blocked you and STOP.
+cycles) it still isn't green, follow **Give up** at the end of this file. Do not
+assume nothing is committed: a branch resumed by Step 0 may hold commits, and may
+already be on the remote. Then report what blocked you and STOP.
 
 ## Step 6 — Commit & push
 
@@ -360,14 +355,9 @@ the PR body rather than skipping silently.
 Act on the findings:
 
 - **CRITICAL / HIGH:** fix, re-run the Step 5 gate (the Verify commands), and commit as `fix: address review findings (#<number>)`. One fix round only: if
-  a CRITICAL finding still stands after it, give up. The branch is already pushed,
-  so the Step 5 give-up path is not enough on its own: first delete the remote
-  branch, or it is orphaned (Step 0 only finds `in-progress` issues, and give-up
-  removes that label):
-  ```bash
-  git push origin --delete <type>/<number>-<slug>
-  ```
-  then run the Step 5 give-up path, naming the surviving finding in the comment.
+  a CRITICAL finding still stands after it, follow **Give up** at the end of this
+  file, naming the surviving finding in the comment. It also removes the branch you
+  pushed in Step 6, so it is not orphaned.
 - **MEDIUM / LOW:** don't fix unless trivial and inside the issue's scope (the
   "never touch unrelated files" guardrail still applies). List them in the PR body.
 - **A finding you judge wrong:** don't act on it; record it with a one-line reason in
@@ -422,3 +412,56 @@ gh issue edit <number> --remove-label in-progress --add-label in-review
 
 Report concisely: issue number + title, branch, PR URL, and test results. If any
 actionable issues remain, the loop will continue to the next one.
+
+## Give up — keep the work, then release the issue
+
+Steps 5 and 6.5 both end here. The branch may be in any state: fresh, resumed by
+Step 0 with commits, local-only, or already pushed. Giving up must never destroy
+work silently, and must not leave the issue's branch on the remote. So: save the
+work first, delete branches second, swap the labels last. An interrupted give-up
+then leaves the issue `in-progress`, and Step 0 finishes it.
+
+Run these on the issue's branch, `<type>/<number>-<slug>`.
+
+1. **Commit anything uncommitted**, so it travels with the branch. A stash would stay
+   on this machine, and a cloud session's clone is discarded.
+   ```bash
+   git status --porcelain
+   ```
+   If that lists anything:
+   ```bash
+   git add -A
+   git commit -m "wip: uncommitted work at give-up (#<number>)"
+   ```
+2. **Save any commits** that are not on `main`, under a name no later run reuses:
+   ```bash
+   git log --oneline main..HEAD
+   git log -1 --format='%h %H'
+   ```
+   If the first command lists commits, push them, using the short hash from the
+   second:
+   ```bash
+   git push origin HEAD:refs/heads/abandoned/<number>-<short-sha>
+   ```
+   **If that push fails, stop deleting.** Leave the branch as it is, skip to step 5,
+   and say in the comment that the work exists only on this machine's local branch.
+3. **Remove the issue's branch from the remote**, if it is there, so it is not
+   orphaned (Step 0 only looks at `in-progress` issues). Delete only if the first
+   command prints the branch:
+   ```bash
+   git ls-remote --heads origin <type>/<number>-<slug>
+   git push origin --delete <type>/<number>-<slug>
+   ```
+4. **Delete the local branch.** Its commits are safe on `abandoned/…` (or there were
+   none), and a retry needs the name free:
+   ```bash
+   git switch main
+   git branch -D <type>/<number>-<slug>
+   ```
+5. **Release the issue, labels last.** The comment names where the work is:
+   `abandoned/<number>-<short-sha>` and the full hash, "only on the local branch"
+   if the save failed, or "no commits to keep".
+   ```bash
+   gh issue comment <number> --body "Autonomous loop could not complete this. Blocker: <concise reason>. Work: <where it is>."
+   gh issue edit <number> --remove-label in-progress --add-label needs-attention
+   ```
