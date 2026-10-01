@@ -83,8 +83,15 @@ routines) have **no `gh` CLI**; they reach GitHub through `mcp__github__*` tools
 instead. Decide once, before Step 0:
 
 ```bash
-command -v gh && gh auth status
+git remote get-url origin
+command -v gh && gh auth status --hostname <host>
 ```
+
+`<host>` is the host in origin's URL: `github.com` in `https://github.com/o/r.git`
+or `git@github.com:o/r.git`, the GitHub Enterprise host otherwise. For an SSH alias
+from `~/.ssh/config`, use its real `HostName`. Never run a bare `gh auth status`:
+it exits 1 when any account on any stored host has a stale token, even one this
+repo never uses. With no origin, run it bare.
 
 If that succeeds, run the `gh` commands as written. Otherwise do each GitHub
 operation with the MCP tool in this table. Git itself (fetch, branch, commit, push)

@@ -96,6 +96,13 @@ checkout="$(printf '%s\n' "$step0" | grep -n -m1 'check out the branch' | cut -d
 # Before the checkout, not just the commit: git refuses to switch branches mid-merge.
 check "Step 0 aborts an interrupted merge before checking out the branch" "[ -n '$mh0' ] && [ -n '$checkout' ] && [ '$mh0' -lt '$checkout' ] && [ '$mh0' -lt '$leftover' ]"
 
+# A bare `gh auth status` fails when any stored host has a stale token, so the
+# command checks only the host origin points at (#15). Commands in code blocks only.
+# shellcheck disable=SC2034  # read inside check's eval strings
+auth_cmds="$(awk '/^[[:space:]]*```/{ f = !f; next } f' "$CMD" | grep 'gh auth status' || true)"
+check "the command checks gh auth" "[ -n \"\$auth_cmds\" ]"
+check "every gh auth status it runs names the repo's host" "! printf '%s\n' \"\$auth_cmds\" | grep -v -- '--hostname'"
+
 # Step 0 must not mistake a preserved branch for work in flight.
 check "Step 0 always ignores abandoned/ branches" "section 'Step 0' | grep -q 'always ignore them'"
 # An abandoned/ branch outlives its attempt, so it cannot signal an interrupted
