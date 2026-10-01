@@ -21,7 +21,7 @@ echo "$*" >>"$WORK/gh-calls"
 case "$*" in
   "auth status") exit "${BARE_RC:-1}" ;;
   "auth status --hostname $GOOD_HOST") exit 0 ;;
-  "auth status --hostname "*) exit 1 ;;
+  "auth status --hostname "*) echo "gh says: offline" >&2; exit 1 ;;
   *) echo "fake gh: unexpected: $*" >&2; exit 2 ;;
 esac
 FAKE
@@ -77,12 +77,22 @@ done
 echo "work-gh github.com" >"$WORK/ssh-aliases"
 check_auth git@work-gh:o/r.git
 check "resolves an SSH alias from ~/.ssh/config" "[ $rc -eq 0 ] && [ '$out' = github.com ]"
+check_auth ssh://git@work-gh:2222/o/r.git
+check "resolves an SSH alias in an ssh:// URL" "[ $rc -eq 0 ] && [ '$out' = github.com ]"
 echo "github.com ssh.github.com" >"$WORK/ssh-aliases"
 check_auth git@github.com:o/r.git
 check "folds ssh.github.com into github.com" "[ $rc -eq 0 ] && [ '$out' = github.com ]"
 : >"$WORK/ssh-aliases"
 check_auth https://work-gh/o/r.git GOOD_HOST=work-gh
 check "does not resolve an HTTPS host through ssh" "[ $rc -eq 0 ] && [ '$out' = work-gh ]"
+check_auth https://GitHub.com/o/r.git
+check "lower-cases the host" "[ $rc -eq 0 ] && [ '$out' = github.com ]"
+
+# gh's own report reaches stderr on failure, so its reason is not lost.
+check_auth https://github.com/o/r.git GOOD_HOST=nowhere.example
+check "passes gh's report through on failure" "[ $rc -eq 1 ] && grep -q 'gh says: offline' '$WORK/err'"
+check_auth https://github.com/o/r.git
+check "is quiet on success" "[ $rc -eq 0 ] && [ ! -s '$WORK/err' ]"
 
 # No host to pick: falls back to checking every host, as gh auth status does.
 check_auth "" BARE_RC=0

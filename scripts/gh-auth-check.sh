@@ -50,10 +50,22 @@ gh_host() {
       fi
       ;;
   esac
+  # Hostnames are case-insensitive; gh stores them in lower case.
+  host="$(printf '%s' "$host" | tr '[:upper:]' '[:lower:]')"
   case "$host" in
     *.github.com) host=github.com ;;
   esac
   echo "$host"
+}
+
+# Runs gh auth status with the given flags, quiet on success. On failure it passes
+# gh's report to stderr, so an offline machine or a crash is not mistaken for a
+# missing login.
+auth_status() {
+  local report rc
+  report="$(gh auth status "$@" 2>&1)"; rc=$?
+  [ "$rc" -eq 0 ] || printf '%s\n' "$report" >&2
+  return "$rc"
 }
 
 host=""
@@ -62,8 +74,8 @@ if url="$(git remote get-url origin 2>/dev/null)"; then
 fi
 
 if [ -z "$host" ]; then
-  gh auth status >/dev/null 2>&1
+  auth_status
   exit
 fi
 echo "$host"
-gh auth status --hostname "$host" >/dev/null 2>&1
+auth_status --hostname "$host"
