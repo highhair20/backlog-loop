@@ -330,31 +330,36 @@ would close that PR. Mark the issue
 `gh issue edit <number> --add-label in-review`, leave the branch alone, and go back
 to Step 2 for another issue.
 
-**Retire a leftover branch before claiming.** Check it out (the local copy if there
-is one, otherwise fetch the remote one), then run **Give up** steps 2, 4 and 5: save
-its commits under `abandoned/<number>-<short-sha>`, delete the remote copy only once
-it is proven to hold nothing unsaved, then delete the local branch and return to
+**Retire a leftover branch before claiming.** Do this for every leftover branch
+name (a title edit can change the type or slug, so there may be more than one); a
+local and a remote branch with the same name are one. Check it out (the local copy if
+there is one, otherwise fetch the remote one), then run **Give up** steps 2, 4 and 5:
+save its commits under `abandoned/<number>-<short-sha>`, delete the remote copy only
+once it is proven to hold nothing unsaved, then delete the local branch and return to
 `main`. Skip Give up's step 1 (Step 1 left nothing uncommitted) and step 3 (this
-issue is being claimed, not released). Its failure rule still holds, but nothing is
-claimed yet: if the save fails, or step 4 keeps the remote copy, leave the issue
-unclaimed, but mark it for a human. Left unlabelled, Step 2 would select it again
-next run and fail the same way, so nothing else in the backlog would get worked:
+issue is being claimed, not released).
+
+If any of those steps fails (the save, a remote copy step 4 keeps, or step 5's
+switch or delete), do not claim. Left unlabelled, Step 2 would select the issue again
+next run and fail the same way, so nothing else in the backlog would get worked.
+Mark it for a human instead, then stop and report it:
 
 ```bash
 gh issue comment <number> --body "Autonomous loop could not retire the leftover branch <name> before retrying: <what failed>. Nothing was deleted that was not saved. Remove or rename the branch, then remove needs-attention."
 gh issue edit <number> --add-label needs-attention
 ```
 
-Then stop and report it.
-
-Then name what came before, so Step 0 never mistakes it for a rejection of this
-attempt: any unmerged PRs from `<type>/<number>-…` in Step 0's closed listing that no
-comment on the issue names yet (check as Step 0's case 2 does), and the branch you
-retired. Comment first: a run interrupted between the two then leaves an unclaimed
-issue, not a claim that Step 0 would hand back. With nothing to name, just claim.
+Otherwise, once every leftover branch is retired (or there was none), name what came
+before, so Step 0 never mistakes it for a rejection of this attempt and a human can
+find the saved work: any unmerged PRs from `<type>/<number>-…` in Step 0's closed
+listing that no comment on the issue names yet (check as Step 0's case 2 does), the
+branches you retired, and any `abandoned/<number>-…` branch on the remote that no
+comment names yet (a run interrupted between retiring and commenting leaves one).
+Comment first: a run interrupted between the two then leaves an unclaimed issue, not
+a claim that Step 0 would hand back. With nothing to name, just claim.
 
 ```bash
-gh issue comment <number> --body "Retrying this issue. Earlier PRs closed without merging: <closed PR urls, or none>. Leftover branch: <name> saved as abandoned/<number>-<short-sha> and deleted (or: deleted, no commits to keep; or none). This attempt starts fresh."
+gh issue comment <number> --body "Retrying this issue. Earlier PRs closed without merging: <closed PR urls, or none>. Leftover branches: <name> saved as abandoned/<number>-<short-sha> and deleted (or: deleted, no commits to keep; or none). Saved earlier: <abandoned/… branches no comment names, or none>. This attempt starts fresh."
 gh issue edit <number> --add-label in-progress
 ```
 

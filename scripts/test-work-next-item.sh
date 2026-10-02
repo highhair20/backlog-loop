@@ -196,8 +196,12 @@ claim="$(printf '%s\n' "$step3" | grep -n -m1 'add-label in-progress' | cut -d: 
 check "Step 3 retires a leftover branch before it claims" "[ -n '$retire' ] && [ -n '$claim' ] && [ '$retire' -lt '$claim' ]"
 check "it never treats an abandoned/ branch as leftover" "printf '%s' \"\$step3\" | grep -q 'never .abandoned/'"
 check "it saves before deleting, through Give up's steps" "printf '%s' \"\$step3\" | grep -q 'Give up\*\* steps 2, 4 and 5'"
-check "a failed retire leaves the issue unclaimed but marked for a human" "printf '%s' \"\$step3\" | grep -q 'leave the issue' && printf '%s' \"\$step3\" | grep -q 'add-label needs-attention'"
+check "a failed retire leaves the issue unclaimed but marked for a human" "printf '%s' \"\$step3\" | grep -q 'do not claim' && printf '%s' \"\$step3\" | grep -q 'add-label needs-attention'"
 check "a branch with an open PR is never retired" "printf '%s' \"\$step3\" | grep -q 'open PR' && printf '%s' \"\$step3\" | grep -q 'add-label in-review'"
+check "every leftover branch name is retired, not just one" "printf '%s' \"\$step3\" | grep -q 'for every leftover branch'"
+check "a failed local delete or switch also stops the claim" "printf '%s' \"\$step3\" | grep -q 'step 5.s'"
+check "the claim names saved branches no comment mentions yet" "printf '%s' \"\$step3\" | grep -q 'abandoned/<number>-…. branch on the remote that no'"
+check "the success path is marked apart from the failure stop" "printf '%s' \"\$step3\" | grep -q '^Otherwise, once every leftover branch is retired'"
 check "a branch with no commits is reported as deleted, not saved" "printf '%s' \"\$step3\" | grep -q 'no commits to keep'"
 check "the claim comment says where the old branch went" "printf '%s' \"\$step3\" | grep -q 'saved as abandoned/'"
 
