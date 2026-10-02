@@ -77,7 +77,7 @@ command that fixes each item:
 
 ```sh
 scripts/setup.sh          # check only
-scripts/setup.sh --fix    # also swap in the CLAUDE.md skeleton, create the labels and the local allowlist
+scripts/setup.sh --fix    # also swap in the CLAUDE.md skeleton, create the labels and the local allowlist, and link the issue guide
 ```
 
 It exits 0 once nothing is failing, so re-run it until it does. The steps it checks:
@@ -109,6 +109,12 @@ It exits 0 once nothing is failing, so re-run it until it does. The steps it che
    need a paid GitHub plan.
 5. **Allow the loop's commands** if you will run it unattended — see
    [Running the backlog loop](#running-the-backlog-loop).
+6. **Link the issue guide** in GitHub's "New issue" chooser, so people see the
+   conventions in [`docs/ISSUE_GUIDE.md`](docs/ISSUE_GUIDE.md) before they write
+   an issue. The link needs your repo's absolute URL, so the template cannot ship
+   it: `setup.sh --fix` adds it to `contact_links` in
+   `.github/ISSUE_TEMPLATE/config.yml`, keeping any links already there. It is a
+   warning, not a failure.
 
 ### An existing repository
 

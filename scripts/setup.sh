@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Check that this repo is set up for the backlog loop, and say how to fix what is
 # not. Read-only unless --fix, which applies only the safe, repeatable fixes: it
-# creates missing labels, copies the local allowlist example, and replaces the
+# creates missing labels, copies the local allowlist example, adds a link to
+# docs/ISSUE_GUIDE.md to the issue chooser, and replaces the
 # template repo's own CLAUDE.md with the project skeleton, moving the old file to
 # CLAUDE.md.template-own rather than discarding it. The ruleset is
 # never created here, because it needs your CI job names and admin rights; the
@@ -285,6 +286,113 @@ check_ruleset() {
   fi
 }
 
+# Whether config file $1 links to the issue guide of the repo at URL $2, on any
+# branch. Case-insensitive, like GitHub's owner and repo names. Comments never count.
+guide_linked() { # guide_linked <config> <repo-url>
+  GUIDE_PREFIX="$2/blob/" awk '
+    BEGIN { prefix = tolower(ENVIRON["GUIDE_PREFIX"]); suffix = "/docs/issue_guide.md" }
+    /^[[:space:]]*#/ { next }
+    {
+      line = tolower($0)
+      sub(/[[:space:]]#.*/, "", line)
+      i = index(line, prefix)
+      if (!i) next
+      rest = substr(line, i + length(prefix))
+      j = index(rest, suffix)
+      if (j < 2 || substr(rest, 1, j - 1) ~ /[[:space:]]/) next
+      after = substr(rest, j + length(suffix), 1)
+      if (after == "" || after ~ /[[:space:]"\047]/) { found = 1; exit }
+    }
+    END { exit !found }
+  ' "$1"
+}
+
+# Prints config file $1 with an issue guide entry for URL $2 added as the first
+# contact link, keeping every other line, comments included (a YAML round trip
+# would drop them). Exits 3 when contact_links is written on one line ([...]),
+# which this text edit cannot extend.
+add_guide_link() { # add_guide_link <config> <guide-url>
+  GUIDE_URL="$2" awk '
+    function entry(indent) {
+      print indent "- name: Issue guide"
+      print indent "  url: " ENVIRON["GUIDE_URL"]
+      print indent "  about: How issues here are written and labelled. Read it before opening one."
+    }
+    { lines[NR] = $0 }
+    END {
+      for (k = 1; k <= NR; k++) if (lines[k] ~ /^contact_links:/) break
+      if (k > NR) {
+        for (i = 1; i <= NR; i++) print lines[i]
+        print "contact_links:"
+        entry("  ")
+        exit 0
+      }
+      if (lines[k] !~ /^contact_links:[[:space:]]*(#.*)?$/) exit 3
+      # Indent like the first existing item, so the list stays one list.
+      indent = "  "
+      for (i = k + 1; i <= NR; i++) {
+        if (lines[i] ~ /^[[:space:]]*(#|$)/) continue
+        if (match(lines[i], /^[[:space:]]*- /)) indent = substr(lines[i], 1, RLENGTH - 2)
+        break
+      }
+      for (i = 1; i <= k; i++) print lines[i]
+      entry(indent)
+      for (i = k + 1; i <= NR; i++) print lines[i]
+    }
+  ' "$1"
+}
+
+# A link to docs/ISSUE_GUIDE.md in GitHub's "New issue" chooser (#37). Its URL is
+# absolute, so the template cannot ship it; --fix adds it for the resolved repo.
+check_issue_chooser() {
+  echo "Issue chooser"
+  local cfg="" f url guide tmp rc
+  for f in .github/ISSUE_TEMPLATE/config.yml .github/ISSUE_TEMPLATE/config.yaml; do
+    [ -f "$f" ] && { cfg="$f"; break; }
+  done
+  if [ -z "$cfg" ]; then
+    info "no .github/ISSUE_TEMPLATE/config.yml; skipped"
+    return
+  fi
+  if [ ! -f docs/ISSUE_GUIDE.md ]; then
+    info "no docs/ISSUE_GUIDE.md to link to; skipped"
+    return
+  fi
+  # The template seeds its config.yml into every repo, so its own URL must stay out.
+  if git remote get-url origin 2>/dev/null | grep -qE "$TEMPLATE_ORIGIN_RE"; then
+    info "this is the template repo, whose $cfg is seeded into other repos; skipped"
+    return
+  fi
+  if ! url="$(gh repo view "$repo" --json url --jq .url 2>/dev/null)" || [ -z "$url" ]; then
+    warn "could not read the URL of $repo, so the issue chooser link was not checked"
+    return
+  fi
+  if guide_linked "$cfg" "$url"; then
+    ok "the issue chooser links to docs/ISSUE_GUIDE.md"
+    return
+  fi
+  guide="$url/blob/main/docs/ISSUE_GUIDE.md"
+  if [ "$fix" -ne 1 ]; then
+    warn "the issue chooser has no link to docs/ISSUE_GUIDE.md" "scripts/setup.sh --fix  (adds it to contact_links in $cfg)"
+    return
+  fi
+  tmp="$(mktemp "$cfg.XXXXXX")" || { warn "could not create a temporary file beside $cfg"; return; }
+  add_guide_link "$cfg" "$guide" >"$tmp"; rc=$?
+  # Copied back rather than moved, so the file keeps its mode, not mktemp's 0600.
+  if [ "$rc" -eq 0 ] && guide_linked "$tmp" "$url" && cat "$tmp" >"$cfg"; then
+    rm -f "$tmp"
+    ok "added a link to docs/ISSUE_GUIDE.md to the issue chooser ($cfg)"
+    return
+  fi
+  rm -f "$tmp"
+  if [ "$rc" -eq 3 ]; then
+    warn "the issue chooser has no link to docs/ISSUE_GUIDE.md, and $cfg writes contact_links on one line, which --fix does not edit" \
+      "add an entry to contact_links by hand, with url: $guide"
+  else
+    warn "could not add the issue guide link to $cfg" "add an entry to contact_links by hand, with url: $guide"
+  fi
+}
+
 main() {
   check_tools; echo
   check_claude_md; echo
@@ -294,6 +402,7 @@ main() {
   if check_github; then
     echo; check_labels
     echo; check_ruleset
+    echo; check_issue_chooser
   fi
   echo
   if [ "$failures" -eq 0 ]; then
