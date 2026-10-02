@@ -216,7 +216,7 @@ Report: "Working tree is dirty — cannot start a clean iteration." Do not proce
 ## Step 2 — Select the next item
 
 Pick the highest-priority actionable issue. In priority order `P0`, then `P1`,
-then `P2` (always pass `--limit`: `gh` returns only 30 issues by default, which can
+then `P2`, then `P3` (always pass `--limit`: `gh` returns only 30 issues by default, which can
 hide every actionable one behind newer in-review or blocked ones):
 
 ```bash
@@ -226,7 +226,9 @@ gh issue list --state open --label P0 --limit 1000 --json number,title,labels \
 
 The first **actionable** issue is the one whose labels do **not** include any of:
 `in-progress`, `in-review`, `blocked`, `needs-attention`. Take the first actionable
-issue at the highest priority that has one; if `P0` has none, try `P1`, then `P2`.
+issue at the highest priority that has one; if `P0` has none, try `P1`, then `P2`,
+then `P3`. `P3` is the last tier: take one only when no `P0`–`P2` issue is
+actionable (any left are `in-review`, `blocked`, or `needs-attention`).
 
 If **no** actionable issue exists at any priority: report
 "✅ Backlog drained — no actionable issues remain." and STOP. (This ends the loop —

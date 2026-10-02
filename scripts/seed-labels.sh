@@ -18,7 +18,7 @@ LABELS=(
   "P0|B60205|Priority: do first — blocker / release-critical"
   "P1|FBCA04|Priority: high"
   "P2|C2E0C6|Priority: medium"
-  "P3|EDEDED|Priority: nice-to-have; not selected by the loop"
+  "P3|EDEDED|Priority: nice-to-have; worked only when no P0-P2 is actionable"
   "bug|D73A4A|Something isn't working"
   "enhancement|A2EEEF|New feature or request"
   "in-progress|0E8A16|Claimed and being worked"

@@ -37,7 +37,8 @@ needs is in place.
 0. **Recover.** At most one issue is `in-progress`. If its PR is open, mark it
    `in-review`; if only its branch exists, resume it; if neither, release it.
 1. **Clean base.** Start from an up-to-date `main` with a clean working tree.
-2. **Select** the highest-priority actionable issue: `P0`, then `P1`, then `P2`,
+2. **Select** the highest-priority actionable issue: `P0`, then `P1`, then `P2`, then
+   `P3` (only once no `P0`–`P2` issue is actionable),
    skipping anything `in-progress`, `in-review`, `blocked`, or `needs-attention`.
 3. **Claim** it with `in-progress`.
 4. **Check the premise, then the scope.** Confirm the issue's claims against the

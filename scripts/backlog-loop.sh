@@ -74,7 +74,7 @@ BG_WAIT_SECONDS=$((10#$BG_WAIT_SECONDS))
 
 # A missing tool would otherwise look like a usage limit: run_item fails, and the
 # driver backs off for MAX_RETRIES rounds before giving up.
-for tool in claude gh; do
+for tool in claude gh jq; do
   command -v "$tool" >/dev/null || { echo "✗ $tool not found on PATH. Install it, then re-run." >&2; exit 1; }
 done
 # Only the login for origin's host counts; a stale token for another host must not
@@ -96,10 +96,12 @@ export BACKLOG_LOOP_PID=$$
 
 # Count open, prioritized issues that still need loop work. in-progress counts
 # (Step 0 recovers it); blocked / needs-attention / in-review do not.
+# P3 counts too: /work-next-item takes a P3 once no P0-P2 issue is actionable (#45).
+# Filtered with jq here rather than gh --jq, so the test's fake gh exercises it.
 work_remaining() {
-  gh issue list --state open --limit 1000 --json labels --jq '
+  gh issue list --state open --limit 1000 --json labels | jq '
     [ .[] | ([.labels[].name]) as $l
-      | select( ($l | any(. == "P0" or . == "P1" or . == "P2"))
+      | select( ($l | any(. == "P0" or . == "P1" or . == "P2" or . == "P3"))
             and (($l | any(. == "blocked" or . == "needs-attention" or . == "in-review")) | not) )
     ] | length'
 }

@@ -34,7 +34,10 @@ setup() {
   echo 3 >"$dir/count"
   : >"$dir/calls"
   # gh: `issue list ... --jq ...` prints the remaining count.
-  printf '#!/usr/bin/env bash\ncat "%s/count"\n' "$dir" >"$dir/bin/gh"
+  # Issues as gh prints them: <count> actionable ones labelled $(cat label) (P2 by
+  # default), plus any in extra.json, so the driver's own filter is exercised.
+  printf '#!/usr/bin/env bash\n[ -f "%s/extra.json" ] || echo "[]" >"%s/extra.json"\njq -n --argjson n "$(cat "%s/count")" --arg lab "$(cat "%s/label" 2>/dev/null || echo P2)" --slurpfile extra "%s/extra.json" '"'"'[range($n) | {labels: [{name: $lab}]}] + $extra[0]'"'"'\n' "$dir" "$dir" "$dir" "$dir" "$dir" >"$dir/bin/issues-json"
+  printf '#!/usr/bin/env bash\n"%s/bin/issues-json"\n' "$dir" >"$dir/bin/gh"
   {
     printf '#!/usr/bin/env bash\ncd "%s" || exit 1\necho x >>calls\n' "$dir"
     # The background-wait ceiling this session was given (#22).
@@ -135,6 +138,17 @@ I="$(setup inherited progress)"
 BACKLOG_LOOP_STAGED="$WORK" BACKLOG_LOOP_ROOT="$ROOT_OF_TEMPLATE" run "$I"; rc=$?
 check "inherited staging variables do not redirect a nested driver" "[ $rc -eq 0 ] && [ \$(wc -l <'$I/calls') -eq 3 ] && [ ! -e '$I/.git/backlog-loop.lock' ]"
 
+# P3 issues are worked once no P0-P2 issue is actionable (#45).
+Q3="$(setup p3only progress)"
+echo P3 >"$Q3/label"
+run "$Q3"; rc=$?
+check "works a backlog of only P3 issues" "[ $rc -eq 0 ] && [ \$(wc -l <'$Q3/calls') -eq 3 ]"
+B3="$(setup blockedp2 progress)"
+echo P3 >"$B3/label"; echo 1 >"$B3/count"
+echo '[{"labels": [{"name": "P2"}, {"name": "blocked"}]}, {"labels": [{"name": "P1"}, {"name": "needs-attention"}]}]' >"$B3/extra.json"
+run "$B3"; rc=$?
+check "a blocked P2 and a needs-attention P1 do not hold back a P3" "[ $rc -eq 0 ] && [ \$(wc -l <'$B3/calls') -eq 1 ] && grep -q 'Backlog drained' '$B3/out'"
+
 N="$(setup noverify progress)"
 printf '## Verify\n```sh\n# test:\n```\n' >"$N/CLAUDE.md"
 run "$N"; rc=$?
@@ -148,7 +162,7 @@ PATH="$C/bin:/usr/bin:/bin" PACE_SECONDS=0 BACKOFF_SECONDS=60 LOG_DIR="$WORK/log
 check "refuses to start without claude on PATH" "[ $rc -ne 0 ] && grep -q 'claude not found' '$C/out'"
 
 A="$(setup noauth progress)"
-printf '#!/usr/bin/env bash\n[ "$1" = auth ] && exit 1\ncat "%s/count"\n' "$A" >"$A/bin/gh"
+printf '#!/usr/bin/env bash\n[ "$1" = auth ] && exit 1\n"%s/bin/issues-json"\n' "$A" >"$A/bin/gh"
 run "$A"; rc=$?
 check "refuses to start when gh is not authenticated" "[ $rc -ne 0 ] && [ ! -s '$A/calls' ] && grep -q 'gh auth login' '$A/out'"
 
@@ -156,13 +170,13 @@ check "refuses to start when gh is not authenticated" "[ $rc -ne 0 ] && [ ! -s '
 # stored host has a stale token.
 G="$(setup stalehost progress)"
 git -C "$G" remote add origin https://ghe.example.com/o/r.git
-printf '#!/usr/bin/env bash\n[ "$*" = "auth status --hostname ghe.example.com" ] && exit 0\n[ "$1" = auth ] && exit 1\ncat "%s/count"\n' "$G" >"$G/bin/gh"
+printf '#!/usr/bin/env bash\n[ "$*" = "auth status --hostname ghe.example.com" ] && exit 0\n[ "$1" = auth ] && exit 1\n"%s/bin/issues-json"\n' "$G" >"$G/bin/gh"
 run "$G"; rc=$?
 check "a stale token for another host does not stop the loop" "[ $rc -eq 0 ] && [ \$(wc -l <'$G/calls') -eq 3 ]"
 
 H="$(setup hostloggedout progress)"
 git -C "$H" remote add origin https://ghe.example.com/o/r.git
-printf '#!/usr/bin/env bash\n[ "$*" = "auth status" ] && exit 0\n[ "$1" = auth ] && exit 1\ncat "%s/count"\n' "$H" >"$H/bin/gh"
+printf '#!/usr/bin/env bash\n[ "$*" = "auth status" ] && exit 0\n[ "$1" = auth ] && exit 1\n"%s/bin/issues-json"\n' "$H" >"$H/bin/gh"
 run "$H"; rc=$?
 check "refuses to start when the repo's own host is logged out" "[ $rc -ne 0 ] && [ ! -s '$H/calls' ] && grep -q 'gh auth login --hostname ghe.example.com' '$H/out'"
 

@@ -54,7 +54,7 @@ too, and in `scripts/seed-labels.sh`, which creates them.
 | `P0` | Do first — blocker / release-critical |
 | `P1` | High |
 | `P2` | Medium |
-| `P3` | Nice-to-have. Not selected by the loop. |
+| `P3` | Nice-to-have. Selected only when no `P0`–`P2` issue is actionable. |
 
 **Type:** `enhancement` or `bug`.
 
