@@ -226,7 +226,7 @@ The guardrails are layered, from softest to hardest:
   that output (`URL=$(gh pr create …)`), no review loop opens; start one by hand
   with `.claude/hooks/pr-review-state.sh seed <pr> <url>`.
 - A headless session cannot edit `.claude/`, so the loop cannot work an issue that
-  changes the loop itself. Label such issues `no-auto-heal` and work them in an
+  changes its own command, hooks, or settings there (`scripts/` is fine). Label such issues `no-auto-heal` and work them in an
   interactive session.
 - Run one loop per repository at a time, local or scheduled. Step 0 treats any
   `in-progress` issue as a run that died, so two runners would recover each other's
