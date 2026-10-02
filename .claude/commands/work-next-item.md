@@ -44,15 +44,32 @@ or killed (closed terminal) at any moment — possibly mid-issue. Therefore:
 - **A tool call refused by the permission settings is a blocker only when no
   permitted way round it exists.** First try one: a dedicated tool instead of a shell
   command, or the command spelled as this file writes it (`git push -u origin
-  <branch>`, not a bare `git push`). When none exists, such as a refused edit to a
-  protected path, an unattended run has no one to approve it: never end the turn
-  asking for approval or for a re-run. With the issue claimed, follow **Give up**,
-  naming the refused command or path in its comment, so the issue gets
-  `needs-attention` and the loop moves on. In Steps 3 to 3.7 the issue has no branch
-  yet, so do only Give up's step 3; Step 0 works on a claimed issue that may have one,
-  so it follows Give up in full. Before anything is claimed, stop and report it. This
-  is about the settings refusing a call; a human declining a prompt in a live session
-  can still tell you what to do instead.
+  <branch>`, not a bare `git push`). When none exists, an unattended run has no one to
+  approve it: never end the turn asking for approval or for a re-run. Then decide
+  whose problem it is:
+  - **A setup problem:** the refused call is a `## Verify` command, or any command
+    this file or a hook tells every iteration to run (one of the `gh` or `git` commands
+    this file lists, a `scripts/` or `.claude/hooks/` helper). A command only this
+    issue's work needs is not one. Every issue would hit it, so giving up
+    would mark the whole backlog `needs-attention`, one issue at a time. So do not
+    follow Give up: stop and report the refused command and the allow rule
+    `.claude/settings.local.json` needs for it. If the refusal came in Steps 3 to 3.7,
+    the issue has no branch and nothing to resume, so release the claim instead
+    (`gh issue edit <number> --remove-label in-progress`). Anywhere else, keep the
+    claim and commit any work to the issue's branch if there is one: Step 0 picks it
+    up again once the rule is added (and redoes a hand-back it could not finish).
+    Either way `scripts/backlog-loop.sh` sees no progress and halts the run; `/loop`
+    or a routine stops at the same refusal each run until the rule is added.
+  - **Specific to this issue,** such as a refused edit to a protected path, or a
+    command only this issue needs: with the issue claimed, follow **Give up**, naming
+    the refused command or path in its comment, so the issue gets `needs-attention`
+    and the loop moves on. In Steps 3 to 3.7 the issue has no branch yet, so do only
+    Give up's step 3; Step 0 works on a claimed issue that may have one, so it follows
+    Give up in full.
+
+  Before anything is claimed, stop and report it. This is about the settings refusing
+  a call; a human declining a prompt in a live session can still tell you what to do
+  instead.
 
 ## The repo contract (CLAUDE.md sections this command reads)
 
@@ -653,7 +670,7 @@ actionable issues remain, the loop will continue to the next one.
 
 ## Give up — keep the work, then release the issue
 
-Steps 5 and 6.5 both end here, and so does Step 0 for a rejected PR whose branch remains, and any refused tool call after the claim (see the guardrails). Step 3 borrows steps 2, 4 and 5 to retire a leftover branch. The branch may be in any state: fresh, resumed by
+Steps 5 and 6.5 both end here, and so does Step 0 for a rejected PR whose branch remains, and a refused tool call specific to the issue after the claim (a setup problem never comes here; see the guardrails). Step 3 borrows steps 2, 4 and 5 to retire a leftover branch. The branch may be in any state: fresh, resumed by
 Step 0 with commits, local-only, or already pushed. Giving up must never destroy
 work silently, and must not leave the issue's branch on the remote. So: save the
 work, then release the issue, then delete branches. An interruption after the
