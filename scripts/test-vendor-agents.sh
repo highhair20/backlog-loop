@@ -85,8 +85,42 @@ M="$(target missing alpha)"
 run "$M" "$WORK/no-such-ecc"; rc=$?
 check "refuses without an ECC checkout" "[ $rc -ne 0 ] && grep -q 'ECC_ROOT' '$M/out'"
 
-# --- drift: this repo's agents must match its context files ---
+# --- the optional stack reviewers in .claude/agent-context/optional/ ---
+# A repo enables one by copying it into .claude/agent-context/ and re-running, so
+# each must build with this repo's real _common.md. None is enabled here.
+for a in go-reviewer database-reviewer typescript-reviewer python-reviewer; do
+  check ".claude/agent-context/optional has a non-empty $a.md" "[ -s '$ROOT/.claude/agent-context/optional/$a.md' ]"
+  check "$a is not enabled in this repo" "[ ! -e '$ROOT/.claude/agent-context/$a.md' ] && [ ! -e '$ROOT/.claude/agents/$a.md' ]"
+done
+check ".claude/agent-context/optional has no _common.md of its own" "[ ! -e '$ROOT/.claude/agent-context/optional/_common.md' ]"
+# The rule #33 asked for: migrations run with nobody watching.
+db="$ROOT/.claude/agent-context/optional/database-reviewer.md"
+check "database-reviewer treats a missing down migration or a long lock as HIGH" \
+  "grep -q 'unattended' '$db' && grep -q 'HIGH' '$db' && grep -q 'down migration' '$db' && grep -qi 'lock' '$db'"
+for doc in templates/CLAUDE.md docs/BACKLOG.md; do
+  check "$doc says how to enable a stack reviewer" \
+    "grep -q '.claude/agent-context/optional/' '$ROOT/$doc' && grep -q 'vendor-agents.sh' '$ROOT/$doc'"
+done
+
 shopt -s nullglob
+templates=("$ROOT"/.claude/agent-context/optional/*.md)
+S="$(target stack)"
+cp "$ROOT/.claude/agent-context/_common.md" "$S/.claude/agent-context/"
+for tpl in ${templates[@]+"${templates[@]}"}; do
+  a="$(basename "$tpl" .md)"
+  printf -- '---\nname: %s\ndescription: Upstream %s.\n---\n\n# %s upstream body\n' "$a" "$a" "$a" >"$ECC/agents/$a.md"
+  cp "$tpl" "$S/.claude/agent-context/"
+done
+run "$S"; rc=$?
+check "builds every template context" "[ $rc -eq 0 ] && [ ${#templates[@]} -gt 0 ]"
+[ "$rc" -eq 0 ] || cat "$S/out" >&2
+for tpl in ${templates[@]+"${templates[@]}"}; do
+  a="$(basename "$tpl" .md)"
+  check "template $a.md builds into an agent with its context and the common rules" \
+    "[ -f '$S/.claude/agents/$a.md' ] && contains '$S/.claude/agents/$a.md' '$tpl' && contains '$S/.claude/agents/$a.md' '$ROOT/.claude/agent-context/_common.md'"
+done
+
+# --- drift: this repo's agents must match its context files ---
 contexts=("$ROOT"/.claude/agent-context/*.md)
 check "this repo has agent context files" "[ ${#contexts[@]} -gt 1 ]"
 # The +"…" form: bash 3.2 (macOS) treats an empty array as unbound under set -u.

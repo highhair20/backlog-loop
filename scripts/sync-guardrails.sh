@@ -52,6 +52,14 @@ SEEDED=(
   .claude/agents/pr-test-analyzer.md
   .claude/agents/silent-failure-hunter.md
   .claude/agents/LICENSE.ECC
+  # Optional stack reviewers. They stay off only because vendor-agents.sh reads
+  # the top level of .claude/agent-context/, never optional/; a repo turns one on
+  # by copying it up a level. If vendor-agents.sh ever searches subfolders, this
+  # would switch all of them on in every synced repo.
+  .claude/agent-context/optional/database-reviewer.md
+  .claude/agent-context/optional/go-reviewer.md
+  .claude/agent-context/optional/python-reviewer.md
+  .claude/agent-context/optional/typescript-reviewer.md
 )
 # Not synced: .editorconfig. New repos get it from the template, but its indent
 # defaults would silently change how editors treat an existing repo's code.
@@ -157,7 +165,9 @@ main() {
       .github/ISSUE_TEMPLATE/*) [ "$had_issue_templates" -eq 0 ] || continue ;;
       .github/pull_request_template.md) has_pr_template "$target" && continue ;;
       # A context file makes vendor-agents.sh build that agent, so none for an
-      # agent the repo already has (its own, or one it built another way).
+      # agent the repo already has (its own, or one it built another way). The
+      # optional/ files match here too, on purpose: a repo with its own go-reviewer
+      # does not need a second, inactive context for it.
       .claude/agent-context/_common.md) has_equivalent "$target" "$f" && continue ;;
       .claude/agent-context/*)
         [ -e "$target/.claude/agents/${f##*/}" ] && continue
