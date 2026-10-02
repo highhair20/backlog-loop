@@ -124,3 +124,17 @@ plugins. They are vendored from [ECC](https://github.com/affaan-m/ECC) (MIT) by
 `.claude/agent-context/`. To change what a reviewer is told, edit its context file
 and re-run the script. To add one, add a context file named after the ECC agent,
 re-run, and add a row to `## Specialist reviewers` in `CLAUDE.md`.
+
+Ready-made contexts for stack reviewers (`go-reviewer`, `database-reviewer`,
+`typescript-reviewer`, `python-reviewer`) are in `.claude/agent-context/optional/`. None is
+active until you enable it:
+
+```sh
+cp .claude/agent-context/optional/go-reviewer.md .claude/agent-context/
+scripts/vendor-agents.sh
+```
+
+Then add a row to `## Specialist reviewers` naming the paths it covers (for example,
+`**/*.go`). Each enabled reviewer is one more agent run per loop item, so enable
+only the ones your stack needs. Enable them by hand: headless loop sessions cannot
+write to `.claude/`.

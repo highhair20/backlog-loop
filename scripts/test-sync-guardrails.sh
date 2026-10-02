@@ -72,6 +72,15 @@ check "copies loop-lock.sh, executable" "[ -x '$T/scripts/loop-lock.sh' ]"
 check "copies gh-auth-check.sh, executable" "[ -x '$T/scripts/gh-auth-check.sh' ]"
 check "copies vendor-agents.sh, executable" "[ -x '$T/scripts/vendor-agents.sh' ]"
 check "seeds the reviewer agents, their context, and the ECC license" "[ -f '$T/.claude/agents/pr-test-analyzer.md' ] && [ -f '$T/.claude/agents/silent-failure-hunter.md' ] && [ -f '$T/.claude/agent-context/_common.md' ] && [ -f '$T/.claude/agents/LICENSE.ECC' ]"
+# Inert until a repo copies one into .claude/agent-context/.
+seeds_stack_contexts() {
+  local a
+  for a in go-reviewer database-reviewer typescript-reviewer python-reviewer; do
+    cmp -s "$HERE/../.claude/agent-context/optional/$a.md" "$1/.claude/agent-context/optional/$a.md" || return 1
+    [ ! -e "$1/.claude/agent-context/$a.md" ] || return 1
+  done
+}
+check "seeds the optional stack reviewer contexts, not enabled" "seeds_stack_contexts '$T'"
 check "seeds the backlog operator doc" "[ -f '$T/docs/BACKLOG.md' ]"
 check "seeds the CI hardening guide" "cmp -s '$HERE/../docs/CI_HARDENING.md' '$T/docs/CI_HARDENING.md'"
 check "copies setup.sh and seed-labels.sh, executable" "[ -x '$T/scripts/setup.sh' ] && [ -x '$T/scripts/seed-labels.sh' ]"
