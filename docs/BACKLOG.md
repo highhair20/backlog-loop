@@ -32,6 +32,9 @@ says how to clear the lock.
 Before a first unattended run, `scripts/setup.sh` checks that everything the loop
 needs is in place.
 
+To run it on a schedule in Anthropic's cloud instead, with no machine of yours
+involved, see [`ROUTINE.md`](ROUTINE.md). Run one or the other on a repo, never both.
+
 ## One iteration
 
 0. **Recover.** At most one issue is `in-progress`. If its PR is open, mark it
@@ -40,12 +43,18 @@ needs is in place.
 1. **Clean base.** Start from an up-to-date `main` with a clean working tree.
 2. **Select** the highest-priority actionable issue: `P0`, then `P1`, then `P2`, then
    `P3` (only once no `P0`–`P2` issue is actionable),
-   skipping anything `in-progress`, `in-review`, `blocked`, or `needs-attention`.
+   skipping anything `in-progress`, `in-review`, `blocked`, `needs-attention`, or
+   `no-auto-heal`, and any `heal:proposed` issue not yet `heal:approved`.
 3. **Claim** it with `in-progress`, first naming in a comment any earlier PRs for it that were closed unmerged.
 4. **Check the premise, then the scope.** Confirm the issue's claims against the
    code. Then work out what the change touches from the code itself (route tables,
    registries), not from the issue's list, and correct the issue if it is wrong or
    incomplete.
+
+   With the proposal gate on in `CLAUDE.md`, an issue that is neither
+   `heal:approved` nor machine-filed stops here instead: its findings go into a
+   four-part proposal comment (understanding, root cause, proposed solution, scope
+   delta), the issue gets `heal:proposed`, and nothing is written to the code.
 5. **Branch** as `<type>/<number>-<slug>`, and **implement test-first** until every
    `## Verify` command in `CLAUDE.md` passes. After about three failed cycles it
    gives up: any work is pushed to an `abandoned/<number>-<sha>` branch, the issue's

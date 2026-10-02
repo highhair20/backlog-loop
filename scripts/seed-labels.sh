@@ -26,6 +26,9 @@ LABELS=(
   "blocked|000000|Cannot proceed; skipped by the loop"
   "needs-infra|5319E7|Infra change written but must be applied by a human"
   "needs-attention|D93F0B|Loop gave up after repeated attempts; needs a human"
+  "heal:proposed|C5DEF5|Proposal posted; skipped by the loop until heal:approved"
+  "heal:approved|2DA44E|A human approved the proposal; the loop may open a PR"
+  "no-auto-heal|6A737D|Never selected by the loop; human-only work"
 )
 
 for entry in "${LABELS[@]}"; do

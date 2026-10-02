@@ -34,6 +34,8 @@ MANAGED=(
   scripts/setup.sh
   scripts/vendor-agents.sh
   .claude/settings.local.json.example
+  # Describes the managed command's --dry-run and gate, so it tracks the command.
+  docs/ROUTINE.md
 )
 SEEDED=(
   CLAUDE.md
