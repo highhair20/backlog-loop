@@ -104,7 +104,8 @@ It exits 0 once nothing is failing, so re-run it until it does. The steps it che
    safe to re-run. Add `--strict` to also require a PR's branch to be up to date
    with `main` before it merges: each merge then re-runs CI against the latest `main`,
    so two PRs that pass alone cannot merge into a red `main`. The cost is an update
-   and a CI run per merge. Rulesets are free on public repositories; private repositories
+   and a CI run per merge. A re-run keeps the ruleset's current setting; `--no-strict` turns it
+   off. Rulesets are free on public repositories; private repositories
    need a paid GitHub plan.
 5. **Allow the loop's commands** if you will run it unattended — see
    [Running the backlog loop](#running-the-backlog-loop).

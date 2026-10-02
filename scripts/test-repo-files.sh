@@ -113,7 +113,7 @@ snippets_rc() {
 }
 check "the guide's dev and prod snippets pass its parity script" "snippets_rc"
 # The guide cites these deny rules; it must stop being true only by failing here.
-for rule in 'Bash(git push * v*)' 'Bash(git push *+v*)' 'Bash(git push *--tag*)' 'Bash(git push *--follow*)' 'Bash(git push *refs/tags/*)'; do
+for rule in 'Bash(git push * v*)' 'Bash(git push *+v*)' 'Bash(git push *--ta*)' 'Bash(git push *--fol*)' 'Bash(git push *refs/tags/*)'; do
   check "settings.json denies $rule, as the deploy guide says" "jq -e --arg r '$rule' '.permissions.deny | index(\$r)' '$ROOT/.claude/settings.json' >/dev/null"
 done
 

@@ -71,8 +71,9 @@ jobs:
 ```
 
 **The loop is denied tag pushes.** `.claude/settings.json` denies a pushed `v*`
-tag (`git push * v*`, `git push *+v*`), `--tag` and `--follow` in any spelling git
-accepts (`*--tag*`, `*--follow*`, which also cover `--tags` and `--follow-tags`),
+tag (`git push * v*`, `git push *+v*`), and `--tags` and `--follow-tags` in any
+spelling git accepts. Git takes any unique prefix of a long option; the shortest are
+`--ta` and `--fol`, so the rules are `*--ta*` and `*--fol*`,
 and any push to `refs/tags/`. A tag push would be a prod deploy, and the loop's
 work is unreviewed until you merge it; tagging is the step where you decide that
 reviewed code goes live. Like every deny rule, these match command text, so they
