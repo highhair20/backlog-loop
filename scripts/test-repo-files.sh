@@ -125,14 +125,21 @@ check "BACKLOG.md links the deploy guide" "grep -qF '(./DEPLOYING.md)' '$ROOT/do
 # shellcheck disable=SC2034  # read inside check's eval strings
 runners="$(awk '/^## /{ on = ($0 == "## Task runners") } on' "$ROOT/docs/BACKLOG.md" 2>/dev/null)"
 check "BACKLOG.md has a Task runners section" "[ -n \"\$runners\" ]"
+# One convention's text: from its bold lead-in to the next one.
+convention() { printf '%s\n' "$runners" | awk -v h="**$1.**" 'index($0, h) == 1 { on = 1; next } /^\*\*/ { on = 0 } on'; }
 for convention in 'One entry point' 'Guard recipes' 'Confirm destructive recipes'; do
   check "Task runners describes '$convention'" "printf '%s\n' \"\$runners\" | grep -qF '**$convention.**'"
+  check "'$convention' has a just example" "convention '$convention' | grep -q '^\`\`\`just'"
+  check "'$convention' has a one-line equivalent in another runner" "convention '$convention' | grep -qE '^(In|With) (make|npm)'"
 done
-check "Task runners has an example per convention" "[ \"\$(printf '%s\n' \"\$runners\" | grep -c '^\`\`\`just')\" -ge 3 ]"
-check "the guard example fails with a message naming what is missing" "printf '%s\n' \"\$runners\" | grep -qE 'echo .*not set.*>&2'"
-check "the destructive example makes you type the target's name" "printf '%s\n' \"\$runners\" | grep -qE 'read -r'"
-check "each example has a one-line equivalent in another runner" "[ \"\$(printf '%s\n' \"\$runners\" | grep -cE '^(In|With) (make|npm)')\" -ge 3 ]"
-check "the template ships no task-runner file" "[ -z \"\$(git -C '$ROOT' ls-files | grep -iE '(^|/)(justfile|makefile)$')\" ]"
+check "the guard is a private recipe that another recipe depends on" "convention 'Guard recipes' | grep -qE '^_[a-z-]+:' && convention 'Guard recipes' | grep -qE '^[a-z-]+: _[a-z-]+'"
+check "the guard fails with a message naming what is missing" "convention 'Guard recipes' | grep -qE 'echo .*not set.*>&2; exit 1'"
+check "the destructive example refuses without a terminal" "convention 'Confirm destructive recipes' | grep -qF '[ -t 0 ] ||'"
+check "the destructive example compares the typed answer to the target" "convention 'Confirm destructive recipes' | grep -qF '[ \"\$answer\" = \"\$env\" ] || {'"
+# shellcheck disable=SC2034  # read inside check's eval strings
+tracked="$(git -C "$ROOT" ls-files)" || tracked=""
+check "git lists the template's files" "[ -n \"\$tracked\" ]"
+check "the template ships no task-runner file" "! printf '%s\n' \"\$tracked\" | grep -qiE '(^|/)(\\.?justfile|gnumakefile|makefile)$'"
 check "README's file list mentions the task-runner conventions" "grep -qE '^docs/BACKLOG\\.md[[:space:]].*task runner' '$ROOT/README.md'"
 
 # --- dependabot: updates the pinned actions ---

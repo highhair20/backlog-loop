@@ -129,16 +129,18 @@ In make, the guard is a prerequisite target: `deploy-dev: require-env`.
 
 **Confirm destructive recipes.** A recipe that changes a live environment makes
 you type the target's name first. A slip of the keyboard, or an agent that picked
-the wrong recipe, stops at the prompt. A headless session has no input, so `read`
-fails and the recipe does nothing.
+the wrong recipe, stops at the prompt. A headless session has no terminal, so the
+recipe refuses and changes nothing. `$env` makes `just` pass the argument as an
+environment variable, so a name holding quotes cannot rewrite the script.
 
 ```just
-reset-db env: _require-env
+reset-db $env: _require-env
     #!/usr/bin/env bash
     set -euo pipefail
-    read -r -p "This deletes every row in {{env}}. Type '{{env}}' to continue: " answer
-    [ "$answer" = "{{env}}" ] || { echo "Not confirmed; nothing changed." >&2; exit 1; }
-    ./scripts/reset-db.sh "{{env}}"
+    [ -t 0 ] || { echo "reset-db needs a terminal to confirm; nothing changed." >&2; exit 1; }
+    read -r -p "This deletes every row in $env. Type '$env' to continue: " answer
+    [ -n "$env" ] && [ "$answer" = "$env" ] || { echo "Not confirmed; nothing changed." >&2; exit 1; }
+    ./scripts/reset-db.sh "$env"
 ```
 
 With npm scripts, chain a confirm script before the real one:
