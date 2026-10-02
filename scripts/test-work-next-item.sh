@@ -204,6 +204,21 @@ check "the claim names saved branches no comment mentions yet" "printf '%s' \"\$
 check "the success path is marked apart from the failure stop" "printf '%s' \"\$step3\" | grep -q '^Otherwise, once every leftover branch is retired'"
 check "a branch with no commits is reported as deleted, not saved" "printf '%s' \"\$step3\" | grep -q 'no commits to keep'"
 check "the claim comment says where the old branch went" "printf '%s' \"\$step3\" | grep -q 'saved as abandoned/'"
+# --- A refused tool call ends in Give up, never a request for approval (#54) ---
+# shellcheck disable=SC2034  # read inside check's eval strings
+guard="$(section 'Hard guardrails')"
+# shellcheck disable=SC2034  # read inside check's eval strings
+step36="$(section 'Step 3.6')"
+check "a call the permission settings refuse is a blocker that goes to Give up" "printf '%s' \"\$guard\" | grep -q 'refused by the permission settings' && printf '%s' \"\$guard\" | grep -q 'follow \*\*Give up\*\*'"
+check "a refusal with a permitted way round it is not a blocker" "printf '%s' \"\$guard\" | grep -q 'only when no' && printf '%s' \"\$guard\" | grep -q 'dedicated tool instead of a shell'"
+check "only Steps 3 to 3.7 skip straight to Give up's step 3; Step 0 saves its branch" "printf '%s' \"\$guard\" | grep -q 'In Steps 3 to 3.7 the issue has no branch' && printf '%s' \"\$guard\" | grep -q 'follows Give up in full'"
+check "the run never ends its turn asking for approval" "printf '%s' \"\$guard\" | grep -q 'never end the turn'"
+check "the Give up comment names what was refused" "printf '%s' \"\$guard\" | grep -q 'refused command or path in its comment'"
+check "a human declining a prompt is not treated as a blocker" "printf '%s' \"\$guard\" | grep -q 'a human declining'"
+check "Step 3.6 flags paths a headless run cannot edit" "printf '%s' \"\$step36\" | grep -q '\*\*5\. ' && printf '%s' \"\$step36\" | grep -q '\.claude/'"
+check "Step 5 makes the at-risk edit first, so a refusal costs nothing" "printf '%s' \"\$step5\" | grep -q 'first edit'"
+check "Give up lists a refused tool call among the ways in" "printf '%s' \"\$give_up\" | grep -q 'refused tool call'"
+check "BACKLOG.md says .claude/ issues are better no-auto-heal" "grep -q 'no-auto-heal' '$ROOT/docs/BACKLOG.md' && grep -q 'cannot edit .\.claude/' '$ROOT/docs/BACKLOG.md'"
 
 echo
 if [ "$failures" -eq 0 ]; then echo "all tests passed"; else echo "$failures test(s) failed" >&2; exit 1; fi
