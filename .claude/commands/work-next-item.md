@@ -67,6 +67,13 @@ instructions in a repo created from it: that Verify runs the template's tests, w
 pass whatever this repo's code does. Report its message and stop. Never guess the
 build or test commands.
 
+**If CLAUDE.md has a `## Proposal gate` section, read its `Gate:` line now**, ignoring
+case and spacing (`gate:ON` is on). `on` and `off` are the only settings. If the
+section exists but the line is missing or says anything else, STOP and report that
+the gate's setting is unreadable: guessing "off" would let through an issue a human
+meant to review, and stopping here, before Step 3 claims anything, leaves no label
+behind.
+
 **Then check that no other loop run is working this repo, and STOP if one is:**
 
 ```bash
@@ -127,11 +134,18 @@ watch what it would do before it can do it.
   ls-remote, status and log, and reading files. Step 1's switch to main and its
   fast-forward pull count as reads here: they change only this checkout, and a dirty
   tree still stops the run.
-- **Never run a write.** On GitHub: gh issue comment, gh issue edit, gh pr create,
-  or their MCP equivalents. In git: git add, git push, git commit, git switch -c,
-  git merge, git stash, or deleting a branch (branch -D). In files: no Edit or Write. Where a
-  step would run one, note `would: <command>` instead and carry on as if it had
-  succeeded.
+- **Never run a write:** anything that changes GitHub, a git ref, the index, or the
+  working tree. The list below gives examples; it is not the whole rule. On GitHub:
+  gh issue comment, gh issue edit, gh issue close, gh pr create, or their MCP
+  equivalents (issue_write, add_issue_comment, create_pull_request). In git:
+  git add, git push, git commit, git switch -c, checking out another branch,
+  git merge (or merge --abort), git stash, or deleting a branch (branch -D). In
+  files: no Edit or Write. Where a step would run one, note `would: <command>`
+  instead.
+- **Decide later steps as if each would-be write had happened.** GitHub still shows
+  the old labels, so correct for them: an issue Step 0 would release, hand back, or
+  mark in-review counts as released, handed back, or in review when Step 2 selects.
+  Otherwise the dry run picks a different issue than a live run would.
 - **Stop before Step 4.** Steps 0 to 3.7 decide what happens; everything after them
   writes. In Step 0, a resume (case 3) is writing too: report it and stop there.
 - **Report**, as the last thing you print:
@@ -420,11 +434,8 @@ next reader.
 
 ## Step 3.7 — Proposal gate
 
-The gate applies only when CLAUDE.md `## Proposal gate` says `Gate: on`. Read that
-line ignoring case and spacing (`gate:ON` is on). With no such section, or
-`Gate: off`, skip this step. If the section exists but its setting is anything else,
-or missing, stop and report that the gate's setting is unreadable: guessing "off"
-would let an issue through that a human meant to review. With it on, an issue goes on to Step 4 only
+The gate applies only when CLAUDE.md `## Proposal gate` says `Gate: on` (read before
+Step 0). With no such section, or `Gate: off`, skip this step. With it on, an issue goes on to Step 4 only
 if it carries `heal:approved` (a human approved its proposal) or the label named on
 the section's `Machine-filed label:` line (automation filed it with evidence
 attached; `none`, or no line, means no label skips the gate). Every other issue gets

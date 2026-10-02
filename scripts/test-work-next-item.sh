@@ -175,10 +175,15 @@ check "the CLAUDE.md skeleton has a Proposal gate section, off by default" "grep
 check "the skeleton's machine-filed line is the one Step 3.7 reads" "grep -q '^- Machine-filed label: ' '$TPL' && printf '%s' \"\$gate\" | grep -q 'Machine-filed label:'"
 # Silent-failure review of #13: an unreadable gate fails closed, and a failed label
 # edit cannot loop into a fresh proposal every run.
-check "an unreadable gate setting stops the run instead of reading as off" "printf '%s' \"\$gate\" | grep -q 'ignoring case and spacing' && printf '%s' \"\$gate\" | grep -q 'setting is unreadable'"
+# Read before Step 0, so a bad setting stops the run before Step 3 claims (#53 review).
+# shellcheck disable=SC2034  # read inside check's eval strings
+pre0="$(awk '/^## Step 0/{ exit } { print }' "$CMD")"
+check "an unreadable gate setting stops the run before anything is claimed" "printf '%s' \"\$pre0\" | grep -q 'ignoring' && printf '%s' \"\$pre0\" | grep -q 'setting is unreadable'"
+check "a dry run decides later steps as if its would-be writes had happened" "printf '%s' \"\$dry\" | grep -q 'as if each would-be write had happened'"
+check "the dry run's write list is a rule, not a closed list" "printf '%s' \"\$dry\" | grep -q 'not the whole rule'"
 check "a failed proposal label edit marks the issue needs-attention" "printf '%s' \"\$gate\" | grep -q 'Check both results' && printf '%s' \"\$gate\" | grep -q -- '--remove-label in-progress --add-label needs-attention'"
 check "--dry-run is recognised" "printf '%s' \"\$dry\" | grep -q -- '--dry-run'"
-for w in 'gh issue comment' 'gh issue edit' 'gh pr create' 'git add' 'git push' 'git commit' 'git switch -c' 'git stash' 'branch -D' 'Edit' 'Write'; do
+for w in 'gh issue comment' 'gh issue edit' 'gh issue close' 'gh pr create' 'git add' 'git push' 'git commit' 'git switch -c' 'git stash' 'branch -D' 'Edit' 'Write'; do
   check "a dry run never runs $w" "printf '%s' \"\$dry\" | grep -q -- '$w'"
 done
 check "a dry run reports its selection and intended action" "printf '%s' \"\$dry\" | grep -q 'DRY RUN' && printf '%s' \"\$dry\" | grep -q 'would'"
