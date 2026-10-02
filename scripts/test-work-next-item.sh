@@ -130,12 +130,12 @@ check "it finds the closed PR by branch name, not by an existing branch" "! prin
 check "a rejection is handled before resume and release" "[ -n '$rejected' ] && [ -n '$resume' ] && [ -n '$release' ] && [ '$rejected' -lt '$resume' ] && [ '$rejected' -lt '$release' ]"
 check "a rejection swaps in-progress for needs-attention" "printf '%s' \"\$rejected_case\" | grep -q -- '--remove-label in-progress --add-label needs-attention'"
 check "a rejection comments linking the closed PR" "printf '%s' \"\$rejected_case\" | grep -q 'gh issue comment' && printf '%s' \"\$rejected_case\" | grep -q '<closed PR url>'"
-# A retry that reuses the branch name must be resumed, not handed back (#47 review).
-check "a rejection is only the current attempt (branch gone, or tip at the PR's head)" "printf '%s' \"\$rejected_case\" | grep -q 'headRefOid'"
+# Review of #47: a rejection is handed back once per closed PR, and a remaining
+# branch goes through Give up (saved, then deleted) so no retry reuses it.
+check "a closed PR already named in a comment is not rejected again" "printf '%s' \"\$rejected_case\" | grep -q 'json comments' && printf '%s' \"\$rejected_case\" | grep -q 'no comment on .#N. names yet'"
+check "a rejected PR's remaining branch goes through Give up" "printf '%s' \"\$rejected_case\" | grep -q 'follow \\*\\*Give up\\*\\*'"
 check "the closed listing is not cut short by merged PRs" "grep 'gh pr list --state closed' '$CMD' | grep -q -- '--limit 1000'"
-# A re-queued retry that died before Step 4 must not be rejected again (#47 review).
-check "a rejection is handed back only once" "printf '%s' \"\$rejected_case\" | grep -q 'handed back only once' && printf '%s' \"\$rejected_case\" | grep -q 'json comments'"
-check "the MCP closed listing pages and maps headRefOid" "grep '^| .gh pr list --state closed' '$CMD' | grep -q 'page until a short page' && grep '^| .gh pr list --state closed' '$CMD' | grep -q 'head.sha. is .headRefOid'"
+check "the MCP closed listing pages" "grep '^| .gh pr list --state closed' '$CMD' | grep -q 'page until a short page'"
 check "the MCP table covers the closed-PR listing" "grep -q '^| .gh pr list --state closed' '$CMD'"
 
 echo
