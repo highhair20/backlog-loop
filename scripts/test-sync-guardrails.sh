@@ -70,7 +70,7 @@ check "copies the generic loop command and driver" "[ -f '$T/.claude/commands/wo
 check "copies loop-lock.sh, executable" "[ -x '$T/scripts/loop-lock.sh' ]"
 # The driver and setup.sh call it to check gh auth.
 check "copies gh-auth-check.sh, executable" "[ -x '$T/scripts/gh-auth-check.sh' ]"
-# The driver, the command, and setup.sh call it to pick the repo they act on (#17).
+# The driver and setup.sh call it to pick the repo they act on (#17).
 check "copies gh-repo.sh, executable" "[ -x '$T/scripts/gh-repo.sh' ]"
 check "copies vendor-agents.sh, executable" "[ -x '$T/scripts/vendor-agents.sh' ]"
 check "seeds the reviewer agents, their context, and the ECC license" "[ -f '$T/.claude/agents/pr-test-analyzer.md' ] && [ -f '$T/.claude/agents/silent-failure-hunter.md' ] && [ -f '$T/.claude/agent-context/_common.md' ] && [ -f '$T/.claude/agents/LICENSE.ECC' ]"

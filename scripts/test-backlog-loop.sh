@@ -10,7 +10,7 @@ BG=""
 trap '[ -z "$BG" ] || kill "$BG" 2>/dev/null; touch "$WORK"/*/go 2>/dev/null; rm -rf "$WORK"' EXIT
 
 # When the loop itself runs these tests, the driver's PID is in the environment.
-unset BACKLOG_LOOP_PID BACKLOG_LOOP_STAGED BACKLOG_LOOP_ROOT
+unset BACKLOG_LOOP_PID BACKLOG_LOOP_STAGED BACKLOG_LOOP_ROOT GH_REPO
 # The driver's settings too: a loop started as `MAX_ITEMS=2 scripts/backlog-loop.sh`
 # passes them to every session, and its Verify then ran these nested drivers
 # with a cap of 2 against 3-issue fixtures (#41).
@@ -47,6 +47,7 @@ setup() {
     # The background-wait ceiling this session was given (#22).
     printf 'echo "${CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS:-unset}" >>bgwait\n'
     printf 'echo "${BACKLOG_LOOP_STAGED:-unset} ${BACKLOG_LOOP_ROOT:-unset}" >>staging-env\n'
+    printf 'echo "${GH_REPO:-unset}" >>gh-repo-env\n'
     printf 'scripts/loop-lock.sh check >>check-out 2>&1; echo $? >>check-rc\n'
     if [ "$2" = block ]; then
       # Gives up after 30s so a failed test cannot leave it running.
@@ -194,7 +195,10 @@ R2="$(setup chosen progress)"
 git -C "$R2" remote add upstream https://github.com/up/r.git
 echo o/r >"$R2/default"
 run "$R2"; rc=$?
-check "runs, naming the repo, once a gh default is set" "[ $rc -eq 0 ] && [ \$(wc -l <'$R2/calls') -eq 3 ] && grep -q 'o/r' '$R2/out'"
+check "runs, naming the repo, once a gh default is set" "[ $rc -eq 0 ] && [ \$(wc -l <'$R2/calls') -eq 3 ] && head -1 '$R2/out' | grep -qx 'Working the backlog of o/r'"
+# Every session's gh is pinned to that repo, host included (GHE), so a change to
+# the remotes or the default mid-run cannot move the loop.
+check "pins every session's gh to the repo it named" "[ \"\$(sort -u '$R2/gh-repo-env')\" = github.com/o/r ]"
 
 # --- the single-instance lock ---
 # A lock a live process holds (this test script stands in for the other run).

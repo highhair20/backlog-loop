@@ -35,7 +35,7 @@ case "\$*" in
   "repo set-default --view") echo "\${FAKE_DEFAULT:-}" ;;
   "repo view"*) echo o/r ;;
   "label list"*) cat "$dir/.fake/labels" ;;
-  "label create"*) echo "\$3" >>"$dir/.fake/labels" ;;
+  "label create"*) echo "\$3" >>"$dir/.fake/labels"; echo "\$*" >>"$dir/.fake/label-calls" ;;
   "api repos/o/r/rulesets?includes_parents=false"*) cat "$dir/.fake/rulesets" ;;
   *) echo "fake gh: unexpected: \$*" >&2; exit 1 ;;
 esac
@@ -142,7 +142,7 @@ FAKE_AUTH_RC=1 FAKE_BARE_AUTH_RC=0 run "$H"; rc=$?
 check "the repo's own host logged out still fails, naming that host" "[ $rc -eq 1 ] && grep -q 'gh auth login --hostname ghe.example.com' '$H/.fake/out'"
 
 # The repo is named before any check that reads or writes it (#17).
-check "names the repo before the label and ruleset checks" "awk '/repository o\\/r/{ r = NR } /^Labels/{ l = NR } END { exit !(r && l && r < l) }' '$C/.fake/out'"
+check "names the repo before the label and ruleset checks" "awk '/repository o\\/r/{ r = NR } /^Labels/{ l = NR } /^Branch protection/{ b = NR } END { exit !(r && l && b && r < l && r < b) }' '$C/.fake/out'"
 
 # A fork with an upstream remote and no gh default (#17): gh would pick upstream,
 # so setup must stop before touching either repo, and say how to choose.
@@ -157,6 +157,12 @@ V="$(configured_repo chosen)"
 git -C "$V" remote add upstream https://github.com/up/r.git
 FAKE_DEFAULT=o/r run "$V"; rc=$?
 check "several remotes with a gh default checks that repo" "[ $rc -eq 0 ] && grep -q 'repository o/r' '$V/.fake/out' && grep -q 'every loop label exists' '$V/.fake/out'"
+# --fix writes the missing labels to the repo it printed, and only there.
+W="$(fresh_repo chosenfix)"
+git -C "$W" remote add upstream https://github.com/up/r.git
+FAKE_DEFAULT=o/r run "$W" --fix
+check "--fix with a gh default creates the labels" "[ -s '$W/.fake/label-calls' ] && grep -q 'repository o/r' '$W/.fake/out'"
+check "--fix creates every label on the printed repo" "! grep -v -- '--repo o/r' '$W/.fake/label-calls'"
 
 S="$(configured_repo stale)"
 echo 0000000000000000000000000000000000000000 >"$S/.claude/template-version"

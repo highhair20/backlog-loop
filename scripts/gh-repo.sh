@@ -23,9 +23,12 @@ if [ "$count" -eq 0 ]; then
 fi
 
 if [ "$count" -gt 1 ]; then
-  # gh prints the default on stdout, and nothing there when none is set. A failed
-  # lookup counts as none: guessing is what this script exists to prevent.
-  default="$(gh repo set-default --view 2>/dev/null)" || default=""
+  # gh prints the default on stdout, and nothing there (exit 0) when none is set.
+  # A failed lookup stops too, without guessing, and is not called "unset".
+  if ! default="$(gh repo set-default --view 2>/dev/null)"; then
+    echo "could not read gh's default repository; run gh repo set-default --view to see why" >&2
+    exit 1
+  fi
   if [ -z "$default" ]; then
     echo "this checkout has $count remotes ($(printf '%s\n' "$remotes" | paste -sd, - | sed 's/,/, /g')) and no gh default repository, so gh would guess which repo to act on. Fix: gh repo set-default <owner/repo>  (the repo your issues and PRs live in)" >&2
     exit 1

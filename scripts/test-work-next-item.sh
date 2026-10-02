@@ -103,6 +103,7 @@ check "Step 0 aborts an interrupted merge before checking out the branch" "[ -n 
 code="$(awk '/^[[:space:]]*```/{ f = !f; next } f' "$CMD")"
 check "the command checks gh auth through scripts/gh-auth-check.sh" "printf '%s\n' \"\$code\" | grep -q 'scripts/gh-auth-check.sh'"
 check "it never runs gh auth status itself" "! printf '%s\n' \"\$code\" | grep -q 'gh auth status'"
+
 # P3 is the last tier, tried only when P0-P2 have no actionable issue (#45).
 # shellcheck disable=SC2034  # read inside check's eval string
 step2="$(section 'Step 2')"

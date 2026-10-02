@@ -61,11 +61,14 @@ check "does not let gh guess" "! printf '%s' \"\$calls\" | grep -q 'repo view'"
 
 # A failing `set-default --view` (an old gh, say) counts as no default: the safe side.
 resolve "origin upstream" DEFAULT=o/r DEFAULT_RC=1 VIEW=o/r
-check "a failed default lookup counts as no default" "[ $rc -eq 1 ] && [ -z '$out' ]"
+check "a failed default lookup stops, without guessing" "[ $rc -eq 1 ] && [ -z '$out' ] && ! printf '%s' \"\$calls\" | grep -q 'repo view'"
+check "a failed default lookup is not reported as unset" "printf '%s' \"\$err\" | grep -q 'could not read gh' && ! printf '%s' \"\$err\" | grep -q 'no gh default'"
 
 # Several remotes with a default: gh resolves to it, and the helper says which.
-resolve "origin upstream" DEFAULT=o/r VIEW=o/r
-check "several remotes with a default: prints the repo" "[ $rc -eq 0 ] && [ '$out' = o/r ]"
+# The default names neither remote, so the answer cannot come from a remote name.
+resolve "origin upstream" DEFAULT=chosen/repo VIEW=chosen/repo
+check "several remotes with a default: prints the repo" "[ $rc -eq 0 ] && [ '$out' = chosen/repo ]"
+check "several remotes with a default: quiet on success" "[ -z \"\$err\" ]"
 
 # No remote: no repo, and the reason says so.
 resolve ""

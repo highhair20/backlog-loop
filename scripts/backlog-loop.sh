@@ -92,6 +92,10 @@ if ! gh_repo="$("$HERE/gh-repo.sh")"; then
   exit 1
 fi
 echo "Working the backlog of $gh_repo"
+# Pin every session's gh to that repo, so a remote or default changed mid-run cannot
+# move the loop to another one. GH_REPO takes [HOST/]OWNER/REPO; the host keeps
+# GitHub Enterprise repos working.
+export GH_REPO="${gh_host:+$gh_host/}$gh_repo"
 
 mkdir -p "$LOG_DIR"
 
