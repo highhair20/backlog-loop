@@ -8,7 +8,7 @@ body:
       value: |
         Write this so a fresh contributor, or an agent running `/work-next-item` with no prior context, can pick it up cold and finish it. See `docs/ISSUE_GUIDE.md`.
 
-        **After you create the issue, add exactly one priority label:** `P0` (do first), `P1` (high), `P2` (medium), or `P3` (nice-to-have). The loop never picks up an issue without one, or one labelled `P3`.
+        **After you create the issue, add exactly one priority label:** `P0` (do first), `P1` (high), `P2` (medium), or `P3` (nice-to-have). The loop never picks up an issue without one, and takes a `P3` only when no `P0`–`P2` issue is actionable.
 
   - type: textarea
     id: context

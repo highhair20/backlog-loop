@@ -138,7 +138,7 @@ it with the rest, so you can tell later how far behind the template a repo is.
 ## Running the backlog loop
 
 Write issues with the templates, give each exactly one priority label (`P0`–`P3`;
-`P3` is never picked automatically), then choose how to run it:
+`P3` is taken only once no `P0`–`P2` issue is actionable), then choose how to run it:
 
 | How | When |
 |---|---|
