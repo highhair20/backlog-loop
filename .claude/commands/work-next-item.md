@@ -44,15 +44,26 @@ or killed (closed terminal) at any moment — possibly mid-issue. Therefore:
 - **A tool call refused by the permission settings is a blocker only when no
   permitted way round it exists.** First try one: a dedicated tool instead of a shell
   command, or the command spelled as this file writes it (`git push -u origin
-  <branch>`, not a bare `git push`). When none exists, such as a refused edit to a
-  protected path, an unattended run has no one to approve it: never end the turn
-  asking for approval or for a re-run. With the issue claimed, follow **Give up**,
-  naming the refused command or path in its comment, so the issue gets
-  `needs-attention` and the loop moves on. In Steps 3 to 3.7 the issue has no branch
-  yet, so do only Give up's step 3; Step 0 works on a claimed issue that may have one,
-  so it follows Give up in full. Before anything is claimed, stop and report it. This
-  is about the settings refusing a call; a human declining a prompt in a live session
-  can still tell you what to do instead.
+  <branch>`, not a bare `git push`). When none exists, an unattended run has no one to
+  approve it: never end the turn asking for approval or for a re-run. Then decide
+  whose problem it is:
+  - **A setup problem:** the refused call is a `## Verify` command, or a `gh` or `git`
+    command this file tells every iteration to run. Every issue would hit it, so
+    giving up would mark the whole backlog `needs-attention`, one issue at a time.
+    So do not follow Give up: stop and report the refused command and the allow rule
+    `.claude/settings.local.json` needs for it. Keep the claim, and commit any work to
+    the issue's branch if there is one, so Step 0 resumes it once the rule is added;
+    `scripts/backlog-loop.sh` then sees no progress and halts the run.
+  - **Specific to this issue,** such as a refused edit to a protected path, or a
+    command only this issue needs: with the issue claimed, follow **Give up**, naming
+    the refused command or path in its comment, so the issue gets `needs-attention`
+    and the loop moves on. In Steps 3 to 3.7 the issue has no branch yet, so do only
+    Give up's step 3; Step 0 works on a claimed issue that may have one, so it follows
+    Give up in full.
+
+  Before anything is claimed, stop and report it. This is about the settings refusing
+  a call; a human declining a prompt in a live session can still tell you what to do
+  instead.
 
 ## The repo contract (CLAUDE.md sections this command reads)
 
