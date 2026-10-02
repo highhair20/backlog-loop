@@ -48,14 +48,16 @@ or killed (closed terminal) at any moment — possibly mid-issue. Therefore:
   approve it: never end the turn asking for approval or for a re-run. Then decide
   whose problem it is:
   - **A setup problem:** the refused call is a `## Verify` command, or any command
-    this file or a hook tells every iteration to run (a `gh` or `git` command, a
-    `scripts/` or `.claude/hooks/` helper). Every issue would hit it, so giving up
+    this file or a hook tells every iteration to run (one of the `gh` or `git` commands
+    this file lists, a `scripts/` or `.claude/hooks/` helper). A command only this
+    issue's work needs is not one. Every issue would hit it, so giving up
     would mark the whole backlog `needs-attention`, one issue at a time. So do not
     follow Give up: stop and report the refused command and the allow rule
-    `.claude/settings.local.json` needs for it. If the issue has a branch, keep the
-    claim and commit any work to the branch, so Step 0 resumes it once the rule is
-    added. Without one (Steps 3 to 3.7), release the claim instead
-    (`gh issue edit <number> --remove-label in-progress`): there is nothing to resume.
+    `.claude/settings.local.json` needs for it. If the refusal came in Steps 3 to 3.7,
+    the issue has no branch and nothing to resume, so release the claim instead
+    (`gh issue edit <number> --remove-label in-progress`). Anywhere else, keep the
+    claim and commit any work to the issue's branch if there is one: Step 0 picks it
+    up again once the rule is added (and redoes a hand-back it could not finish).
     Either way `scripts/backlog-loop.sh` sees no progress and halts the run; `/loop`
     or a routine stops at the same refusal each run until the rule is added.
   - **Specific to this issue,** such as a refused edit to a protected path, or a
