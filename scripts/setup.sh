@@ -39,7 +39,9 @@ cd "$root" || exit 1
 
 failures=0
 warnings=0
-repo=""
+repo=""      # owner/repo
+repo_host="" # its host, for gh api --hostname
+repo_full="" # host/owner/repo, for --repo
 ok()   { echo "  ✓ $1"; }
 info() { echo "  - $1"; }
 bad()  { echo "  ✗ $1"; [ -z "${2:-}" ] || echo "      fix: $2"; failures=$((failures + 1)); }
@@ -218,7 +220,8 @@ check_template_version() {
   fi
 }
 
-# Sets $repo. Returns non-zero when the GitHub checks cannot run.
+# Sets $repo, $repo_host, and $repo_full. Returns non-zero when the GitHub checks
+# cannot run.
 check_github() {
   echo "GitHub"
   if ! command -v gh >/dev/null || ! command -v jq >/dev/null; then
@@ -233,12 +236,24 @@ check_github() {
     return 1
   fi
   ok "gh authenticated"
-  repo="$(gh repo view --json nameWithOwner --jq .nameWithOwner 2>/dev/null)"
-  if [ -z "$repo" ]; then
-    bad "no GitHub repository for this checkout" "gh repo create, or git remote add origin <url>"
+  # The same rule the loop uses (#17): with several remotes, the gh default or stop,
+  # so --fix never writes labels to a repo gh guessed. Its reason goes in the ✗ line.
+  local why
+  if ! why="$(mktemp)"; then
+    bad "could not create a temp file to resolve the repository"
     return 1
   fi
-  ok "repository $repo"
+  if ! repo_full="$(scripts/gh-repo.sh --with-host 2>"$why")"; then
+    bad "cannot tell which GitHub repository to check: $(tr '\n' ' ' <"$why")"
+    rm -f "$why"
+    return 1
+  fi
+  rm -f "$why"
+  # A bare owner/repo means github.com to gh, so the host travels with it: --repo
+  # takes $repo_full, and gh api takes --hostname $repo_host.
+  repo_host="${repo_full%%/*}"
+  repo="${repo_full#*/}"
+  ok "repository $repo ($repo_host)"
 }
 
 check_labels() {
@@ -248,7 +263,7 @@ check_labels() {
     return
   fi
   local have want missing=()
-  if ! have="$(gh label list --repo "$repo" --limit 1000 --json name --jq '.[].name' 2>/dev/null)"; then
+  if ! have="$(gh label list --repo "$repo_full" --limit 1000 --json name --jq '.[].name' 2>/dev/null)"; then
     bad "could not list the labels on $repo"
     return
   fi
@@ -258,10 +273,10 @@ check_labels() {
 
   if [ "${#missing[@]}" -eq 0 ]; then
     ok "every loop label exists"
-  elif [ "$fix" -eq 1 ] && scripts/seed-labels.sh "$repo" >/dev/null; then
+  elif [ "$fix" -eq 1 ] && scripts/seed-labels.sh "$repo_full" >/dev/null; then
     ok "created the missing labels: ${missing[*]}"
   else
-    bad "missing labels: ${missing[*]}" "scripts/setup.sh --fix  (or scripts/seed-labels.sh $repo)"
+    bad "missing labels: ${missing[*]}" "scripts/setup.sh --fix  (or scripts/seed-labels.sh $repo_full)"
   fi
 }
 
@@ -269,7 +284,7 @@ check_ruleset() {
   echo "Branch protection"
   local enforcement
   # A disabled or evaluate-only ruleset blocks nothing, so read its enforcement too.
-  if ! enforcement="$(gh api "repos/$repo/rulesets?includes_parents=false" --paginate 2>/dev/null \
+  if ! enforcement="$(gh api "repos/$repo/rulesets?includes_parents=false" --hostname "$repo_host" --paginate 2>/dev/null \
       | jq -r --arg name "$RULESET_NAME" '.[] | select(.name == $name) | .enforcement' | head -1)"; then
     warn "could not read the rulesets on $repo (needs admin; private repos need a paid plan)"
     return
