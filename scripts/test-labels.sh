@@ -8,8 +8,13 @@ set -uo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 # Backticked names inside "## Labels", up to the next "## " heading. Paths and
-# file names (anything with a / or .) are prose references, not labels.
-documented="$(awk '/^## /{ in_labels = ($0 ~ /^## Labels[[:space:]]*$/); next } in_labels' "$ROOT/docs/ISSUE_GUIDE.md" \
+# file names (anything with a / or .) are prose references, not labels. Fenced
+# blocks are examples for a repo to copy (its own label family), not labels.
+documented="$(awk '
+  /^[[:space:]]*(```|~~~)/ { in_fence = !in_fence; next }
+  in_fence { next }
+  /^## / { in_labels = ($0 ~ /^## Labels[[:space:]]*$/); next }
+  in_labels' "$ROOT/docs/ISSUE_GUIDE.md" \
   | grep -oE '`[^`]+`' | tr -d '`' | grep -vE '[/.]' | sort -u)"
 
 # The name field of each "name|color|description" entry in the LABELS array.
