@@ -53,5 +53,11 @@ check "refuses a missing repo argument" "[ $rc -ne 0 ] && [ ! -e '$WORK/calls' ]
 run not-a-repo; rc=$?
 check "refuses a malformed repo argument" "[ $rc -ne 0 ] && [ ! -e '$WORK/calls' ]"
 
+# --strict: a branch must be up to date with main before it merges (#43).
+run o/r test; rc=$?
+check "by default, a branch need not be up to date to merge" "[ $rc -eq 0 ] && jq -e '.rules[] | select(.type == \"required_status_checks\") | .parameters.strict_required_status_checks_policy == false' '$WORK/body.json' >/dev/null"
+run --strict o/r test; rc=$?
+check "--strict requires a branch to be up to date before merging" "[ $rc -eq 0 ] && jq -e '.rules[] | select(.type == \"required_status_checks\") | .parameters.strict_required_status_checks_policy == true' '$WORK/body.json' >/dev/null"
+
 echo
 if [ "$failures" -eq 0 ]; then echo "all tests passed"; else echo "$failures test(s) failed" >&2; exit 1; fi
