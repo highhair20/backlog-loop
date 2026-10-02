@@ -29,7 +29,8 @@ setup() {
   local dir="$WORK/$1"
   mkdir -p "$dir/scripts" "$dir/bin"
   git -C "$dir" init -q -b main
-  cp "$HERE/backlog-loop.sh" "$HERE/check-verify-section.sh" "$HERE/loop-lock.sh" "$HERE/gh-auth-check.sh" "$dir/scripts/"
+  git -C "$dir" remote add origin https://github.com/o/r.git
+  cp "$HERE/backlog-loop.sh" "$HERE/check-verify-section.sh" "$HERE/loop-lock.sh" "$HERE/gh-auth-check.sh" "$HERE/gh-repo.sh" "$dir/scripts/"
   printf '## Verify\n```sh\nmake test\n```\n' >"$dir/CLAUDE.md"
   echo 3 >"$dir/count"
   : >"$dir/calls"
@@ -37,7 +38,10 @@ setup() {
   # Issues as gh prints them: <count> actionable ones labelled $(cat label) (P2 by
   # default), plus any in extra.json, so the driver's own filter is exercised.
   printf '#!/usr/bin/env bash\n[ -f "%s/extra.json" ] || echo "[]" >"%s/extra.json"\njq -n --argjson n "$(cat "%s/count")" --arg lab "$(cat "%s/label" 2>/dev/null || echo P2)" --slurpfile extra "%s/extra.json" '"'"'[range($n) | {labels: [{name: $lab}]}] + $extra[0]'"'"'\n' "$dir" "$dir" "$dir" "$dir" "$dir" >"$dir/bin/issues-json"
-  printf '#!/usr/bin/env bash\n"%s/bin/issues-json"\n' "$dir" >"$dir/bin/gh"
+  # gh-base answers the repo lookups gh-repo.sh makes (a default only when the
+  # fixture has a `default` file); tests that replace gh fall through to it.
+  printf '#!/usr/bin/env bash\ncase "$*" in\n  "repo set-default --view") cat "%s/default" 2>/dev/null; exit 0 ;;\n  "repo view"*) echo o/r; exit 0 ;;\nesac\n"%s/bin/issues-json"\n' "$dir" "$dir" >"$dir/bin/gh-base"
+  printf '#!/usr/bin/env bash\nexec "%s/bin/gh-base" "$@"\n' "$dir" >"$dir/bin/gh"
   {
     printf '#!/usr/bin/env bash\ncd "%s" || exit 1\necho x >>calls\n' "$dir"
     # The background-wait ceiling this session was given (#22).
@@ -162,23 +166,35 @@ PATH="$C/bin:/usr/bin:/bin" PACE_SECONDS=0 BACKOFF_SECONDS=60 LOG_DIR="$WORK/log
 check "refuses to start without claude on PATH" "[ $rc -ne 0 ] && grep -q 'claude not found' '$C/out'"
 
 A="$(setup noauth progress)"
-printf '#!/usr/bin/env bash\n[ "$1" = auth ] && exit 1\n"%s/bin/issues-json"\n' "$A" >"$A/bin/gh"
+printf '#!/usr/bin/env bash\n[ "$1" = auth ] && exit 1\nexec "%s/bin/gh-base" "$@"\n' "$A" >"$A/bin/gh"
 run "$A"; rc=$?
 check "refuses to start when gh is not authenticated" "[ $rc -ne 0 ] && [ ! -s '$A/calls' ] && grep -q 'gh auth login' '$A/out'"
 
 # Only the host origin points at counts (#15): bare `gh auth status` fails when any
 # stored host has a stale token.
 G="$(setup stalehost progress)"
-git -C "$G" remote add origin https://ghe.example.com/o/r.git
-printf '#!/usr/bin/env bash\n[ "$*" = "auth status --hostname ghe.example.com" ] && exit 0\n[ "$1" = auth ] && exit 1\n"%s/bin/issues-json"\n' "$G" >"$G/bin/gh"
+git -C "$G" remote set-url origin https://ghe.example.com/o/r.git
+printf '#!/usr/bin/env bash\n[ "$*" = "auth status --hostname ghe.example.com" ] && exit 0\n[ "$1" = auth ] && exit 1\nexec "%s/bin/gh-base" "$@"\n' "$G" >"$G/bin/gh"
 run "$G"; rc=$?
 check "a stale token for another host does not stop the loop" "[ $rc -eq 0 ] && [ \$(wc -l <'$G/calls') -eq 3 ]"
 
 H="$(setup hostloggedout progress)"
-git -C "$H" remote add origin https://ghe.example.com/o/r.git
-printf '#!/usr/bin/env bash\n[ "$*" = "auth status" ] && exit 0\n[ "$1" = auth ] && exit 1\n"%s/bin/issues-json"\n' "$H" >"$H/bin/gh"
+git -C "$H" remote set-url origin https://ghe.example.com/o/r.git
+printf '#!/usr/bin/env bash\n[ "$*" = "auth status" ] && exit 0\n[ "$1" = auth ] && exit 1\nexec "%s/bin/gh-base" "$@"\n' "$H" >"$H/bin/gh"
 run "$H"; rc=$?
 check "refuses to start when the repo's own host is logged out" "[ $rc -ne 0 ] && [ ! -s '$H/calls' ] && grep -q 'gh auth login --hostname ghe.example.com' '$H/out'"
+
+# Several remotes and no gh default (#17): without a terminal gh would act on one
+# it picks by name (upstream before origin), so the loop must not start.
+R="$(setup ambiguous progress)"
+git -C "$R" remote add upstream https://github.com/up/r.git
+run "$R"; rc=$?
+check "refuses to start when the repo is ambiguous" "[ $rc -ne 0 ] && [ ! -s '$R/calls' ] && grep -q 'gh repo set-default <owner/repo>' '$R/out'"
+R2="$(setup chosen progress)"
+git -C "$R2" remote add upstream https://github.com/up/r.git
+echo o/r >"$R2/default"
+run "$R2"; rc=$?
+check "runs, naming the repo, once a gh default is set" "[ $rc -eq 0 ] && [ \$(wc -l <'$R2/calls') -eq 3 ] && grep -q 'o/r' '$R2/out'"
 
 # --- the single-instance lock ---
 # A lock a live process holds (this test script stands in for the other run).

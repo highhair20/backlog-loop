@@ -37,7 +37,8 @@ if [ "${BACKLOG_LOOP_STAGED:+$BACKLOG_LOOP_STAGED/backlog-loop.sh}" != "$0" ]; t
   # An explicit template: macOS's bare `mktemp -d` ignores TMPDIR.
   stage="$(mktemp -d "${TMPDIR:-/tmp}/backlog-loop.XXXXXX")" || { echo "✗ could not create a temp dir for the driver" >&2; exit 1; }
   if ! cp "$root/scripts/backlog-loop.sh" "$root/scripts/loop-lock.sh" \
-          "$root/scripts/check-verify-section.sh" "$root/scripts/gh-auth-check.sh" "$stage/"; then
+          "$root/scripts/check-verify-section.sh" "$root/scripts/gh-auth-check.sh" \
+          "$root/scripts/gh-repo.sh" "$stage/"; then
     rm -rf "$stage"
     echo "✗ could not copy the driver's scripts from $root/scripts" >&2
     exit 1
@@ -83,6 +84,14 @@ if ! gh_host="$("$HERE/gh-auth-check.sh")"; then
   echo "✗ gh is not authenticated${gh_host:+ to $gh_host}. Run: gh auth login${gh_host:+ --hostname $gh_host}" >&2
   exit 1
 fi
+# The sessions run gh without --repo and without a terminal, so with several remotes
+# and no gh default gh would pick the repo itself, often a fork's upstream (#17).
+# The helper prints its reason on stderr.
+if ! gh_repo="$("$HERE/gh-repo.sh")"; then
+  echo "✗ cannot tell which GitHub repository the loop would act on (see above)." >&2
+  exit 1
+fi
+echo "Working the backlog of $gh_repo"
 
 mkdir -p "$LOG_DIR"
 

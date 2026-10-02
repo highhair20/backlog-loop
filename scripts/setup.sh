@@ -233,11 +233,19 @@ check_github() {
     return 1
   fi
   ok "gh authenticated"
-  repo="$(gh repo view --json nameWithOwner --jq .nameWithOwner 2>/dev/null)"
-  if [ -z "$repo" ]; then
-    bad "no GitHub repository for this checkout" "gh repo create, or git remote add origin <url>"
+  # The same rule the loop uses (#17): with several remotes, the gh default or stop,
+  # so --fix never writes labels to a repo gh guessed. Its reason goes in the ✗ line.
+  local why
+  if ! why="$(mktemp)"; then
+    bad "could not create a temp file to resolve the repository"
     return 1
   fi
+  if ! repo="$(scripts/gh-repo.sh 2>"$why")"; then
+    bad "cannot tell which GitHub repository to check: $(tr '\n' ' ' <"$why")"
+    rm -f "$why"
+    return 1
+  fi
+  rm -f "$why"
   ok "repository $repo"
 }
 

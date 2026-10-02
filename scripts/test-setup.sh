@@ -19,7 +19,8 @@ fresh_repo() {
   local dir="$WORK/$1"
   mkdir -p "$dir/scripts" "$dir/.claude" "$dir/.github/workflows" "$dir/.fake/bin" "$dir/templates"
   git -C "$dir" init -q -b main
-  cp "$ROOT"/scripts/{setup,check-verify-section,seed-labels,protect-main,gh-auth-check}.sh "$dir/scripts/"
+  git -C "$dir" remote add origin https://github.com/o/r.git
+  cp "$ROOT"/scripts/{setup,check-verify-section,seed-labels,protect-main,gh-auth-check,gh-repo}.sh "$dir/scripts/"
   cp "$ROOT/templates/CLAUDE.md" "$dir/templates/"
   cp "$ROOT/templates/CLAUDE.md" "$dir/"
   cp "$ROOT/.github/workflows/ci.yml" "$dir/.github/workflows/"
@@ -30,7 +31,8 @@ fresh_repo() {
 #!/usr/bin/env bash
 case "\$*" in
   "auth status") exit \${FAKE_BARE_AUTH_RC:-\${FAKE_AUTH_RC:-0}} ;;
-  "auth status --hostname ghe.example.com") exit \${FAKE_AUTH_RC:-0} ;;
+  "auth status --hostname github.com"|"auth status --hostname ghe.example.com") exit \${FAKE_AUTH_RC:-0} ;;
+  "repo set-default --view") echo "\${FAKE_DEFAULT:-}" ;;
   "repo view"*) echo o/r ;;
   "label list"*) cat "$dir/.fake/labels" ;;
   "label create"*) echo "\$3" >>"$dir/.fake/labels" ;;
@@ -131,13 +133,30 @@ check "a logged-out gh fails with the login command" "[ $rc -eq 1 ] && grep -q '
 # Only the host origin points at counts (#15): bare `gh auth status` fails when any
 # stored host has a stale token.
 G="$(configured_repo stalehost)"
-git -C "$G" remote add origin https://ghe.example.com/o/r.git
+git -C "$G" remote set-url origin https://ghe.example.com/o/r.git
 FAKE_BARE_AUTH_RC=1 run "$G"; rc=$?
 check "a stale token for another host does not fail the GitHub checks" "[ $rc -eq 0 ] && grep -q 'gh authenticated' '$G/.fake/out' && grep -q 'every loop label exists' '$G/.fake/out'"
 H="$(configured_repo hostloggedout)"
-git -C "$H" remote add origin https://ghe.example.com/o/r.git
+git -C "$H" remote set-url origin https://ghe.example.com/o/r.git
 FAKE_AUTH_RC=1 FAKE_BARE_AUTH_RC=0 run "$H"; rc=$?
 check "the repo's own host logged out still fails, naming that host" "[ $rc -eq 1 ] && grep -q 'gh auth login --hostname ghe.example.com' '$H/.fake/out'"
+
+# The repo is named before any check that reads or writes it (#17).
+check "names the repo before the label and ruleset checks" "awk '/repository o\\/r/{ r = NR } /^Labels/{ l = NR } END { exit !(r && l && r < l) }' '$C/.fake/out'"
+
+# A fork with an upstream remote and no gh default (#17): gh would pick upstream,
+# so setup must stop before touching either repo, and say how to choose.
+U="$(fresh_repo ambiguous)"
+git -C "$U" remote add upstream https://github.com/up/r.git
+run "$U" --fix; rc=$?
+check "several remotes and no gh default fails with the fix" "[ $rc -eq 1 ] && grep -q 'gh repo set-default <owner/repo>' '$U/.fake/out'"
+check "it names no repo it did not choose" "! grep -q 'repository o/r' '$U/.fake/out'"
+check "--fix creates no labels when the repo is ambiguous" "[ ! -s '$U/.fake/labels' ]"
+check "it skips the label and ruleset checks" "! grep -q '^Labels' '$U/.fake/out' && ! grep -q '^Branch protection' '$U/.fake/out'"
+V="$(configured_repo chosen)"
+git -C "$V" remote add upstream https://github.com/up/r.git
+FAKE_DEFAULT=o/r run "$V"; rc=$?
+check "several remotes with a gh default checks that repo" "[ $rc -eq 0 ] && grep -q 'repository o/r' '$V/.fake/out' && grep -q 'every loop label exists' '$V/.fake/out'"
 
 S="$(configured_repo stale)"
 echo 0000000000000000000000000000000000000000 >"$S/.claude/template-version"

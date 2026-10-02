@@ -27,6 +27,7 @@ MANAGED=(
   scripts/backlog-loop.sh
   scripts/check-verify-section.sh
   scripts/gh-auth-check.sh
+  scripts/gh-repo.sh
   scripts/loop-lock.sh
   scripts/protect-main.sh
   scripts/seed-labels.sh
