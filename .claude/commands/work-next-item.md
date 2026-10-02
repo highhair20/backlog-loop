@@ -41,6 +41,13 @@ or killed (closed terminal) at any moment — possibly mid-issue. Therefore:
 - Prefer the Read/Grep/Glob/Edit/Write tools over shell `cat`/`grep`/`sed`/`find`.
   This loop runs headless under a tight bash allowlist; dedicated tools never need
   bash permission, so the iteration won't stall on a denied shell command.
+- **A tool call refused by the permission settings is a blocker, not a question.**
+  An unattended run has no one to approve it, so never end the turn asking for
+  approval or for a re-run. Once an issue is claimed, follow **Give up**, naming the
+  refused command or path in its comment, so the issue gets `needs-attention` and the
+  loop moves on; before Step 4 there is no branch, so do only its step 3. Before
+  anything is claimed, stop and report it. This is about the settings refusing a call;
+  a human declining a prompt in a live session can still tell you what to do instead.
 
 ## The repo contract (CLAUDE.md sections this command reads)
 
@@ -427,6 +434,12 @@ is "log it and let the original operation succeed" — a logging table must not 
 working delete into a 500. Whatever you choose, state it in the PR body and cover it
 with a test.
 
+**5. Note any path this runner may not be allowed to edit.** A headless run
+(`claude -p`, `scripts/backlog-loop.sh`, a scheduled routine) cannot edit `.claude/`,
+and a repo's settings can refuse other paths. If the surface from check 1 includes
+one, Step 5 makes its first edit there, so a refusal ends the run before any other
+work is spent. Such issues are better labelled `no-auto-heal` and worked by hand.
+
 **If any check turns up a gap, correct the issue body before implementing** (same
 mechanism as Step 3.5): edit it so the scope is accurate, note what you added in a
 comment, and carry the correction into the PR body. Leave the issue correct for the
@@ -490,16 +503,19 @@ git switch -c <type>/<number>-<slug>
 
 ## Step 5 — Implement with TDD
 
-1. Translate the issue's acceptance criteria into tests **first** (RED), following
+1. If Step 3.6 check 5 noted a path this runner may not edit, make the first edit
+   there, before the tests. A refusal is a blocker (see the guardrails): follow
+   **Give up**, naming the path.
+2. Translate the issue's acceptance criteria into tests **first** (RED), following
    any testing notes in CLAUDE.md. Mock external services rather than calling them.
-2. Implement the minimal code to satisfy them (GREEN), then refactor.
-3. The change is **done** only when every command in CLAUDE.md `## Verify` that
+3. Implement the minimal code to satisfy them (GREEN), then refactor.
+4. The change is **done** only when every command in CLAUDE.md `## Verify` that
    applies to the changed paths passes locally, **and** every check in
    `## Definition of done` (if present) is satisfied and recorded in the PR body.
    Run the commands exactly as written; do not substitute or skip one because it is
    slow. If Verify marks a command as needing something this runner lacks (e.g.
    Docker), follow its stated fallback and say so in the PR body.
-4. Do a quick self-review of your diff against the repo's code-quality checklist
+5. Do a quick self-review of your diff against the repo's code-quality checklist
    (small functions, error handling, no secrets, no debug prints) before shipping.
 
 **Give-up condition:** if after a focused effort (~3 substantial implement+test
@@ -599,7 +615,7 @@ actionable issues remain, the loop will continue to the next one.
 
 ## Give up — keep the work, then release the issue
 
-Steps 5 and 6.5 both end here, and so does Step 0 for a rejected PR whose branch remains. The branch may be in any state: fresh, resumed by
+Steps 5 and 6.5 both end here, and so does Step 0 for a rejected PR whose branch remains, and any refused tool call after the claim (see the guardrails). The branch may be in any state: fresh, resumed by
 Step 0 with commits, local-only, or already pushed. Giving up must never destroy
 work silently, and must not leave the issue's branch on the remote. So: save the
 work, then release the issue, then delete branches. An interruption after the

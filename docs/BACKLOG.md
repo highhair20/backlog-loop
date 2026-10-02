@@ -32,6 +32,12 @@ says how to clear the lock.
 Before a first unattended run, `scripts/setup.sh` checks that everything the loop
 needs is in place.
 
+A headless session cannot edit `.claude/` (the loop's own command, hooks, and
+settings). An issue that changes those files is better labelled `no-auto-heal` and
+worked in an interactive session. If one is selected anyway, the loop makes that
+edit first, and a refusal ends in Give up with the path named, rather than a run
+that stops to ask for approval.
+
 To run it on a schedule in Anthropic's cloud instead, with no machine of yours
 involved, see [`ROUTINE.md`](ROUTINE.md). Run one or the other on a repo, never both.
 

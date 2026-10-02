@@ -190,5 +190,19 @@ check "a dry run reports its selection and intended action" "printf '%s' \"\$dry
 check "a dry run shows the proposal it would post" "printf '%s' \"\$dry\" | grep -q 'full text of the proposal'"
 check "the dry run rules come before Step 0" "[ \$(grep -n '^## Dry run' '$CMD' | cut -d: -f1) -lt \$(grep -n '^## Step 0' '$CMD' | cut -d: -f1) ]"
 
+# --- A refused tool call ends in Give up, never a request for approval (#54) ---
+# shellcheck disable=SC2034  # read inside check's eval strings
+guard="$(section 'Hard guardrails')"
+# shellcheck disable=SC2034  # read inside check's eval strings
+step36="$(section 'Step 3.6')"
+check "a call the permission settings refuse is a blocker that goes to Give up" "printf '%s' \"\$guard\" | grep -q 'refused by the permission settings' && printf '%s' \"\$guard\" | grep -q 'follow \*\*Give up\*\*'"
+check "the run never ends its turn asking for approval" "printf '%s' \"\$guard\" | grep -q 'never end the turn asking'"
+check "the Give up comment names what was refused" "printf '%s' \"\$guard\" | grep -q 'refused command or path in its comment'"
+check "a human declining a prompt is not treated as a blocker" "printf '%s' \"\$guard\" | grep -q 'a human declining'"
+check "Step 3.6 flags paths a headless run cannot edit" "printf '%s' \"\$step36\" | grep -q '\*\*5\. ' && printf '%s' \"\$step36\" | grep -q '\.claude/'"
+check "Step 5 makes the at-risk edit first, so a refusal costs nothing" "printf '%s' \"\$step5\" | grep -q 'first edit'"
+check "Give up lists a refused tool call among the ways in" "printf '%s' \"\$give_up\" | grep -q 'refused tool call'"
+check "BACKLOG.md says .claude/ issues are better no-auto-heal" "grep -q 'no-auto-heal' '$ROOT/docs/BACKLOG.md' && grep -q 'cannot edit .\.claude/' '$ROOT/docs/BACKLOG.md'"
+
 echo
 if [ "$failures" -eq 0 ]; then echo "all tests passed"; else echo "$failures test(s) failed" >&2; exit 1; fi
