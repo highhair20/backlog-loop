@@ -101,11 +101,12 @@ works the same in both; take `owner`/`repo` from `git remote get-url origin`.
 |---|---|
 | `gh issue list --label X …` | `mcp__github__list_issues` with state `OPEN` and labels `[X]`; page until a short page, since one call returns a single page |
 | `gh issue view N` | `mcp__github__issue_read` (get) |
+| `gh issue view N --json comments …` | `mcp__github__issue_read` (get_comments); page until a short page |
 | `gh issue edit N --add-label A --remove-label R` | `mcp__github__issue_read` for the current labels, then `mcp__github__issue_write` (update) with the **complete** new set — current minus R plus A. The `labels` field **replaces** the whole set; passing only `[A]` silently deletes the priority and type labels. |
 | `gh issue edit N --body …` / close | `mcp__github__issue_write` (update) with `body` / `state: closed` |
 | `gh issue comment N --body …` | `mcp__github__add_issue_comment` |
 | `gh pr list --state open …` | `mcp__github__list_pull_requests` with state `open` |
-| `gh pr list --state closed … select(.mergedAt == null)` | `mcp__github__list_pull_requests` with state `closed`, keeping only those whose `merged_at` is null |
+| `gh pr list --state closed … select(.mergedAt == null)` | `mcp__github__list_pull_requests` with state `closed`, keeping only those whose `merged_at` is null; page until a short page, since one call returns a single page. `head.ref` is `headRefName` and `head.sha` is `headRefOid` |
 | `gh pr create --assignee @me …` | `mcp__github__create_pull_request` (base `main`, head = the branch), then `mcp__github__issue_write` (update) on **the PR's number** with `assignees: [<your login>]` from `mcp__github__get_me` — the create tool cannot assign, and a PR is an issue for this purpose |
 
 Never use the MCP tools that merge, enable auto-merge, or write files or branches
@@ -158,6 +159,12 @@ Then:
    tip is the closed PR's `headRefOid` (the hash `git ls-remote --heads origin` printed
    above, or `git log -1 --format=%H <type>/${N}-<slug>` for a local-only branch). A branch whose tip
    differs is a later retry that reused the name: treat it as case 3, not a rejection.
+   A rejection is handed back only once. If the issue already has this step's comment
+   naming the same PR url, a human has seen it and re-queued the issue, so this is a
+   retry (perhaps one stopped before Step 4 created its branch): go on to case 3 or 4.
+   ```bash
+   gh issue view ${N} --json comments --jq '.comments[].body'
+   ```
    Do not resume a rejected attempt (that redoes rejected work) and do not release it
    (Step 2 would select it again). Hand it back and move on to a new item:
    ```bash

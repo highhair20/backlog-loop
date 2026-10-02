@@ -133,6 +133,9 @@ check "a rejection comments linking the closed PR" "printf '%s' \"\$rejected_cas
 # A retry that reuses the branch name must be resumed, not handed back (#47 review).
 check "a rejection is only the current attempt (branch gone, or tip at the PR's head)" "printf '%s' \"\$rejected_case\" | grep -q 'headRefOid'"
 check "the closed listing is not cut short by merged PRs" "grep 'gh pr list --state closed' '$CMD' | grep -q -- '--limit 1000'"
+# A re-queued retry that died before Step 4 must not be rejected again (#47 review).
+check "a rejection is handed back only once" "printf '%s' \"\$rejected_case\" | grep -q 'handed back only once' && printf '%s' \"\$rejected_case\" | grep -q 'json comments'"
+check "the MCP closed listing pages and maps headRefOid" "grep '^| .gh pr list --state closed' '$CMD' | grep -q 'page until a short page' && grep '^| .gh pr list --state closed' '$CMD' | grep -q 'head.sha. is .headRefOid'"
 check "the MCP table covers the closed-PR listing" "grep -q '^| .gh pr list --state closed' '$CMD'"
 
 echo
