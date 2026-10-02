@@ -105,6 +105,7 @@ works the same in both; take `owner`/`repo` from `git remote get-url origin`.
 | `gh issue edit N --body …` / close | `mcp__github__issue_write` (update) with `body` / `state: closed` |
 | `gh issue comment N --body …` | `mcp__github__add_issue_comment` |
 | `gh pr list --state open …` | `mcp__github__list_pull_requests` with state `open` |
+| `gh pr list --state closed … select(.mergedAt == null)` | `mcp__github__list_pull_requests` with state `closed`, keeping only those whose `merged_at` is null |
 | `gh pr create --assignee @me …` | `mcp__github__create_pull_request` (base `main`, head = the branch), then `mcp__github__issue_write` (update) on **the PR's number** with `assignees: [<your login>]` from `mcp__github__get_me` — the create tool cannot assign, and a PR is an issue for this purpose |
 
 Never use the MCP tools that merge, enable auto-merge, or write files or branches
@@ -131,7 +132,12 @@ git ls-remote --heads origin
 git branch --list
 git status --porcelain
 gh pr list --state open --json number,headRefName,url
+gh pr list --state closed --limit 100 --json number,headRefName,url,mergedAt \
+  --jq '.[] | select(.mergedAt == null)'
 ```
+
+The closed listing is matched by branch name, never by `--head` against an existing
+branch: a human who closed the PR may also have deleted its branch.
 
 The branch reaches the remote only at Step 6, so a run interrupted in Steps 4–5 leaves
 a **local-only** branch, possibly with uncommitted edits. Check local branches too.
@@ -146,7 +152,15 @@ Then:
 1. **An open PR already exists from that branch** → the work finished but the label
    swap didn't. Just fix the state and move on to a new item:
    `gh issue edit ${N} --remove-label in-progress --add-label in-review`.
-2. **A branch exists (remote or local-only) but no open PR** → work was underway.
+2. **No open PR, but a closed, unmerged PR from `#N`'s branch name** (`<type>/${N}-…`,
+   in the closed listing) → a human rejected the work, whether or not the branch still
+   exists. Do not resume it (that redoes rejected work) and do not release it (Step 2
+   would select it again). Hand it back and move on to a new item:
+   ```bash
+   gh issue comment ${N} --body "The loop's PR for this issue was closed without merging: <closed PR url>. Not retrying it automatically; remove needs-attention to queue it again."
+   gh issue edit ${N} --remove-label in-progress --add-label needs-attention
+   ```
+3. **A branch exists (remote or local-only) but no open PR** → work was underway.
    Resume *that* issue as this iteration (do not pick a new one). First, if an earlier
    run stopped in the middle of a merge (`git rev-parse -q --verify MERGE_HEAD` prints
    a hash; no output means none is in progress), abort it: git refuses to change
@@ -190,7 +204,7 @@ Then:
    ```
    Then bring it to green (Step 5's gate), then continue from Step 6 (commit/push,
    review, PR).
-3. **Neither a branch nor a PR** → nothing was actually done; release the claim so the
+4. **Neither a branch nor a PR** → nothing was actually done; release the claim so the
    issue becomes selectable again: `gh issue edit ${N} --remove-label in-progress`.
    If `git status --porcelain` is non-empty here, the edits belong to no branch: stash
    them (`git stash push -u -m "orphaned edits for #${N}"`) so Step 1 starts clean,

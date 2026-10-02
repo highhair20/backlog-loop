@@ -35,7 +35,8 @@ needs is in place.
 ## One iteration
 
 0. **Recover.** At most one issue is `in-progress`. If its PR is open, mark it
-   `in-review`; if only its branch exists, resume it; if neither, release it.
+   `in-review`; if its PR was closed unmerged, hand it back as `needs-attention`;
+   if only its branch exists, resume it; if neither, release it.
 1. **Clean base.** Start from an up-to-date `main` with a clean working tree.
 2. **Select** the highest-priority actionable issue: `P0`, then `P1`, then `P2`, then
    `P3` (only once no `P0`–`P2` issue is actionable),
