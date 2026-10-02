@@ -57,7 +57,7 @@ configured_repo() {
   echo '[{"id": 1, "name": "protect-main", "enforcement": "active"}]' >"$dir/.fake/rulesets"
   cp "$dir/.claude/settings.local.json.example" "$dir/.claude/settings.local.json"
   echo "$TEMPLATE_HEAD" >"$dir/.claude/template-version"
-  printf 'contact_links:\n  - name: Issue guide\n    url: %s\n    about: How to write an issue here\n' "$GUIDE_URL" >>"$dir/.github/ISSUE_TEMPLATE/config.yml"
+  printf 'blank_issues_enabled: true\ncontact_links:\n  - name: Issue guide\n    url: %s\n    about: How to write an issue here\n' "$GUIDE_URL" >"$dir/.github/ISSUE_TEMPLATE/config.yml"
   echo "$dir"
 }
 
@@ -217,6 +217,31 @@ KB="$(chooser_repo branch "$(printf 'contact_links:\n  - name: Guide\n    url: h
 cp "$KB/$CFG" "$KB/.fake/cfg"
 run "$KB" --fix
 check "a link on another branch, in other case, counts" "cmp -s '$KB/.fake/cfg' '$KB/$CFG' && grep -q 'issue chooser links to' '$KB/.fake/out'"
+# A link written another way still counts, so --fix adds no second one.
+link_form() { # link_form <description> <config.yml content>
+  local dir; dir="$(chooser_repo form "$2")"
+  cp "$dir/$CFG" "$dir/.fake/cfg"
+  run "$dir" --fix
+  check "counts as linked: $1" "cmp -s '$dir/.fake/cfg' '$dir/$CFG' && grep -q 'issue chooser links to' '$dir/.fake/out'"
+  rm -rf "$dir"
+}
+link_form "a quoted url" "$(printf 'contact_links:\n  - name: G\n    url: "%s"\n    about: x\n' "$GUIDE_URL")"
+link_form "a url with an #anchor" "$(printf 'contact_links:\n  - name: G\n    url: %s#labels\n    about: x\n' "$GUIDE_URL")"
+link_form "a flow-style entry" "$(printf 'contact_links:\n  - {name: G, url: %s, about: x}\n' "$GUIDE_URL")"
+KL="$(chooser_repo longer "$(printf 'contact_links:\n  - name: G\n    url: %s.bak\n    about: x\n' "$GUIDE_URL")")"
+run "$KL"
+check "a longer path is not the guide" "grep -q 'issue chooser has no link' '$KL/.fake/out'"
+KQ="$(chooser_repo quoted "$(printf '"contact_links":\n  - name: Forum\n    url: https://example.com/forum\n    about: x\n')")"
+cp "$KQ/$CFG" "$KQ/.fake/cfg"
+run "$KQ" --fix; rc=$?
+check "--fix leaves a quoted contact_links key alone" "[ $rc -eq 0 ] && cmp -s '$KQ/.fake/cfg' '$KQ/$CFG' && grep -q 'quoted key' '$KQ/.fake/out'"
+KI="$(chooser_repo between "$(printf 'contact_links: # links\n\n    # the forum\n    - name: Forum\n      url: https://example.com/forum\n      about: x\n')")"
+run "$KI" --fix
+check "--fix indents past comments and blank lines" "[ \"\$(yaml_urls '$KI/$CFG')\" = \"\$(printf '%s\n' '$GUIDE_URL' https://example.com/forum)\" ]"
+KU="$(configured_repo nourl)"
+cp "$ROOT/$CFG" "$KU/$CFG"
+FAKE_REPO_URL=' ' run "$KU" --fix; rc=$?
+check "an unreadable repo URL is a warning, and nothing changes" "[ $rc -eq 0 ] && cmp -s '$ROOT/$CFG' '$KU/$CFG' && grep -q 'could not read the URL of o/r' '$KU/.fake/out'"
 KC="$(chooser_repo comment "$(printf 'blank_issues_enabled: true\n# url: %s\n' "$GUIDE_URL")")"
 run "$KC"
 check "a commented-out link does not count" "grep -q 'issue chooser has no link' '$KC/.fake/out'"

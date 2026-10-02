@@ -300,8 +300,9 @@ guide_linked() { # guide_linked <config> <repo-url>
       rest = substr(line, i + length(prefix))
       j = index(rest, suffix)
       if (j < 2 || substr(rest, 1, j - 1) ~ /[[:space:]]/) next
+      # Ends the path: end of line, a quote, "}", "#anchor", "?query", and so on.
       after = substr(rest, j + length(suffix), 1)
-      if (after == "" || after ~ /[[:space:]"\047]/) { found = 1; exit }
+      if (after !~ /[a-z0-9._~%\/-]/) { found = 1; exit }
     }
     END { exit !found }
   ' "$1"
@@ -309,8 +310,8 @@ guide_linked() { # guide_linked <config> <repo-url>
 
 # Prints config file $1 with an issue guide entry for URL $2 added as the first
 # contact link, keeping every other line, comments included (a YAML round trip
-# would drop them). Exits 3 when contact_links is written on one line ([...]),
-# which this text edit cannot extend.
+# would drop them). Exits 3 when contact_links is written on one line ([...]) or
+# as a quoted key, which this text edit cannot extend safely.
 add_guide_link() { # add_guide_link <config> <guide-url>
   GUIDE_URL="$2" awk '
     function entry(indent) {
@@ -319,7 +320,9 @@ add_guide_link() { # add_guide_link <config> <guide-url>
       print indent "  about: How issues here are written and labelled. Read it before opening one."
     }
     { lines[NR] = $0 }
+    /^["\047]contact_links["\047][[:space:]]*:/ { quoted = 1 }
     END {
+      if (quoted) exit 3
       for (k = 1; k <= NR; k++) if (lines[k] ~ /^contact_links:/) break
       if (k > NR) {
         for (i = 1; i <= NR; i++) print lines[i]
@@ -386,7 +389,7 @@ check_issue_chooser() {
   fi
   rm -f "$tmp"
   if [ "$rc" -eq 3 ]; then
-    warn "the issue chooser has no link to docs/ISSUE_GUIDE.md, and $cfg writes contact_links on one line, which --fix does not edit" \
+    warn "the issue chooser has no link to docs/ISSUE_GUIDE.md, and $cfg writes contact_links on one line or as a quoted key, which --fix does not edit" \
       "add an entry to contact_links by hand, with url: $guide"
   else
     warn "could not add the issue guide link to $cfg" "add an entry to contact_links by hand, with url: $guide"
