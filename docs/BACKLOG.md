@@ -94,6 +94,60 @@ in production, deleting a record that had children hit a foreign-key violation. 
 failing case was never exercised. The `pr-test-analyzer` reviewer checks for
 exactly this.
 
+## Task runners
+
+If the repo has a task runner (`just`, `make`, `npm` scripts), three conventions
+make it safe for an unattended loop to use. The examples use `just`, and each is
+followed by a one-line version for another runner. The template ships no runner
+file: the conventions are what matter, not the tool.
+
+**One entry point.** People, CI, and the loop's `## Verify` run the same named
+recipes. Verify then cannot drift from how the project is really built and tested,
+so a green Verify means what a green local run means.
+
+```just
+# CLAUDE.md's Verify runs `just verify`, and so does CI.
+verify: lint test
+```
+
+In make, the same target is `verify: lint test`, and Verify runs `make verify`.
+
+**Guard recipes.** A private recipe checks one precondition, such as a credential
+or an environment variable, and other recipes depend on it. A missing one then
+fails first, with a message that says what to set, instead of halfway through with
+an error the loop has to guess at.
+
+```just
+deploy-dev: _require-env
+    ./scripts/deploy.sh dev
+
+_require-env:
+    @[ -n "${API_TOKEN:-}" ] || { echo "API_TOKEN is not set; see README" >&2; exit 1; }
+```
+
+In make, the guard is a prerequisite target: `deploy-dev: require-env`.
+
+**Confirm destructive recipes.** A recipe that changes a live environment makes
+you type the target's name first. A slip of the keyboard, or an agent that picked
+the wrong recipe, stops at the prompt. A headless session has no input, so `read`
+fails and the recipe does nothing.
+
+```just
+reset-db env: _require-env
+    #!/usr/bin/env bash
+    set -euo pipefail
+    read -r -p "This deletes every row in {{env}}. Type '{{env}}' to continue: " answer
+    [ "$answer" = "{{env}}" ] || { echo "Not confirmed; nothing changed." >&2; exit 1; }
+    ./scripts/reset-db.sh "{{env}}"
+```
+
+With npm scripts, chain a confirm script before the real one:
+`"reset-db": "./scripts/confirm.sh && ./scripts/reset-db.sh"`.
+
+The prompt is a speed bump, not a lock: an agent could pipe the answer in. Also
+deny the recipe in `.claude/settings.json` (for example `Bash(just reset-db*)`), so
+the loop never runs it.
+
 ## Guardrails, and why
 
 - **One issue, one branch, one PR.** A PR that bundles issues cannot be reviewed or
