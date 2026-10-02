@@ -3,8 +3,9 @@
 Once `.github/workflows/ci.yml` runs your Verify commands, CI is green when those
 commands pass. The patterns below close the gaps where a green check is not
 evidence: a test that silently skipped, a tool CI fetched instead of the one you
-declared, a coverage number that flaps or comes from a cache. Each one is the fix
-for a real incident. Take the ones that fit your stack.
+declared, a coverage number that flaps or comes from a cache, a check that skipped
+work a committed cache said was done. Each one is the fix for a real incident.
+Take the ones that fit your stack.
 
 Each section states the principle first, then the failure it prevents, then a
 snippet for a step in your `verify` job. Snippets marked with a stack (Node, Go)
@@ -155,6 +156,45 @@ names the value; every other file, other workflows included, is searched.
     if [ "$files" != "$HOME_FILE" ]; then
       echo "::error::'$VALUE' must appear only in $HOME_FILE. Found in:"
       printf '%s\n' "${files:-<nowhere>}"
+      exit 1
+    fi
+```
+
+## 6. Never commit build caches
+
+**Principle:** CI starts from source. A file in which a tool records what it has
+already checked stays on the machine that made it, and never enters the repo.
+
+**Prevents:** a check that skips itself. Section 4 covers a cache the runner
+restores; this one arrives with the checkout. `tsc -b` decides from each
+project's `*.tsbuildinfo` whether there is anything to check, so a stale copy
+committed by mistake can make CI report a clean typecheck it never ran. pytest's
+`.pytest_cache` does the same to `--lf` (rerun only the tests recorded as failing)
+and `--sw` (skip ahead to the last recorded failure): a committed copy decides
+which tests CI runs. Python's `__pycache__` is lower risk, since Python checks
+each `.pyc` against its source by default, but it is the same kind of
+machine-local state and belongs with the others.
+
+**Snippet (any stack):** ignore the caches in `.gitignore`. Add your stack's
+equivalents, such as another tool's incremental-build or test-result file.
+
+```gitignore
+*.tsbuildinfo
+__pycache__/
+.pytest_cache/
+```
+
+`.gitignore` does not untrack a file that is already committed, and `git add -f`
+gets past it. This step fails while one is tracked. In git pathspecs `*` also
+matches `/`, so each pattern finds the cache at any depth.
+
+```yaml
+- name: No committed build caches
+  run: |
+    tracked="$(git ls-files -- '*.tsbuildinfo' '*__pycache__/*' '*.pytest_cache/*')"
+    if [ -n "$tracked" ]; then
+      echo "::error::Build caches are committed. Untrack them with 'git rm --cached', then ignore them:"
+      printf '%s\n' "$tracked"
       exit 1
     fi
 ```

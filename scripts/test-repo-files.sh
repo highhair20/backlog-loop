@@ -32,12 +32,12 @@ guide_unpinned="$(printf '%s\n' "$guide_uses" | grep -vE 'uses:[[:space:]]*[^@[:
 check "every action in the CI hardening guide is pinned to a SHA with a version comment" "[ -z \"\$guide_unpinned\" ]"
 [ -z "$guide_unpinned" ] || printf '     unpinned: %s\n' "$guide_unpinned" >&2
 # One "## N. " section per pattern the guide promises: tooling, own binaries,
-# coverage gate, uncached coverage, single source of truth.
-check "CI hardening guide has a section per pattern" "[ \"\$(grep -c '^## [1-5]\\. ' '$guide' 2>/dev/null)\" = 5 ]"
+# coverage gate, uncached coverage, single source of truth, no committed caches.
+check "CI hardening guide has a section per pattern" "[ \"\$(grep -c '^## [1-9]\\. ' '$guide' 2>/dev/null)\" = 6 ]"
 check "placeholder CI step points to the hardening guide" "grep -q 'docs/CI_HARDENING.md' '$ROOT/.github/workflows/ci.yml'"
 # Each pattern section states its principle, then the failure it prevents, then a
 # copy-ready snippet. A heading alone must not pass.
-for n in 1 2 3 4 5; do
+for n in 1 2 3 4 5 6; do
   sec="$(awk -v h="## $n. " '/^## /{ on = (index($0, h) == 1) } on' "$guide" 2>/dev/null)"
   p="$(printf '%s\n' "$sec" | grep -n -m1 '^\*\*Principle:\*\*' | cut -d: -f1)"
   v="$(printf '%s\n' "$sec" | grep -n -m1 '^\*\*Prevents:\*\*' | cut -d: -f1)"
@@ -62,6 +62,38 @@ check "the gate fails coverage below the floor" "! gate_rc 70"
 check "the gate fails a non-numeric total (jq's null)" "! gate_rc null"
 check "the gate fails an empty total" "! gate_rc ''"
 check "the Jest snippet makes jq fail on a missing field" "grep -q 'jq -e ' '$guide'"
+
+# Run section 6's snippets too: the .gitignore lines must ignore each cache the
+# guide names, and the CI step must fail when one is tracked anyway.
+caches="$(awk '/^## /{ on = (index($0, "## 6. ") == 1) } on' "$guide" 2>/dev/null)"
+ignore="$(printf '%s\n' "$caches" | awk '/^```gitignore/{ y = 1; next } y && /^```/{ exit } y')"
+cache_step="$(printf '%s\n' "$caches" | awk '/^```yaml/{ y = 1; next } y && /^```/{ exit } y && r { sub(/^    /, ""); print } y && /run: \|/{ r = 1 }')"
+check "extracted the .gitignore lines from section 6" "[ -n \"\$ignore\" ]"
+check "extracted the tracked-cache step from section 6" "printf '%s' \"\$cache_step\" | grep -q 'git ls-files'"
+CACHE_PATHS=("tsconfig.tsbuildinfo" "packages/web/tsconfig.tsbuildinfo" "__pycache__/app.cpython-312.pyc" "src/pkg/__pycache__/mod.cpython-312.pyc" ".pytest_cache/v/cache/lastfailed" "tests/.pytest_cache/v/cache/nodeids")
+# Each helper prints a status rather than returning one, and a setup failure
+# prints "setup", so no check can pass because its repo was never built.
+ignore_status() { # ignore_status <path>: git check-ignore's status (0 ignored, 1 not) under the guide's lines
+  local d rc; d="$(mktemp -d)"
+  if git -C "$d" init -q && printf '%s\n' "$ignore" >"$d/.gitignore"; then
+    git -C "$d" check-ignore -q --no-index -- "$1"; rc=$?
+  else rc=setup; fi
+  rm -rf "$d"; echo "$rc"
+}
+cache_status() { # cache_status <path>...: "<status> <output>" of the guide's step in a repo tracking those paths
+  local d p out="" rc; d="$(mktemp -d)"
+  if (cd "$d" && git init -q && for p in "$@"; do { mkdir -p "$(dirname "$p")" && echo x >"$p"; } || exit 1; done && git add -f -- "$@"); then
+    out="$(cd "$d" && bash -eo pipefail -c "$cache_step" 2>&1)"; rc=$?
+  else rc=setup; fi
+  rm -rf "$d"; printf '%s %s\n' "$rc" "$out"
+}
+for p in "${CACHE_PATHS[@]}"; do
+  check "the guide's .gitignore lines ignore $p" "[ \"\$(ignore_status '$p')\" = 0 ]"
+  # It must fail and name the file, so a step broken some other way does not pass.
+  check "the guide's step fails when $p is tracked, naming it" "cache_status src/app.ts '$p' | grep -q '^1 ' && cache_status src/app.ts '$p' | grep -qxF '$p'"
+done
+check "the guide's .gitignore lines leave source files alone" "[ \"\$(ignore_status src/app.ts)\" = 1 ]"
+check "the guide's step passes a repo that tracks no cache" "cache_status src/app.ts tests/test_app.py | grep -q '^0 '"
 
 # The README's file list is how a reader finds the guide (#14 acceptance criterion).
 check "README's file list includes the hardening guide" "grep -qE '^docs/CI_HARDENING\\.md[[:space:]]' '$ROOT/README.md'"
