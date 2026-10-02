@@ -130,6 +130,9 @@ check "it finds the closed PR by branch name, not by an existing branch" "! prin
 check "a rejection is handled before resume and release" "[ -n '$rejected' ] && [ -n '$resume' ] && [ -n '$release' ] && [ '$rejected' -lt '$resume' ] && [ '$rejected' -lt '$release' ]"
 check "a rejection swaps in-progress for needs-attention" "printf '%s' \"\$rejected_case\" | grep -q -- '--remove-label in-progress --add-label needs-attention'"
 check "a rejection comments linking the closed PR" "printf '%s' \"\$rejected_case\" | grep -q 'gh issue comment' && printf '%s' \"\$rejected_case\" | grep -q '<closed PR url>'"
+# A retry that reuses the branch name must be resumed, not handed back (#47 review).
+check "a rejection is only the current attempt (branch gone, or tip at the PR's head)" "printf '%s' \"\$rejected_case\" | grep -q 'headRefOid'"
+check "the closed listing is not cut short by merged PRs" "grep 'gh pr list --state closed' '$CMD' | grep -q -- '--limit 1000'"
 check "the MCP table covers the closed-PR listing" "grep -q '^| .gh pr list --state closed' '$CMD'"
 
 echo

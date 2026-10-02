@@ -132,7 +132,7 @@ git ls-remote --heads origin
 git branch --list
 git status --porcelain
 gh pr list --state open --json number,headRefName,url
-gh pr list --state closed --limit 100 --json number,headRefName,url,mergedAt \
+gh pr list --state closed --limit 1000 --json number,headRefName,headRefOid,url,mergedAt \
   --jq '.[] | select(.mergedAt == null)'
 ```
 
@@ -153,11 +153,15 @@ Then:
    swap didn't. Just fix the state and move on to a new item:
    `gh issue edit ${N} --remove-label in-progress --add-label in-review`.
 2. **No open PR, but a closed, unmerged PR from `#N`'s branch name** (`<type>/${N}-…`,
-   in the closed listing) → a human rejected the work, whether or not the branch still
-   exists. Do not resume it (that redoes rejected work) and do not release it (Step 2
-   would select it again). Hand it back and move on to a new item:
+   in the closed listing) **that is the current attempt** → a human rejected the work.
+   It is the current attempt when no branch for `#N` exists any more, or the branch's
+   tip is the closed PR's `headRefOid` (the hash `git ls-remote --heads origin` printed
+   above, or `git log -1 --format=%H <type>/${N}-<slug>` for a local-only branch). A branch whose tip
+   differs is a later retry that reused the name: treat it as case 3, not a rejection.
+   Do not resume a rejected attempt (that redoes rejected work) and do not release it
+   (Step 2 would select it again). Hand it back and move on to a new item:
    ```bash
-   gh issue comment ${N} --body "The loop's PR for this issue was closed without merging: <closed PR url>. Not retrying it automatically; remove needs-attention to queue it again."
+   gh issue comment ${N} --body "The loop's PR for this issue was closed without merging: <closed PR url>. Not retrying it automatically. To retry from scratch, delete its branch (locally and on the remote), then remove needs-attention."
    gh issue edit ${N} --remove-label in-progress --add-label needs-attention
    ```
 3. **A branch exists (remote or local-only) but no open PR** → work was underway.
