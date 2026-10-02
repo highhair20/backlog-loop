@@ -144,5 +144,51 @@ check "a closed PR's url is matched whole, not as a prefix" "printf '%s' \"\$rej
 check "a rejection with no branch stashes a dirty tree" "printf '%s' \"\$rejected_case\" | grep -q 'stash the edits'"
 check "the MCP table covers the closed-PR listing" "grep -q '^| .gh pr list --state closed' '$CMD'"
 
+# --- The proposal gate and dry run (#13) ---
+# shellcheck disable=SC2034  # read inside check's eval strings
+gate="$(section 'Step 3.7')"
+# shellcheck disable=SC2034  # read inside check's eval strings
+dry="$(section 'Dry run')"
+check "the contract table lists the Proposal gate section" "grep -q '^| .## Proposal gate. |' '$CMD'"
+check "the command reads its arguments" "grep -q '\$ARGUMENTS' '$CMD'"
+check "Step 2 skips no-auto-heal" "printf '%s' \"\$step2\" | grep -q 'no-auto-heal'"
+check "Step 2 skips heal:proposed unless heal:approved" "printf '%s' \"\$step2\" | grep -q 'heal:proposed. unless it also has .heal:approved'"
+s36="$(grep -n '^## Step 3.6' "$CMD" | cut -d: -f1)"
+s37="$(grep -n '^## Step 3.7' "$CMD" | cut -d: -f1)"
+s4="$(grep -n '^## Step 4' "$CMD" | cut -d: -f1)"
+check "the proposal gate runs after Step 3.6 and before Step 4 branches" "[ -n '$s37' ] && [ '$s36' -lt '$s37' ] && [ '$s37' -lt '$s4' ]"
+check "the gate is off unless CLAUDE.md turns it on" "printf '%s' \"\$gate\" | grep -q 'Gate: on'"
+for part in 'Understanding' 'Root cause' 'Proposed solution' 'Scope delta'; do
+  check "the proposal has a $part part" "printf '%s' \"\$gate\" | grep -q '\*\*$part'"
+done
+check "an empty scope delta is stated as none" "printf '%s' \"\$gate\" | grep -q 'none'"
+check "a proposal releases the claim and marks heal:proposed" "printf '%s' \"\$gate\" | grep -q -- '--remove-label in-progress --add-label heal:proposed'"
+check "a proposal stops before any branch or PR" "printf '%s' \"\$gate\" | grep -q 'no branch, no commits, no PR'"
+check "heal:approved or the machine-filed label goes on to Step 4" "printf '%s' \"\$gate\" | grep -q 'heal:approved' && printf '%s' \"\$gate\" | grep -q 'Machine-filed label'"
+check "under the gate, Steps 3.5 and 3.6 report in the proposal instead of editing the issue" "printf '%s' \"\$gate\" | grep -q 'do not edit the issue body'"
+# shellcheck disable=SC2034  # read inside check's eval strings
+step35="$(section 'Step 3.5')"
+check "Step 3.5 itself holds off editing the issue when the gate will hold it" "printf '%s' \"\$step35\" | grep -q 'Step 3.7.s proposal gate will hold this issue' && printf '%s' \"\$step35\" | grep -q 'not edited, commented'"
+# The skeleton must use the exact lines Step 3.7 reads.
+TPL="$ROOT/templates/CLAUDE.md"
+check "the CLAUDE.md skeleton has a Proposal gate section, off by default" "grep -q '^## Proposal gate\$' '$TPL' && grep -q '^- Gate: off\$' '$TPL'"
+check "the skeleton's machine-filed line is the one Step 3.7 reads" "grep -q '^- Machine-filed label: ' '$TPL' && printf '%s' \"\$gate\" | grep -q 'Machine-filed label:'"
+# Silent-failure review of #13: an unreadable gate fails closed, and a failed label
+# edit cannot loop into a fresh proposal every run.
+# Read before Step 0, so a bad setting stops the run before Step 3 claims (#53 review).
+# shellcheck disable=SC2034  # read inside check's eval strings
+pre0="$(awk '/^## Step 0/{ exit } { print }' "$CMD")"
+check "an unreadable gate setting stops the run before anything is claimed" "printf '%s' \"\$pre0\" | grep -q 'ignoring' && printf '%s' \"\$pre0\" | grep -q 'setting is unreadable'"
+check "a dry run decides later steps as if its would-be writes had happened" "printf '%s' \"\$dry\" | grep -q 'as if each would-be write had happened'"
+check "the dry run's write list is a rule, not a closed list" "printf '%s' \"\$dry\" | grep -q 'not the whole rule'"
+check "a failed proposal label edit marks the issue needs-attention" "printf '%s' \"\$gate\" | grep -q 'Check both results' && printf '%s' \"\$gate\" | grep -q -- '--remove-label in-progress --add-label needs-attention'"
+check "--dry-run is recognised" "printf '%s' \"\$dry\" | grep -q -- '--dry-run'"
+for w in 'gh issue comment' 'gh issue edit' 'gh issue close' 'gh pr create' 'git add' 'git push' 'git commit' 'git switch -c' 'git stash' 'branch -D' 'Edit' 'Write'; do
+  check "a dry run never runs $w" "printf '%s' \"\$dry\" | grep -q -- '$w'"
+done
+check "a dry run reports its selection and intended action" "printf '%s' \"\$dry\" | grep -q 'DRY RUN' && printf '%s' \"\$dry\" | grep -q 'would'"
+check "a dry run shows the proposal it would post" "printf '%s' \"\$dry\" | grep -q 'full text of the proposal'"
+check "the dry run rules come before Step 0" "[ \$(grep -n '^## Dry run' '$CMD' | cut -d: -f1) -lt \$(grep -n '^## Step 0' '$CMD' | cut -d: -f1) ]"
+
 echo
 if [ "$failures" -eq 0 ]; then echo "all tests passed"; else echo "$failures test(s) failed" >&2; exit 1; fi

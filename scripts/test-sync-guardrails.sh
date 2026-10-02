@@ -85,6 +85,7 @@ seeds_stack_contexts() {
 check "seeds the optional stack reviewer contexts, not enabled" "seeds_stack_contexts '$T'"
 check "seeds the backlog operator doc" "[ -f '$T/docs/BACKLOG.md' ]"
 check "seeds the CI hardening guide" "cmp -s '$HERE/../docs/CI_HARDENING.md' '$T/docs/CI_HARDENING.md'"
+check "manages the routine guide" "cmp -s '$HERE/../docs/ROUTINE.md' '$T/docs/ROUTINE.md'"
 check "seeds the deploy guide" "cmp -s '$HERE/../docs/DEPLOYING.md' '$T/docs/DEPLOYING.md'"
 check "copies setup.sh and seed-labels.sh, executable" "[ -x '$T/scripts/setup.sh' ] && [ -x '$T/scripts/seed-labels.sh' ]"
 check "copies protect-main.sh and the allowlist example" "[ -x '$T/scripts/protect-main.sh' ] && [ -f '$T/.claude/settings.local.json.example' ]"

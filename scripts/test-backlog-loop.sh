@@ -154,6 +154,24 @@ echo '[{"labels": [{"name": "P2"}, {"name": "blocked"}]}, {"labels": [{"name": "
 run "$B3"; rc=$?
 check "a blocked P2 and a needs-attention P1 do not hold back a P3" "[ $rc -eq 0 ] && [ \$(wc -l <'$B3/calls') -eq 1 ] && grep -q 'Backlog drained' '$B3/out'"
 
+# The proposal gate (#13): an opted-out issue, or a proposal awaiting a human, is
+# not remaining work; an approved proposal is.
+G="$(setup gated stall)"
+echo 0 >"$G/count"
+echo '[{"labels": [{"name": "P1"}, {"name": "no-auto-heal"}]}, {"labels": [{"name": "P1"}, {"name": "heal:proposed"}]}, {"labels": [{"name": "P1"}, {"name": "no-auto-heal"}, {"name": "heal:approved"}]}]' >"$G/extra.json"
+run "$G"; rc=$?
+check "no-auto-heal (even with heal:approved) and an unapproved proposal are not remaining work" "[ $rc -eq 0 ] && [ \$(wc -l <'$G/calls') -eq 0 ] && grep -q 'Backlog drained' '$G/out'"
+A="$(setup approved stall)"
+echo 0 >"$A/count"
+echo '[{"labels": [{"name": "P1"}, {"name": "heal:proposed"}, {"name": "heal:approved"}]}]' >"$A/extra.json"
+run "$A"
+check "an approved proposal is remaining work" "[ \$(wc -l <'$A/calls') -eq 1 ]"
+H="$(setup approvedonly stall)"
+echo 0 >"$H/count"
+echo '[{"labels": [{"name": "P1"}, {"name": "heal:approved"}]}]' >"$H/extra.json"
+run "$H"
+check "heal:approved without heal:proposed is remaining work" "[ \$(wc -l <'$H/calls') -eq 1 ]"
+
 N="$(setup noverify progress)"
 printf '## Verify\n```sh\n# test:\n```\n' >"$N/CLAUDE.md"
 run "$N"; rc=$?

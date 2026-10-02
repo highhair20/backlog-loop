@@ -41,6 +41,17 @@ an extra agent run per item.
 | any source or test file | `pr-test-analyzer` | each acceptance criterion has a test that reaches its real failure case |
 | any source file | `silent-failure-hunter` | swallowed errors and fallbacks that hide failure |
 
+## Proposal gate
+
+`/work-next-item` Step 3.7 reads this. With the gate on, a hand-written issue gets a
+four-part proposal comment and `heal:proposed` instead of code, and the loop opens a
+PR only after a human adds `heal:approved`. Issues carrying the machine-filed label
+skip the proposal. Turn it on before running the loop on a schedule: see
+`docs/ROUTINE.md`.
+
+- Gate: off
+- Machine-filed label: none
+
 <!-- Optional sections read by /work-next-item. Delete any you don't need.
 
 ## Testing notes

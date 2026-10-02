@@ -68,6 +68,17 @@ too, and in `scripts/seed-labels.sh`, which creates them.
 | `needs-infra` | Infra change written but must be applied by a human |
 | `needs-attention` | Gave up after repeated attempts; needs a human |
 
+**Proposal gate** (used when the Proposal gate section of `CLAUDE.md` turns it on):
+
+| Label | Meaning |
+|---|---|
+| `heal:proposed` | The loop posted a proposal comment and is waiting for a human. Skipped until `heal:approved` is added. |
+| `heal:approved` | A human approved the proposal; the loop may implement it and open a PR. |
+| `no-auto-heal` | Never selected by the loop: work a human keeps, such as infrastructure or the loop's own plumbing. |
+
+The label that marks machine-filed issues, which skip the proposal, is per repo
+(for example source:worker-dlq from a triage agent). Name it in `CLAUDE.md`, not here.
+
 **Repo-specific families.** A repo can add its own family, such as which surface
 a change ships to. Define it here before anyone relies on it, giving each label
 its meaning, and add a "commonly misread as" line for any label whose name invites

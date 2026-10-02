@@ -6,6 +6,9 @@ You are running one iteration of the autonomous backlog loop for this repository
 Do **exactly one** issue, then stop and report. `/loop` re-invokes this command for
 the next item.
 
+**Arguments:** `$ARGUMENTS`. If they include `--dry-run`, this is a dry run: follow
+**Dry run** below at every step.
+
 **Session-limit awareness (important).** A single Claude Code session has finite
 context and usage limits. This iteration may be compacted, paused at a usage limit,
 or killed (closed terminal) at any moment — possibly mid-issue. Therefore:
@@ -50,6 +53,7 @@ This command is shared across repos; everything repo-specific lives in the repo'
 | `## Definition of done` | no | Step 5 — extra checks beyond Verify (e.g. deploy-readiness) |
 | `## Scope map` | no | Step 3.6 — where to enumerate the real affected surface |
 | `## Specialist reviewers` | no | Step 6.5 — which `.claude/agents/` reviewer covers which paths |
+| `## Proposal gate` | no | Step 3.7 — whether a human approves a proposal before any code, and which label marks machine-filed issues that skip it |
 
 **Before Step 0, run the checker and STOP if it fails:**
 
@@ -62,6 +66,13 @@ definition of green"), and when `CLAUDE.md` is claude-code-repo-template's own
 instructions in a repo created from it: that Verify runs the template's tests, which
 pass whatever this repo's code does. Report its message and stop. Never guess the
 build or test commands.
+
+**If CLAUDE.md has a `## Proposal gate` section, read its `Gate:` line now**, ignoring
+case and spacing (`gate:ON` is on). `on` and `off` are the only settings. If the
+section exists but the line is missing or says anything else, STOP and report that
+the gate's setting is unreadable: guessing "off" would let through an issue a human
+meant to review, and stopping here, before Step 3 claims anything, leaves no label
+behind.
 
 **Then check that no other loop run is working this repo, and STOP if one is:**
 
@@ -112,6 +123,40 @@ works the same in both; take `owner`/`repo` from `git remote get-url origin`.
 Never use the MCP tools that merge, enable auto-merge, or write files or branches
 through the API (`merge_pull_request`, `push_files`, `create_or_update_file`, …); the
 committed settings deny them, and the guardrails above forbid what they do.
+
+## Dry run
+
+With `--dry-run`, the iteration decides everything and changes nothing anyone else
+can see. A scheduled routine starts this way (see `docs/ROUTINE.md`), so a human can
+watch what it would do before it can do it.
+
+- **Run every read:** the checks above, the gh listings and views, git fetch,
+  ls-remote, status and log, and reading files. Step 1's switch to main and its
+  fast-forward pull count as reads here: they change only this checkout, and a dirty
+  tree still stops the run.
+- **Never run a write:** anything that changes GitHub, a git ref, the index, or the
+  working tree. The list below gives examples; it is not the whole rule. On GitHub:
+  gh issue comment, gh issue edit, gh issue close, gh pr create, or their MCP
+  equivalents (issue_write, add_issue_comment, create_pull_request). In git:
+  git add, git push, git commit, git switch -c, checking out another branch,
+  git merge (or merge --abort), git stash, or deleting a branch (branch -D). In
+  files: no Edit or Write. Where a step would run one, note `would: <command>`
+  instead.
+- **Decide later steps as if each would-be write had happened.** GitHub still shows
+  the old labels, so correct for them: an issue Step 0 would release, hand back, or
+  mark in-review counts as released, handed back, or in review when Step 2 selects.
+  Otherwise the dry run picks a different issue than a live run would.
+- **Stop before Step 4.** Steps 0 to 3.7 decide what happens; everything after them
+  writes. In Step 0, a resume (case 3) is writing too: report it and stop there.
+- **Report**, as the last thing you print:
+  ```text
+  DRY RUN: nothing was written.
+  Selected: #<number> <title>   (or: none, backlog drained)
+  Action: <post a proposal | implement and open a PR | resume #N | hand back #N | release #N>
+  Would run: <each would: line, in order>
+  ```
+  For a proposal, add the full text of the proposal you would post, so a human can
+  judge its quality before the routine goes live.
 
 ## Step 0 — Recover any interrupted iteration
 
@@ -256,10 +301,11 @@ gh issue list --state open --label P0 --limit 1000 --json number,title,labels \
 ```
 
 The first **actionable** issue is the one whose labels do **not** include any of:
-`in-progress`, `in-review`, `blocked`, `needs-attention`. Take the first actionable
-issue at the highest priority that has one; if `P0` has none, try `P1`, then `P2`,
-then `P3`. `P3` is the last tier: take one only when no `P0`–`P2` issue is
-actionable (any left are `in-review`, `blocked`, or `needs-attention`).
+`in-progress`, `in-review`, `blocked`, `needs-attention`, `no-auto-heal`, and that is
+not `heal:proposed` unless it also has `heal:approved` (a proposal still waiting for
+a human; see Step 3.7). Take the first actionable issue at the highest priority that
+has one; if `P0` has none, try `P1`, then `P2`, then `P3`. `P3` is the last tier:
+take one only when no `P0`–`P2` issue is actionable.
 
 If **no** actionable issue exists at any priority: report
 "✅ Backlog drained — no actionable issues remain." and STOP. (This ends the loop —
@@ -297,6 +343,11 @@ set `temperature: 0`. It was **already 0**, on every call, and was 0 when the bu
 occurred — the real cause was closer to the opposite (greedy decoding *causes*
 repetition loops). Implementing that issue as written would have changed nothing and
 shipped a green checkmark over a live bug.
+
+If Step 3.7's proposal gate will hold this issue for a proposal (read its first
+paragraph now), still do this step and the next in full, but only to find things
+out: their findings go into the proposal, and the issue is not edited, commented
+on, or closed here.
 
 So, before Step 4, **read the code the issue is about and confirm its factual claims**:
 
@@ -380,6 +431,52 @@ with a test.
 mechanism as Step 3.5): edit it so the scope is accurate, note what you added in a
 comment, and carry the correction into the PR body. Leave the issue correct for the
 next reader.
+
+## Step 3.7 — Proposal gate
+
+The gate applies only when CLAUDE.md `## Proposal gate` says `Gate: on` (read before
+Step 0). With no such section, or `Gate: off`, skip this step. With it on, an issue goes on to Step 4 only
+if it carries `heal:approved` (a human approved its proposal) or the label named on
+the section's `Machine-filed label:` line (automation filed it with evidence
+attached; `none`, or no line, means no label skips the gate). Every other issue gets
+a proposal instead of code.
+
+Steps 3.5 and 3.6 have run in full, but under the gate do not edit the issue body,
+comment, or close the issue in them: what they found goes into the proposal, which
+a human reviews before anything changes. Post it as one comment in four parts:
+
+1. **Understanding**: the problem, restated in your own words.
+2. **Root cause**: what reading the code showed (Step 3.5), citing files and lines,
+   not a restatement of the issue. If the premise is false, say so here and propose
+   the correction, or closing the issue.
+3. **Proposed solution**: the approach, the files it touches, and the tests.
+4. **Scope delta**: what Step 3.6 found the issue omits, under-specifies, or
+   misjudges in size. Write "none" when it is complete; silence reads as "not
+   checked".
+
+Comment first, then release the claim and mark the proposal. A run interrupted
+between the two leaves a claimed issue with no branch, which Step 0 releases; the
+retry posts the proposal again rather than losing it.
+
+```bash
+gh issue comment <number> --body "<the four-part proposal>"
+gh issue edit <number> --remove-label in-progress --add-label heal:proposed
+```
+
+Check both results. If the comment fails, nothing was posted: release the claim
+(`gh issue edit <number> --remove-label in-progress`) and report the error. If the
+comment posted but the label edit fails, the issue would come back every run and get
+a duplicate proposal each time. Mark it for a human instead, and report the error
+(most often `heal:proposed` does not exist yet; `scripts/seed-labels.sh` creates it):
+
+```bash
+gh issue edit <number> --remove-label in-progress --add-label needs-attention
+```
+
+Then stop: this iteration is done, with no branch, no commits, no PR. Report the
+issue and that its proposal awaits review. A human approves by adding
+`heal:approved`, which lets Step 2 select it again and this step pass it through.
+To get a fresh proposal instead, they edit the issue and remove `heal:proposed`.
 
 ## Step 4 — Branch
 

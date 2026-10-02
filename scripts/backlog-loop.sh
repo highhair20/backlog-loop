@@ -110,12 +110,15 @@ export BACKLOG_LOOP_PID=$$
 # Count open, prioritized issues that still need loop work. in-progress counts
 # (Step 0 recovers it); blocked / needs-attention / in-review do not.
 # P3 counts too: /work-next-item takes a P3 once no P0-P2 issue is actionable (#45).
+# no-auto-heal never counts, nor does a heal:proposed issue a human has not yet
+# approved with heal:approved: Step 2 skips both (#13).
 # Filtered with jq here rather than gh --jq, so the test's fake gh exercises it.
 work_remaining() {
   gh issue list --state open --limit 1000 --json labels | jq '
     [ .[] | ([.labels[].name]) as $l
       | select( ($l | any(. == "P0" or . == "P1" or . == "P2" or . == "P3"))
-            and (($l | any(. == "blocked" or . == "needs-attention" or . == "in-review")) | not) )
+            and (($l | any(. == "blocked" or . == "needs-attention" or . == "in-review" or . == "no-auto-heal")) | not)
+            and ((($l | any(. == "heal:proposed")) and (($l | any(. == "heal:approved")) | not)) | not) )
     ] | length'
 }
 
