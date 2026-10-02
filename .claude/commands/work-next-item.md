@@ -101,10 +101,12 @@ works the same in both; take `owner`/`repo` from `git remote get-url origin`.
 |---|---|
 | `gh issue list --label X …` | `mcp__github__list_issues` with state `OPEN` and labels `[X]`; page until a short page, since one call returns a single page |
 | `gh issue view N` | `mcp__github__issue_read` (get) |
+| `gh issue view N --json comments …` | `mcp__github__issue_read` (get_comments); page until a short page |
 | `gh issue edit N --add-label A --remove-label R` | `mcp__github__issue_read` for the current labels, then `mcp__github__issue_write` (update) with the **complete** new set — current minus R plus A. The `labels` field **replaces** the whole set; passing only `[A]` silently deletes the priority and type labels. |
 | `gh issue edit N --body …` / close | `mcp__github__issue_write` (update) with `body` / `state: closed` |
 | `gh issue comment N --body …` | `mcp__github__add_issue_comment` |
 | `gh pr list --state open …` | `mcp__github__list_pull_requests` with state `open` |
+| `gh pr list --state closed … select(.mergedAt == null)` | `mcp__github__list_pull_requests` with state `closed`, keeping only those whose `merged_at` is null; page until a short page, since one call returns a single page. `head.ref` is `headRefName` |
 | `gh pr create --assignee @me …` | `mcp__github__create_pull_request` (base `main`, head = the branch), then `mcp__github__issue_write` (update) on **the PR's number** with `assignees: [<your login>]` from `mcp__github__get_me` — the create tool cannot assign, and a PR is an issue for this purpose |
 
 Never use the MCP tools that merge, enable auto-merge, or write files or branches
@@ -131,7 +133,12 @@ git ls-remote --heads origin
 git branch --list
 git status --porcelain
 gh pr list --state open --json number,headRefName,url
+gh pr list --state closed --limit 1000 --json number,headRefName,url,mergedAt \
+  --jq '.[] | select(.mergedAt == null)'
 ```
+
+The closed listing is matched by branch name, never by `--head` against an existing
+branch: a human who closed the PR may also have deleted its branch.
 
 The branch reaches the remote only at Step 6, so a run interrupted in Steps 4–5 leaves
 a **local-only** branch, possibly with uncommitted edits. Check local branches too.
@@ -146,7 +153,31 @@ Then:
 1. **An open PR already exists from that branch** → the work finished but the label
    swap didn't. Just fix the state and move on to a new item:
    `gh issue edit ${N} --remove-label in-progress --add-label in-review`.
-2. **A branch exists (remote or local-only) but no open PR** → work was underway.
+2. **No open PR, but a closed, unmerged PR from `#N`'s branch name** (`<type>/${N}-…`,
+   in the closed listing) **that no comment on `#N` names yet** → a human rejected the
+   work, and the loop has not handed it back. A closed PR whose url already appears in
+   the issue's comments was closed before this attempt began: either it was handed
+   back here, or Step 3 named it when it claimed the issue again. Ignore that PR and go
+   on to case 3 or 4 (this is a retry, perhaps one stopped before Step 4 created its
+   branch). Match the whole url, not a prefix: `…/pull/4` must not match `…/pull/47`.
+   ```bash
+   gh issue view ${N} --json comments --jq '.comments[].body'
+   ```
+   Do not resume rejected work and do not release it (Step 2 would select it again).
+   Hand it back, naming every closed PR not yet named, then move on to a new item:
+   - **A branch for `#N` still exists** (remote or local-only): abort a half-done merge
+     as case 3 does, check the branch out (fetch it first if it is remote-only), and
+     follow **Give up** with the blocker "a human closed <closed PR url> without
+     merging". Give up saves the rejected commits under `abandoned/` and deletes the
+     branch, so a retry starts clean on a fresh branch instead of resuming them.
+   - **No branch exists:** there is nothing to save. Comment and swap the labels:
+     ```bash
+     gh issue comment ${N} --body "The loop's PR for this issue was closed without merging: <closed PR url>. Not retrying it automatically; remove needs-attention to queue it again."
+     gh issue edit ${N} --remove-label in-progress --add-label needs-attention
+     ```
+     If `git status --porcelain` is then non-empty, stash the edits as case 4 does, so
+     Step 1 starts clean.
+3. **A branch exists (remote or local-only) but no open PR** → work was underway.
    Resume *that* issue as this iteration (do not pick a new one). First, if an earlier
    run stopped in the middle of a merge (`git rev-parse -q --verify MERGE_HEAD` prints
    a hash; no output means none is in progress), abort it: git refuses to change
@@ -190,7 +221,7 @@ Then:
    ```
    Then bring it to green (Step 5's gate), then continue from Step 6 (commit/push,
    review, PR).
-3. **Neither a branch nor a PR** → nothing was actually done; release the claim so the
+4. **Neither a branch nor a PR** → nothing was actually done; release the claim so the
    issue becomes selectable again: `gh issue edit ${N} --remove-label in-progress`.
    If `git status --porcelain` is non-empty here, the edits belong to no branch: stash
    them (`git stash push -u -m "orphaned edits for #${N}"`) so Step 1 starts clean,
@@ -242,7 +273,14 @@ gh issue view <number> --json title,body
 
 ## Step 3 — Claim it
 
+First name any earlier rejections, so Step 0 never mistakes them for a rejection of
+this attempt. Run Step 0's closed listing; if it has unmerged PRs from
+`<type>/<number>-…` that no comment on the issue names yet (check as Step 0's case 2
+does), name them before claiming. Comment first: a run interrupted between the two
+then leaves an unclaimed issue, not a claim that Step 0 would hand back.
+
 ```bash
+gh issue comment <number> --body "Retrying this issue. Earlier PRs closed without merging: <closed PR urls>. This attempt starts fresh."
 gh issue edit <number> --add-label in-progress
 ```
 
@@ -464,7 +502,7 @@ actionable issues remain, the loop will continue to the next one.
 
 ## Give up — keep the work, then release the issue
 
-Steps 5 and 6.5 both end here. The branch may be in any state: fresh, resumed by
+Steps 5 and 6.5 both end here, and so does Step 0 for a rejected PR whose branch remains. The branch may be in any state: fresh, resumed by
 Step 0 with commits, local-only, or already pushed. Giving up must never destroy
 work silently, and must not leave the issue's branch on the remote. So: save the
 work, then release the issue, then delete branches. An interruption after the

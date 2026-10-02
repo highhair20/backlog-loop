@@ -110,10 +110,39 @@ step2="$(section 'Step 2')"
 check "Step 2 tries P3 after P2" "printf '%s' \"\$step2\" | grep -q 'then .P3.'"
 
 # Step 0 must not mistake a preserved branch for work in flight.
-check "Step 0 always ignores abandoned/ branches" "section 'Step 0' | grep -q 'always ignore them'"
+check "Step 0 always ignores abandoned/ branches" "printf '%s' \"\$step0\" | grep -q 'always ignore them'"
 # An abandoned/ branch outlives its attempt, so it cannot signal an interrupted
 # give-up: acting on it would delete a later retry's unsaved work (#24 review).
 check "Step 0 never resumes a give-up from an abandoned/ branch" "! section 'Step 0' | grep -qi 'finish it from'"
+
+# A PR a human closed unmerged is a rejection, whatever the label (#5). Step 0
+# must neither resume it (opening a new PR) nor release it (Step 2 re-selects it).
+closed_list="$(printf '%s\n' "$step0" | grep -n -m1 'gh pr list --state closed' | cut -d: -f1)"
+rejected="$(printf '%s\n' "$step0" | grep -n -m1 'closed, unmerged PR' | cut -d: -f1)"
+resume="$(printf '%s\n' "$step0" | grep -n -m1 'work was underway' | cut -d: -f1)"
+release="$(printf '%s\n' "$step0" | grep -n -m1 'release the claim' | cut -d: -f1)"
+# shellcheck disable=SC2034  # read inside check's eval strings
+rejected_case="$(printf '%s\n' "$step0" | awk '/closed, unmerged PR/{ on = 1 } on && /^[0-9]+\. / && !/closed, unmerged PR/{ exit } on')"
+check "Step 0 lists closed PRs" "[ -n '$closed_list' ]"
+check "it skips merged PRs" "printf '%s\n' \"\$step0\" | grep 'gh pr list --state closed' -A2 | grep -q 'mergedAt == null'"
+# By name, not --head: a human who deleted the branch has still rejected the work.
+check "it finds the closed PR by branch name, not by an existing branch" "! printf '%s' \"\$step0\" | grep -q -- '--state closed --head'"
+check "a rejection is handled before resume and release" "[ -n '$rejected' ] && [ -n '$resume' ] && [ -n '$release' ] && [ '$rejected' -lt '$resume' ] && [ '$rejected' -lt '$release' ]"
+check "a rejection swaps in-progress for needs-attention" "printf '%s' \"\$rejected_case\" | grep -q -- '--remove-label in-progress --add-label needs-attention'"
+check "a rejection comments linking the closed PR" "printf '%s' \"\$rejected_case\" | grep -q 'gh issue comment' && printf '%s' \"\$rejected_case\" | grep -q '<closed PR url>'"
+# Review of #47: a rejection is handed back once per closed PR, and a remaining
+# branch goes through Give up (saved, then deleted) so no retry reuses it.
+check "a closed PR already named in a comment is not rejected again" "printf '%s' \"\$rejected_case\" | grep -q 'json comments' && printf '%s' \"\$rejected_case\" | grep -q 'no comment on .#N. names yet'"
+check "a rejected PR's remaining branch goes through Give up" "printf '%s' \"\$rejected_case\" | grep -q 'follow \\*\\*Give up\\*\\*'"
+check "the closed listing is not cut short by merged PRs" "grep 'gh pr list --state closed' '$CMD' | grep -q -- '--limit 1000'"
+check "the MCP closed listing pages" "grep '^| .gh pr list --state closed' '$CMD' | grep -q 'page until a short page'"
+# Review round 4 of #47.
+# shellcheck disable=SC2034  # read inside check's eval strings
+step3="$(section 'Step 3 ')"
+check "the claim names earlier closed PRs before adding in-progress" "printf '%s' \"\$step3\" | grep -q 'Earlier PRs closed without merging' && [ \$(printf '%s\n' \"\$step3\" | grep -n 'gh issue comment' | cut -d: -f1) -lt \$(printf '%s\n' \"\$step3\" | grep -n 'add-label in-progress' | cut -d: -f1) ]"
+check "a closed PR's url is matched whole, not as a prefix" "printf '%s' \"\$rejected_case\" | grep -q 'not a prefix'"
+check "a rejection with no branch stashes a dirty tree" "printf '%s' \"\$rejected_case\" | grep -q 'stash the edits'"
+check "the MCP table covers the closed-PR listing" "grep -q '^| .gh pr list --state closed' '$CMD'"
 
 echo
 if [ "$failures" -eq 0 ]; then echo "all tests passed"; else echo "$failures test(s) failed" >&2; exit 1; fi
