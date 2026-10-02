@@ -121,6 +121,27 @@ check "README's file list includes the deploy guide" "grep -qE '^docs/DEPLOYING\
 check "README links the deploy guide" "grep -qF '(docs/DEPLOYING.md)' '$ROOT/README.md'"
 check "BACKLOG.md links the deploy guide" "grep -qF '(./DEPLOYING.md)' '$ROOT/docs/BACKLOG.md'"
 
+# --- task-runner conventions (#35): the three conventions, each with an example ---
+# shellcheck disable=SC2034  # read inside check's eval strings
+runners="$(awk '/^## /{ on = ($0 == "## Task runners") } on' "$ROOT/docs/BACKLOG.md" 2>/dev/null)"
+check "BACKLOG.md has a Task runners section" "[ -n \"\$runners\" ]"
+# One convention's text: from its bold lead-in to the next one.
+convention() { printf '%s\n' "$runners" | awk -v h="**$1.**" 'index($0, h) == 1 { on = 1; next } /^\*\*/ { on = 0 } on'; }
+for convention in 'One entry point' 'Guard recipes' 'Confirm destructive recipes'; do
+  check "Task runners describes '$convention'" "printf '%s\n' \"\$runners\" | grep -qF '**$convention.**'"
+  check "'$convention' has a just example" "convention '$convention' | grep -q '^\`\`\`just'"
+  check "'$convention' has a one-line equivalent in another runner" "convention '$convention' | grep -qE '^(In|With) (make|npm)'"
+done
+check "the guard is a private recipe that another recipe depends on" "convention 'Guard recipes' | grep -qE '^_[a-z-]+:' && convention 'Guard recipes' | grep -qE '^[a-z-]+: _[a-z-]+'"
+check "the guard fails with a message naming what is missing" "convention 'Guard recipes' | grep -qE 'echo .*not set.*>&2; exit 1'"
+check "the destructive example refuses without a terminal" "convention 'Confirm destructive recipes' | grep -qF '[ -t 0 ] ||'"
+check "the destructive example compares the typed answer to the target" "convention 'Confirm destructive recipes' | grep -qF '[ \"\$answer\" = \"\$env\" ] || {'"
+# shellcheck disable=SC2034  # read inside check's eval strings
+tracked="$(git -C "$ROOT" ls-files)" || tracked=""
+check "git lists the template's files" "[ -n \"\$tracked\" ]"
+check "the template ships no task-runner file" "! printf '%s\n' \"\$tracked\" | grep -qiE '(^|/)(\\.?justfile|gnumakefile|makefile)$'"
+check "README's file list mentions the task-runner conventions" "grep -qE '^docs/BACKLOG\\.md[[:space:]].*task runner' '$ROOT/README.md'"
+
 # --- dependabot: updates the pinned actions ---
 check "dependabot.yml parses and updates github-actions" \
   "yaml 'd = YAML.load_file(ARGV[0]); exit(d[\"version\"] == 2 && d[\"updates\"].any? { |u| u[\"package-ecosystem\"] == \"github-actions\" } ? 0 : 1)' '$ROOT/.github/dependabot.yml'"
