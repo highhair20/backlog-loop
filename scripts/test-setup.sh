@@ -35,7 +35,7 @@ fresh_repo() {
 case "\$*" in
   "auth status") exit \${FAKE_BARE_AUTH_RC:-\${FAKE_AUTH_RC:-0}} ;;
   "auth status --hostname ghe.example.com") exit \${FAKE_AUTH_RC:-0} ;;
-  "repo view o/r --json url"*) echo \${FAKE_REPO_URL:-https://github.com/o/r} ;;
+  "repo view o/r --json url,defaultBranchRef"*) echo "\${FAKE_REPO_URL-https://github.com/o/r} \${FAKE_BRANCH-main}" ;;
   "repo view"*) echo o/r ;;
   "label list"*) cat "$dir/.fake/labels" ;;
   "label create"*) echo "\$3" >>"$dir/.fake/labels" ;;
@@ -240,7 +240,7 @@ run "$KI" --fix
 check "--fix indents past comments and blank lines" "[ \"\$(yaml_urls '$KI/$CFG')\" = \"\$(printf '%s\n' '$GUIDE_URL' https://example.com/forum)\" ]"
 KU="$(configured_repo nourl)"
 cp "$ROOT/$CFG" "$KU/$CFG"
-FAKE_REPO_URL=' ' run "$KU" --fix; rc=$?
+FAKE_REPO_URL='' run "$KU" --fix; rc=$?
 check "an unreadable repo URL is a warning, and nothing changes" "[ $rc -eq 0 ] && cmp -s '$ROOT/$CFG' '$KU/$CFG' && grep -q 'could not read the URL of o/r' '$KU/.fake/out'"
 KC="$(chooser_repo comment "$(printf 'blank_issues_enabled: true\n# url: %s\n' "$GUIDE_URL")")"
 run "$KC"
@@ -253,6 +253,14 @@ KE="$(configured_repo ghe)"
 cp "$ROOT/$CFG" "$KE/$CFG"
 FAKE_REPO_URL=https://ghe.example.com/o/r run "$KE" --fix
 check "--fix uses the repo's own host" "[ \"\$(yaml_urls '$KE/$CFG')\" = https://ghe.example.com/o/r/blob/main/docs/ISSUE_GUIDE.md ]"
+KD="$(configured_repo trunk)"
+cp "$ROOT/$CFG" "$KD/$CFG"
+FAKE_BRANCH=trunk run "$KD" --fix
+check "--fix links the default branch, so the link does not 404" "[ \"\$(yaml_urls '$KD/$CFG')\" = https://github.com/o/r/blob/trunk/docs/ISSUE_GUIDE.md ]"
+KZ="$(configured_repo nocommits)"
+cp "$ROOT/$CFG" "$KZ/$CFG"
+FAKE_BRANCH='' run "$KZ" --fix
+check "--fix falls back to main when there is no default branch yet" "[ \"\$(yaml_urls '$KZ/$CFG')\" = '$GUIDE_URL' ]"
 KM="$(configured_repo noconfig)"
 rm "$KM/$CFG"
 run "$KM" --fix; rc=$?

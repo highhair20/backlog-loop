@@ -366,15 +366,21 @@ check_issue_chooser() {
     info "this is the template repo, whose $cfg is seeded into other repos; skipped"
     return
   fi
-  if ! url="$(gh repo view "$repo" --json url --jq .url 2>/dev/null)" || [ -z "$url" ]; then
+  local view branch
+  view="$(gh repo view "$repo" --json url,defaultBranchRef --jq '.url + " " + (.defaultBranchRef.name // "")' 2>/dev/null)" || view=""
+  url="${view%% *}"
+  branch="${view#* }"
+  if [ -z "$url" ] || [ "$url" = "$view" ]; then
     warn "could not read the URL of $repo, so the issue chooser link was not checked"
     return
   fi
+  # A repo with no commits has no default branch yet; main is what it will get.
+  [ -n "$branch" ] || branch=main
   if guide_linked "$cfg" "$url"; then
     ok "the issue chooser links to docs/ISSUE_GUIDE.md"
     return
   fi
-  guide="$url/blob/main/docs/ISSUE_GUIDE.md"
+  guide="$url/blob/$branch/docs/ISSUE_GUIDE.md"
   if [ "$fix" -ne 1 ]; then
     warn "the issue chooser has no link to docs/ISSUE_GUIDE.md" "scripts/setup.sh --fix  (adds it to contact_links in $cfg)"
     return
