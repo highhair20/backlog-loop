@@ -71,24 +71,29 @@ cache_step="$(printf '%s\n' "$caches" | awk '/^```yaml/{ y = 1; next } y && /^``
 check "extracted the .gitignore lines from section 6" "[ -n \"\$ignore\" ]"
 check "extracted the tracked-cache step from section 6" "printf '%s' \"\$cache_step\" | grep -q 'git ls-files'"
 CACHE_PATHS=("tsconfig.tsbuildinfo" "packages/web/tsconfig.tsbuildinfo" "__pycache__/app.cpython-312.pyc" "src/pkg/__pycache__/mod.cpython-312.pyc" ".pytest_cache/v/cache/lastfailed" "tests/.pytest_cache/v/cache/nodeids")
-ignored_rc() { # ignored_rc <path>: 0 when the guide's .gitignore lines ignore it
-  local d; d="$(mktemp -d)"
-  git -C "$d" init -q && printf '%s\n' "$ignore" >"$d/.gitignore" && git -C "$d" check-ignore -q --no-index -- "$1"
-  local rc=$?; rm -rf "$d"; return "$rc"
+# Each helper prints a status rather than returning one, and a setup failure
+# prints "setup", so no check can pass because its repo was never built.
+ignore_status() { # ignore_status <path>: git check-ignore's status (0 ignored, 1 not) under the guide's lines
+  local d rc; d="$(mktemp -d)"
+  if git -C "$d" init -q && printf '%s\n' "$ignore" >"$d/.gitignore"; then
+    git -C "$d" check-ignore -q --no-index -- "$1"; rc=$?
+  else rc=setup; fi
+  rm -rf "$d"; echo "$rc"
 }
-cache_rc() { # cache_rc <path>...: exit status of the guide's step in a repo tracking those paths
-  local d p; d="$(mktemp -d)"
-  git -C "$d" init -q
-  for p in "$@"; do mkdir -p "$d/$(dirname "$p")" && echo x >"$d/$p"; done
-  git -C "$d" add -f -- "$@" && (cd "$d" && bash -eo pipefail -c "$cache_step") >/dev/null 2>&1
-  local rc=$?; rm -rf "$d"; return "$rc"
+cache_status() { # cache_status <path>...: "<status> <output>" of the guide's step in a repo tracking those paths
+  local d p out="" rc; d="$(mktemp -d)"
+  if (cd "$d" && git init -q && for p in "$@"; do { mkdir -p "$(dirname "$p")" && echo x >"$p"; } || exit 1; done && git add -f -- "$@"); then
+    out="$(cd "$d" && bash -eo pipefail -c "$cache_step" 2>&1)"; rc=$?
+  else rc=setup; fi
+  rm -rf "$d"; printf '%s %s\n' "$rc" "$out"
 }
 for p in "${CACHE_PATHS[@]}"; do
-  check "the guide's .gitignore lines ignore $p" "ignored_rc '$p'"
-  check "the guide's step fails when $p is tracked" "! cache_rc src/app.ts '$p'"
+  check "the guide's .gitignore lines ignore $p" "[ \"\$(ignore_status '$p')\" = 0 ]"
+  # It must fail and name the file, so a step broken some other way does not pass.
+  check "the guide's step fails when $p is tracked, naming it" "cache_status src/app.ts '$p' | grep -q '^1 ' && cache_status src/app.ts '$p' | grep -qxF '$p'"
 done
-check "the guide's .gitignore lines leave source files alone" "! ignored_rc src/app.ts"
-check "the guide's step passes a repo that tracks no cache" "cache_rc src/app.ts tests/test_app.py"
+check "the guide's .gitignore lines leave source files alone" "[ \"\$(ignore_status src/app.ts)\" = 1 ]"
+check "the guide's step passes a repo that tracks no cache" "cache_status src/app.ts tests/test_app.py | grep -q '^0 '"
 
 # The README's file list is how a reader finds the guide (#14 acceptance criterion).
 check "README's file list includes the hardening guide" "grep -qE '^docs/CI_HARDENING\\.md[[:space:]]' '$ROOT/README.md'"
