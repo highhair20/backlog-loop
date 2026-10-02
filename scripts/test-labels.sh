@@ -7,20 +7,26 @@ set -uo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
-# Backticked names inside "## Labels", up to the next "## " heading. Paths and
-# file names (anything with a / or .) are prose references, not labels. Fenced
-# blocks are examples for a repo to copy (its own label family), not labels.
-documented="$(awk '
-  /^[[:space:]]*(```|~~~)/ { in_fence = !in_fence; next }
+failures=0
+
+# The "## Labels" section, up to the next "## " heading. Fenced blocks are
+# examples for a repo to copy (its own label family), not labels. An unclosed
+# fence would hide every label after it, so it fails rather than passing short.
+labels_section="$(awk '
+  /^ ? ? ?(```|~~~)[^`]*$/ { in_fence = !in_fence; next }
   in_fence { next }
   /^## / { in_labels = ($0 ~ /^## Labels[[:space:]]*$/); next }
-  in_labels' "$ROOT/docs/ISSUE_GUIDE.md" \
-  | grep -oE '`[^`]+`' | tr -d '`' | grep -vE '[/.]' | sort -u)"
+  in_labels
+  END { if (in_fence) exit 2 }' "$ROOT/docs/ISSUE_GUIDE.md")" \
+  || { echo "FAIL docs/ISSUE_GUIDE.md has an unclosed code fence; labels after it would go unchecked" >&2; failures=$((failures + 1)); }
+
+# Backticked names in that section. Paths and file names (anything with a / or .)
+# are prose references, not labels.
+documented="$(printf '%s\n' "$labels_section" | grep -oE '`[^`]+`' | tr -d '`' | grep -vE '[/.]' | sort -u)"
 
 # The name field of each "name|color|description" entry in the LABELS array.
 seeded="$(sed -nE 's/^[[:space:]]*"([^|"]+)\|.*/\1/p' "$ROOT/scripts/seed-labels.sh" | sort -u)"
 
-failures=0
 [ -n "$documented" ] || { echo "FAIL found no labels in docs/ISSUE_GUIDE.md; extraction is broken" >&2; failures=$((failures + 1)); }
 [ -n "$seeded" ] || { echo "FAIL found no labels in scripts/seed-labels.sh; extraction is broken" >&2; failures=$((failures + 1)); }
 
