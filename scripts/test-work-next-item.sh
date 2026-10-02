@@ -190,5 +190,14 @@ check "a dry run reports its selection and intended action" "printf '%s' \"\$dry
 check "a dry run shows the proposal it would post" "printf '%s' \"\$dry\" | grep -q 'full text of the proposal'"
 check "the dry run rules come before Step 0" "[ \$(grep -n '^## Dry run' '$CMD' | cut -d: -f1) -lt \$(grep -n '^## Step 0' '$CMD' | cut -d: -f1) ]"
 
+# --- A retry retires a leftover branch before claiming (#55) ---
+retire="$(printf '%s\n' "$step3" | grep -n -m1 'Retire a leftover branch' | cut -d: -f1)"
+claim="$(printf '%s\n' "$step3" | grep -n -m1 'add-label in-progress' | cut -d: -f1)"
+check "Step 3 retires a leftover branch before it claims" "[ -n '$retire' ] && [ -n '$claim' ] && [ '$retire' -lt '$claim' ]"
+check "it never treats an abandoned/ branch as leftover" "printf '%s' \"\$step3\" | grep -q 'never .abandoned/'"
+check "it saves before deleting, through Give up's steps" "printf '%s' \"\$step3\" | grep -q 'Give up\*\* steps 2, 4 and 5'"
+check "a failed save stops the run with the issue unclaimed" "printf '%s' \"\$step3\" | grep -q 'leaving the issue unclaimed'"
+check "the claim comment says where the old branch went" "printf '%s' \"\$step3\" | grep -q 'saved as abandoned/'"
+
 echo
 if [ "$failures" -eq 0 ]; then echo "all tests passed"; else echo "$failures test(s) failed" >&2; exit 1; fi

@@ -319,14 +319,30 @@ gh issue view <number> --json title,body
 
 ## Step 3 — Claim it
 
-First name any earlier rejections, so Step 0 never mistakes them for a rejection of
-this attempt. Run Step 0's closed listing; if it has unmerged PRs from
-`<type>/<number>-…` that no comment on the issue names yet (check as Step 0's case 2
-does), name them before claiming. Comment first: a run interrupted between the two
-then leaves an unclaimed issue, not a claim that Step 0 would hand back.
+A claim starts on a fresh branch. Any branch for this issue that exists now
+(`<type>/<number>-…`, local or remote, never `abandoned/…`) is left over from an
+earlier attempt: Step 0 dealt with any attempt still in flight, so this one belongs
+to a PR a human closed. Resuming it later would redo rejected work, and its name
+blocks Step 4. Look with Step 0's `git ls-remote --heads origin` and
+`git branch --list`.
+
+**Retire a leftover branch before claiming.** Check it out (the local copy if there
+is one, otherwise fetch the remote one), then run **Give up** steps 2, 4 and 5: save
+its commits under `abandoned/<number>-<short-sha>`, delete the remote copy only once
+it is proven to hold nothing unsaved, then delete the local branch and return to
+`main`. Skip Give up's step 1 (Step 1 left nothing uncommitted) and step 3 (this
+issue is being claimed, not released). Its failure rule still holds, but nothing is
+claimed yet: if the save fails, or step 4 keeps the remote copy, stop and report it,
+leaving the issue unclaimed. The name is still taken, so Step 4 would fail.
+
+Then name what came before, so Step 0 never mistakes it for a rejection of this
+attempt: any unmerged PRs from `<type>/<number>-…` in Step 0's closed listing that no
+comment on the issue names yet (check as Step 0's case 2 does), and the branch you
+retired. Comment first: a run interrupted between the two then leaves an unclaimed
+issue, not a claim that Step 0 would hand back. With nothing to name, just claim.
 
 ```bash
-gh issue comment <number> --body "Retrying this issue. Earlier PRs closed without merging: <closed PR urls>. This attempt starts fresh."
+gh issue comment <number> --body "Retrying this issue. Earlier PRs closed without merging: <closed PR urls, or none>. Leftover branch: <name> saved as abandoned/<number>-<short-sha> and deleted (or none). This attempt starts fresh."
 gh issue edit <number> --add-label in-progress
 ```
 
@@ -599,7 +615,7 @@ actionable issues remain, the loop will continue to the next one.
 
 ## Give up — keep the work, then release the issue
 
-Steps 5 and 6.5 both end here, and so does Step 0 for a rejected PR whose branch remains. The branch may be in any state: fresh, resumed by
+Steps 5 and 6.5 both end here, and so does Step 0 for a rejected PR whose branch remains. Step 3 borrows steps 2, 4 and 5 to retire a leftover branch. The branch may be in any state: fresh, resumed by
 Step 0 with commits, local-only, or already pushed. Giving up must never destroy
 work silently, and must not leave the issue's branch on the remote. So: save the
 work, then release the issue, then delete branches. An interruption after the
