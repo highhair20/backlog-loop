@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Check that this repo is set up for the backlog loop, and say how to fix what is
 # not. Read-only unless --fix, which applies only the safe, repeatable fixes: it
-# creates missing labels, copies the local allowlist example, and replaces the
+# creates missing labels, copies the local allowlist example, adds a link to
+# docs/ISSUE_GUIDE.md to the issue chooser, and replaces the
 # template repo's own CLAUDE.md with the project skeleton, moving the old file to
 # CLAUDE.md.template-own rather than discarding it. The ruleset is
 # never created here, because it needs your CI job names and admin rights; the
@@ -39,7 +40,9 @@ cd "$root" || exit 1
 
 failures=0
 warnings=0
-repo=""
+repo=""      # owner/repo
+repo_host="" # its host, for gh api --hostname
+repo_full="" # host/owner/repo, for --repo
 ok()   { echo "  ✓ $1"; }
 info() { echo "  - $1"; }
 bad()  { echo "  ✗ $1"; [ -z "${2:-}" ] || echo "      fix: $2"; failures=$((failures + 1)); }
@@ -218,7 +221,8 @@ check_template_version() {
   fi
 }
 
-# Sets $repo. Returns non-zero when the GitHub checks cannot run.
+# Sets $repo, $repo_host, and $repo_full. Returns non-zero when the GitHub checks
+# cannot run.
 check_github() {
   echo "GitHub"
   if ! command -v gh >/dev/null || ! command -v jq >/dev/null; then
@@ -233,12 +237,24 @@ check_github() {
     return 1
   fi
   ok "gh authenticated"
-  repo="$(gh repo view --json nameWithOwner --jq .nameWithOwner 2>/dev/null)"
-  if [ -z "$repo" ]; then
-    bad "no GitHub repository for this checkout" "gh repo create, or git remote add origin <url>"
+  # The same rule the loop uses (#17): with several remotes, the gh default or stop,
+  # so --fix never writes labels to a repo gh guessed. Its reason goes in the ✗ line.
+  local why
+  if ! why="$(mktemp)"; then
+    bad "could not create a temp file to resolve the repository"
     return 1
   fi
-  ok "repository $repo"
+  if ! repo_full="$(scripts/gh-repo.sh --with-host 2>"$why")"; then
+    bad "cannot tell which GitHub repository to check: $(tr '\n' ' ' <"$why")"
+    rm -f "$why"
+    return 1
+  fi
+  rm -f "$why"
+  # A bare owner/repo means github.com to gh, so the host travels with it: --repo
+  # takes $repo_full, and gh api takes --hostname $repo_host.
+  repo_host="${repo_full%%/*}"
+  repo="${repo_full#*/}"
+  ok "repository $repo ($repo_host)"
 }
 
 check_labels() {
@@ -248,7 +264,7 @@ check_labels() {
     return
   fi
   local have want missing=()
-  if ! have="$(gh label list --repo "$repo" --limit 1000 --json name --jq '.[].name' 2>/dev/null)"; then
+  if ! have="$(gh label list --repo "$repo_full" --limit 1000 --json name --jq '.[].name' 2>/dev/null)"; then
     bad "could not list the labels on $repo"
     return
   fi
@@ -258,10 +274,10 @@ check_labels() {
 
   if [ "${#missing[@]}" -eq 0 ]; then
     ok "every loop label exists"
-  elif [ "$fix" -eq 1 ] && scripts/seed-labels.sh "$repo" >/dev/null; then
+  elif [ "$fix" -eq 1 ] && scripts/seed-labels.sh "$repo_full" >/dev/null; then
     ok "created the missing labels: ${missing[*]}"
   else
-    bad "missing labels: ${missing[*]}" "scripts/setup.sh --fix  (or scripts/seed-labels.sh $repo)"
+    bad "missing labels: ${missing[*]}" "scripts/setup.sh --fix  (or scripts/seed-labels.sh $repo_full)"
   fi
 }
 
@@ -269,7 +285,7 @@ check_ruleset() {
   echo "Branch protection"
   local enforcement
   # A disabled or evaluate-only ruleset blocks nothing, so read its enforcement too.
-  if ! enforcement="$(gh api "repos/$repo/rulesets?includes_parents=false" --paginate 2>/dev/null \
+  if ! enforcement="$(gh api "repos/$repo/rulesets?includes_parents=false" --hostname "$repo_host" --paginate 2>/dev/null \
       | jq -r --arg name "$RULESET_NAME" '.[] | select(.name == $name) | .enforcement' | head -1)"; then
     warn "could not read the rulesets on $repo (needs admin; private repos need a paid plan)"
     return
@@ -285,6 +301,122 @@ check_ruleset() {
   fi
 }
 
+# Whether config file $1 links to the issue guide of the repo at URL $2, on any
+# branch. Case-insensitive, like GitHub's owner and repo names. Comments never count.
+guide_linked() { # guide_linked <config> <repo-url>
+  GUIDE_PREFIX="$2/blob/" awk '
+    BEGIN { prefix = tolower(ENVIRON["GUIDE_PREFIX"]); suffix = "/docs/issue_guide.md" }
+    /^[[:space:]]*#/ { next }
+    {
+      line = tolower($0)
+      sub(/[[:space:]]#.*/, "", line)
+      i = index(line, prefix)
+      if (!i) next
+      rest = substr(line, i + length(prefix))
+      j = index(rest, suffix)
+      if (j < 2 || substr(rest, 1, j - 1) ~ /[[:space:]]/) next
+      # Ends the path: end of line, a quote, "}", "#anchor", "?query", and so on.
+      after = substr(rest, j + length(suffix), 1)
+      if (after !~ /[a-z0-9._~%\/-]/) { found = 1; exit }
+    }
+    END { exit !found }
+  ' "$1"
+}
+
+# Prints config file $1 with an issue guide entry for URL $2 added as the first
+# contact link, keeping every other line, comments included (a YAML round trip
+# would drop them). Exits 3 when contact_links is written on one line ([...]) or
+# as a quoted key, which this text edit cannot extend safely.
+add_guide_link() { # add_guide_link <config> <guide-url>
+  GUIDE_URL="$2" awk '
+    function entry(indent) {
+      print indent "- name: Issue guide"
+      print indent "  url: " ENVIRON["GUIDE_URL"]
+      print indent "  about: How issues here are written and labelled. Read it before opening one."
+    }
+    { lines[NR] = $0 }
+    /^["\047]contact_links["\047][[:space:]]*:/ { quoted = 1 }
+    END {
+      if (quoted) exit 3
+      for (k = 1; k <= NR; k++) if (lines[k] ~ /^contact_links:/) break
+      if (k > NR) {
+        for (i = 1; i <= NR; i++) print lines[i]
+        print "contact_links:"
+        entry("  ")
+        exit 0
+      }
+      if (lines[k] !~ /^contact_links:[[:space:]]*(#.*)?$/) exit 3
+      # Indent like the first existing item, so the list stays one list.
+      indent = "  "
+      for (i = k + 1; i <= NR; i++) {
+        if (lines[i] ~ /^[[:space:]]*(#|$)/) continue
+        if (match(lines[i], /^[[:space:]]*- /)) indent = substr(lines[i], 1, RLENGTH - 2)
+        break
+      }
+      for (i = 1; i <= k; i++) print lines[i]
+      entry(indent)
+      for (i = k + 1; i <= NR; i++) print lines[i]
+    }
+  ' "$1"
+}
+
+# A link to docs/ISSUE_GUIDE.md in GitHub's "New issue" chooser (#37). Its URL is
+# absolute, so the template cannot ship it; --fix adds it for the resolved repo.
+check_issue_chooser() {
+  echo "Issue chooser"
+  local cfg="" f url guide tmp rc
+  for f in .github/ISSUE_TEMPLATE/config.yml .github/ISSUE_TEMPLATE/config.yaml; do
+    [ -f "$f" ] && { cfg="$f"; break; }
+  done
+  if [ -z "$cfg" ]; then
+    info "no .github/ISSUE_TEMPLATE/config.yml; skipped"
+    return
+  fi
+  if [ ! -f docs/ISSUE_GUIDE.md ]; then
+    info "no docs/ISSUE_GUIDE.md to link to; skipped"
+    return
+  fi
+  # The template seeds its config.yml into every repo, so its own URL must stay out.
+  if git remote get-url origin 2>/dev/null | grep -qE "$TEMPLATE_ORIGIN_RE"; then
+    info "this is the template repo, whose $cfg is seeded into other repos; skipped"
+    return
+  fi
+  local view branch
+  view="$(gh repo view "$repo_full" --json url,defaultBranchRef --jq '.url + " " + (.defaultBranchRef.name // "")' 2>/dev/null)" || view=""
+  url="${view%% *}"
+  branch="${view#* }"
+  if [ -z "$url" ] || [ "$url" = "$view" ]; then
+    warn "could not read the URL of $repo, so the issue chooser link was not checked"
+    return
+  fi
+  # A repo with no commits has no default branch yet; main is what it will get.
+  [ -n "$branch" ] || branch=main
+  if guide_linked "$cfg" "$url"; then
+    ok "the issue chooser links to docs/ISSUE_GUIDE.md"
+    return
+  fi
+  guide="$url/blob/$branch/docs/ISSUE_GUIDE.md"
+  if [ "$fix" -ne 1 ]; then
+    warn "the issue chooser has no link to docs/ISSUE_GUIDE.md" "scripts/setup.sh --fix  (adds it to contact_links in $cfg)"
+    return
+  fi
+  tmp="$(mktemp "$cfg.XXXXXX")" || { warn "could not create a temporary file beside $cfg"; return; }
+  add_guide_link "$cfg" "$guide" >"$tmp"; rc=$?
+  # Copied back rather than moved, so the file keeps its mode, not mktemp's 0600.
+  if [ "$rc" -eq 0 ] && guide_linked "$tmp" "$url" && cat "$tmp" >"$cfg"; then
+    rm -f "$tmp"
+    ok "added a link to docs/ISSUE_GUIDE.md to the issue chooser ($cfg)"
+    return
+  fi
+  rm -f "$tmp"
+  if [ "$rc" -eq 3 ]; then
+    warn "the issue chooser has no link to docs/ISSUE_GUIDE.md, and $cfg writes contact_links on one line or as a quoted key, which --fix does not edit" \
+      "add an entry to contact_links by hand, with url: $guide"
+  else
+    warn "could not add the issue guide link to $cfg" "add an entry to contact_links by hand, with url: $guide"
+  fi
+}
+
 main() {
   check_tools; echo
   check_claude_md; echo
@@ -294,6 +426,7 @@ main() {
   if check_github; then
     echo; check_labels
     echo; check_ruleset
+    echo; check_issue_chooser
   fi
   echo
   if [ "$failures" -eq 0 ]; then
