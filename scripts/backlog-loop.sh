@@ -87,15 +87,15 @@ fi
 # The sessions run gh without --repo and without a terminal, so with several remotes
 # and no gh default gh would pick the repo itself, often a fork's upstream (#17).
 # The helper prints its reason on stderr.
-if ! gh_repo="$("$HERE/gh-repo.sh")"; then
+if ! gh_repo="$("$HERE/gh-repo.sh" --with-host)"; then
   echo "✗ cannot tell which GitHub repository the loop would act on (see above)." >&2
   exit 1
 fi
-echo "Working the backlog of $gh_repo"
+echo "Working the backlog of ${gh_repo#*/}"
 # Pin every session's gh to that repo, so a remote or default changed mid-run cannot
-# move the loop to another one. GH_REPO takes [HOST/]OWNER/REPO; the host keeps
-# GitHub Enterprise repos working.
-export GH_REPO="${gh_host:+$gh_host/}$gh_repo"
+# move the loop to another one. The host is gh's, not origin's, so a GitHub
+# Enterprise repo on another remote stays on its own host.
+export GH_REPO="$gh_repo"
 
 mkdir -p "$LOG_DIR"
 

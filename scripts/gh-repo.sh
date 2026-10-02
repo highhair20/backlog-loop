@@ -11,8 +11,17 @@
 #   - several: the one `gh repo set-default` names, and stop when none is set.
 # Once this succeeds, every gh command in this checkout resolves to the repo printed.
 #
-# Usage: scripts/gh-repo.sh   (from inside the repo)
+# Usage: scripts/gh-repo.sh [--with-host]   (from inside the repo)
+#   --with-host  print HOST/OWNER/REPO, the form GH_REPO takes, with the host gh
+#                itself resolved (not origin's: the repo may be on another remote)
 set -uo pipefail
+
+with_host=0
+case "${1:-}" in
+  --with-host) with_host=1 ;;
+  "") ;;
+  *) echo "usage: $0 [--with-host]" >&2; exit 2 ;;
+esac
 
 remotes="$(git remote 2>/dev/null)" || { echo "not inside a git repository" >&2; exit 1; }
 count="$(printf '%s\n' "$remotes" | grep -c .)"
@@ -36,10 +45,17 @@ if [ "$count" -gt 1 ]; then
 fi
 
 # Unambiguous now: one remote, or a default gh will use. gh's message reaches
-# stderr if it fails.
-repo="$(gh repo view --json nameWithOwner --jq .nameWithOwner)" || exit 1
-if [ -z "$repo" ]; then
-  echo "gh repo view named no repository for this checkout" >&2
+# stderr if it fails. Its url (https://HOST/OWNER/REPO) gives the host and the
+# name from one answer.
+url="$(gh repo view --json url --jq .url)" || exit 1
+full="${url#*://}"
+case "$full" in
+  */*/*/*|/*|*//*|"$url") full="" ;;
+  */*/*) ;;
+  *) full="" ;;
+esac
+if [ -z "$full" ]; then
+  echo "gh repo view gave no usable repository URL for this checkout: '$url'" >&2
   exit 1
 fi
-echo "$repo"
+if [ "$with_host" -eq 1 ]; then echo "$full"; else echo "${full#*/}"; fi

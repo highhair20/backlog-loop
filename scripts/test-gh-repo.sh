@@ -21,9 +21,9 @@ case "$*" in
   "repo set-default --view")
     [ -n "${DEFAULT:-}" ] && echo "$DEFAULT" || echo "no default repository has been set" >&2
     exit "${DEFAULT_RC:-0}" ;;
-  "repo view --json nameWithOwner --jq .nameWithOwner")
+  "repo view --json url --jq .url")
     [ -n "${VIEW:-}" ] || { echo "gh says: none of the git remotes point to a known GitHub host" >&2; exit 1; }
-    echo "$VIEW" ;;
+    case "$VIEW" in *://*) echo "$VIEW" ;; *) echo "https://${VIEW_HOST:-github.com}/$VIEW" ;; esac ;;
   *) echo "fake gh: unexpected: $*" >&2; exit 2 ;;
 esac
 FAKE
@@ -69,6 +69,23 @@ check "a failed default lookup is not reported as unset" "printf '%s' \"\$err\" 
 resolve "origin upstream" DEFAULT=chosen/repo VIEW=chosen/repo
 check "several remotes with a default: prints the repo" "[ $rc -eq 0 ] && [ '$out' = chosen/repo ]"
 check "several remotes with a default: quiet on success" "[ -z \"\$err\" ]"
+
+# --with-host gives GH_REPO's form, with the host gh resolved, not origin's (PR #48
+# review): a GHE repo whose only remote is not named origin stays on its host.
+git init -q "$WORK/ghe"
+git -C "$WORK/ghe" remote add work https://ghe.example.com/o/r.git
+: >"$WORK/gh-calls"
+out="$(cd "$WORK/ghe" && env PATH="$WORK/bin:$PATH" VIEW=o/r VIEW_HOST=ghe.example.com "$HERE/gh-repo.sh" --with-host 2>"$WORK/err")"; rc=$?
+check "--with-host prints gh's host with the repo" "[ $rc -eq 0 ] && [ '$out' = ghe.example.com/o/r ]"
+resolve origin VIEW=o/r VIEW_HOST=ghe.example.com
+check "without --with-host the host is dropped" "[ $rc -eq 0 ] && [ '$out' = o/r ]"
+for bad_url in "https://github.com/o" "https://github.com/o/r/extra" "not-a-url"; do
+  resolve origin VIEW="$bad_url"
+  check "rejects an unusable URL from gh: $bad_url" "[ $rc -eq 1 ] && [ -z '$out' ] && printf '%s' \"\$err\" | grep -q 'no usable repository URL'"
+done
+resolve origin VIEW=o/r
+(cd "$WORK/repo$n" && "$HERE/gh-repo.sh" --bogus >/dev/null 2>&1); rc=$?
+check "rejects an unknown argument" "[ $rc -eq 2 ]"
 
 # No remote: no repo, and the reason says so.
 resolve ""

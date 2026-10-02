@@ -33,7 +33,7 @@ case "\$*" in
   "auth status") exit \${FAKE_BARE_AUTH_RC:-\${FAKE_AUTH_RC:-0}} ;;
   "auth status --hostname github.com"|"auth status --hostname ghe.example.com") exit \${FAKE_AUTH_RC:-0} ;;
   "repo set-default --view") echo "\${FAKE_DEFAULT:-}" ;;
-  "repo view"*) echo o/r ;;
+  "repo view --json url --jq .url") echo https://github.com/o/r ;;
   "label list"*) cat "$dir/.fake/labels" ;;
   "label create"*) echo "\$3" >>"$dir/.fake/labels"; echo "\$*" >>"$dir/.fake/label-calls" ;;
   "api repos/o/r/rulesets?includes_parents=false"*) cat "$dir/.fake/rulesets" ;;

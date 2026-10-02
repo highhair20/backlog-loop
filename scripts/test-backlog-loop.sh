@@ -40,7 +40,7 @@ setup() {
   printf '#!/usr/bin/env bash\n[ -f "%s/extra.json" ] || echo "[]" >"%s/extra.json"\njq -n --argjson n "$(cat "%s/count")" --arg lab "$(cat "%s/label" 2>/dev/null || echo P2)" --slurpfile extra "%s/extra.json" '"'"'[range($n) | {labels: [{name: $lab}]}] + $extra[0]'"'"'\n' "$dir" "$dir" "$dir" "$dir" "$dir" >"$dir/bin/issues-json"
   # gh-base answers the repo lookups gh-repo.sh makes (a default only when the
   # fixture has a `default` file); tests that replace gh fall through to it.
-  printf '#!/usr/bin/env bash\ncase "$*" in\n  "repo set-default --view") cat "%s/default" 2>/dev/null; exit 0 ;;\n  "repo view"*) echo o/r; exit 0 ;;\nesac\n"%s/bin/issues-json"\n' "$dir" "$dir" >"$dir/bin/gh-base"
+  printf '#!/usr/bin/env bash\ncase "$*" in\n  "repo set-default --view") cat "%s/default" 2>/dev/null; exit 0 ;;\n  "repo view --json url --jq .url") echo https://github.com/o/r; exit 0 ;;\nesac\n"%s/bin/issues-json"\n' "$dir" "$dir" >"$dir/bin/gh-base"
   printf '#!/usr/bin/env bash\nexec "%s/bin/gh-base" "$@"\n' "$dir" >"$dir/bin/gh"
   {
     printf '#!/usr/bin/env bash\ncd "%s" || exit 1\necho x >>calls\n' "$dir"
