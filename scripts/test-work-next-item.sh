@@ -222,9 +222,12 @@ check "BACKLOG.md says .claude/ issues are better no-auto-heal" "grep -q 'no-aut
 
 # --- A refusal every issue would hit stops the run instead of giving up (#60) ---
 check "a refused Verify or standard command is a setup problem" "printf '%s' \"\$guard\" | grep -q 'setup problem' && printf '%s' \"\$guard\" | grep -q '## Verify'"
-check "a setup problem does not follow Give up" "printf '%s' \"\$guard\" | grep -q 'do not follow Give up'"
+check "a setup problem does not follow Give up" "printf '%s' \"\$guard\" | grep -q 'follow Give up: stop and report'"
 check "a setup problem names the allow rule it needs" "printf '%s' \"\$guard\" | grep -q 'allow rule'"
-check "a setup problem keeps the claim, so the driver halts on no progress" "printf '%s' \"\$guard\" | grep -qi 'keep the claim'"
+check "a setup problem keeps the claim, so the driver halts on no progress" "printf '%s' \"\$guard\" | grep -q 'claim and commit any work to the branch'"
+check "Give up's opening keeps setup problems out" "printf '%s' \"\$give_up\" | grep -q 'a setup problem never comes here'"
+check "a setup problem covers every command an iteration runs, helpers included" "printf '%s' \"\$guard\" | grep -q '.claude/hooks/. helper'"
+check "a setup problem with no branch releases the claim" "printf '%s' \"\$guard\" | grep -q 'release the claim instead'"
 check "a refusal specific to the issue still follows Give up" "printf '%s' \"\$guard\" | grep -qi 'specific to this issue'"
 
 echo

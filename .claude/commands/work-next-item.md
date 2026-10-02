@@ -47,13 +47,17 @@ or killed (closed terminal) at any moment — possibly mid-issue. Therefore:
   <branch>`, not a bare `git push`). When none exists, an unattended run has no one to
   approve it: never end the turn asking for approval or for a re-run. Then decide
   whose problem it is:
-  - **A setup problem:** the refused call is a `## Verify` command, or a `gh` or `git`
-    command this file tells every iteration to run. Every issue would hit it, so
-    giving up would mark the whole backlog `needs-attention`, one issue at a time.
-    So do not follow Give up: stop and report the refused command and the allow rule
-    `.claude/settings.local.json` needs for it. Keep the claim, and commit any work to
-    the issue's branch if there is one, so Step 0 resumes it once the rule is added;
-    `scripts/backlog-loop.sh` then sees no progress and halts the run.
+  - **A setup problem:** the refused call is a `## Verify` command, or any command
+    this file or a hook tells every iteration to run (a `gh` or `git` command, a
+    `scripts/` or `.claude/hooks/` helper). Every issue would hit it, so giving up
+    would mark the whole backlog `needs-attention`, one issue at a time. So do not
+    follow Give up: stop and report the refused command and the allow rule
+    `.claude/settings.local.json` needs for it. If the issue has a branch, keep the
+    claim and commit any work to the branch, so Step 0 resumes it once the rule is
+    added. Without one (Steps 3 to 3.7), release the claim instead
+    (`gh issue edit <number> --remove-label in-progress`): there is nothing to resume.
+    Either way `scripts/backlog-loop.sh` sees no progress and halts the run; `/loop`
+    or a routine stops at the same refusal each run until the rule is added.
   - **Specific to this issue,** such as a refused edit to a protected path, or a
     command only this issue needs: with the issue claimed, follow **Give up**, naming
     the refused command or path in its comment, so the issue gets `needs-attention`
@@ -664,7 +668,7 @@ actionable issues remain, the loop will continue to the next one.
 
 ## Give up — keep the work, then release the issue
 
-Steps 5 and 6.5 both end here, and so does Step 0 for a rejected PR whose branch remains, and any refused tool call after the claim (see the guardrails). Step 3 borrows steps 2, 4 and 5 to retire a leftover branch. The branch may be in any state: fresh, resumed by
+Steps 5 and 6.5 both end here, and so does Step 0 for a rejected PR whose branch remains, and a refused tool call specific to the issue after the claim (a setup problem never comes here; see the guardrails). Step 3 borrows steps 2, 4 and 5 to retire a leftover branch. The branch may be in any state: fresh, resumed by
 Step 0 with commits, local-only, or already pushed. Giving up must never destroy
 work silently, and must not leave the issue's branch on the remote. So: save the
 work, then release the issue, then delete branches. An interruption after the
