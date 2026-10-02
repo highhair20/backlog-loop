@@ -23,13 +23,13 @@ beyond the tools you already use.
 
 | Capability | What you get |
 |---|---|
-| **Merge and push guardrails** | A committed `.claude/settings.json` that denies merging PRs (CLI, REST API, and GitHub MCP tools), pushing to `main`, force pushes, tag pushes, and the GitHub MCP file-write tools. Because it is committed, it applies to cloud and headless sessions too. |
+| **Merge and push guardrails** | A committed `.claude/settings.json` that denies merging PRs (CLI, REST API, and GitHub MCP tools), pushing to `main`, force pushes, tag pushes, and the GitHub MCP file-write tools. Because it is committed, it applies to headless sessions too, and to cloud sessions that load the repo's settings; check a scheduled routine with the first dry run in [`docs/ROUTINE.md`](docs/ROUTINE.md#the-first-dry-run). |
 | **Autonomous backlog loop** | `/work-next-item` takes the highest-priority open issue, checks that the issue's diagnosis matches the code, derives the full scope from the code rather than the issue text, implements it test-first, runs your verify commands, and opens a PR assigned to you. One issue, one branch, one PR — never merged. |
 | **Scheduled routine** | [`docs/ROUTINE.md`](docs/ROUTINE.md) sets the loop up as a Claude Code routine that works one issue an hour in the cloud. A proposal gate in `CLAUDE.md` holds hand-written issues for your approval (`heal:approved`) before any code, and `/work-next-item --dry-run` shows what a run would do while writing nothing. |
 | **Cold-context driver** | `scripts/backlog-loop.sh` runs one issue per fresh `claude -p` session, so a long backlog never exhausts a context window. All state lives in git and issue labels, so it is safe to stop and resume at any time. |
 | **Specialist reviewers** | Two reviewer agents, `pr-test-analyzer` and `silent-failure-hunter`, that the loop runs before opening each PR in any repo whose `CLAUDE.md` lists them under `## Specialist reviewers`. The skeleton `CLAUDE.md` does; a repo synced with an existing `CLAUDE.md` must add that table (copy it from the template). They are vendored from [ECC](https://github.com/affaan-m/ECC) (MIT) by `scripts/vendor-agents.sh`, which adds your repo's context, so they work in cloud sessions that load no plugins. Optional stack reviewers (`go-reviewer`, `database-reviewer`, `typescript-reviewer`, `python-reviewer`) ship off by default in `.claude/agent-context/optional/`; see [`docs/BACKLOG.md`](docs/BACKLOG.md#reviewers) to enable one. |
 | **PR review loop** | Hooks that start a `/code-review` when a PR is opened and keep the session from ending until the review's critical and high findings are resolved — with a round cap and timeouts so it cannot run forever. |
-| **Issue conventions** | Feature and bug issue forms (the key sections are required fields) and a guide (`docs/ISSUE_GUIDE.md`) that make each issue a self-contained work item an agent can pick up cold, plus a script that creates the priority and status labels the loop uses. |
+| **Issue conventions** | Feature and bug issue forms (the key sections are required fields) and a guide (`docs/ISSUE_GUIDE.md`) that make each issue a self-contained work item an agent can pick up cold, plus a script that creates the priority, status, and proposal-gate labels the loop uses. |
 | **CI skeleton** | A workflow that runs on branches and PRs with read-only permissions, and fails until you configure it — so a new repo never shows a green check that tests nothing. Actions are pinned to commit SHAs, and Dependabot keeps the pins current. |
 | **Repo defaults** | A PR template for PRs opened by hand, and an `.editorconfig` with LF endings, final newlines, and tabs where a format requires them. |
 | **Sync for existing repos** | `scripts/sync-guardrails.sh` brings any existing repository up to date with this template without overwriting the parts you have customised. |
@@ -41,6 +41,8 @@ flowchart LR
   A[You file an issue<br/>P0–P3 label] --> B["/work-next-item<br/>claims it"]
   B --> C[Verify premise<br/>and scope vs. code]
   C --> D[Test-first implementation<br/>until Verify passes]
+  C -. proposal gate on,<br/>not yet approved .-> P[Proposal comment<br/>for you to approve]
+  P -. you add heal:approved .-> B
   D --> E[Push branch,<br/>open PR assigned to you]
   E --> F[Review loop until no<br/>critical/high findings]
   F --> G([You review and merge])
@@ -170,9 +172,12 @@ cp .claude/settings.local.json.example .claude/settings.local.json
 
 The example covers every `gh` and `git` command `/work-next-item` runs; a test
 keeps the two in step. The committed deny rules still win over any allow rule, so
-merges and pushes to `main` stay blocked. If a command is missing, the first item
-stops early and the driver reports "no progress"; that item's log in `.loop-logs/`
-names the refused command.
+merges and pushes to `main` stay blocked. If a command every
+iteration runs, or a Verify command, is missing, the first item stops without giving up,
+and the driver reports "no progress"; that item's log in `.loop-logs/` names the
+refused command and the allow rule to add. A refusal only one issue meets, such
+as an edit under `.claude/`, gives that issue up as `needs-attention` instead, and
+the loop moves on.
 
 **One driver at a time.** `backlog-loop.sh` holds a lock in the git directory
 (`.git/backlog-loop.lock`) while it runs, so a second driver in the same clone
@@ -181,8 +186,10 @@ reclaimed automatically, because it records its owner's PID. If a run is refused
 you know no loop is running, the message gives the `rm -rf` that clears the lock.
 
 The loop manages these status labels: `in-progress`, `in-review`, `blocked`,
-`needs-infra`, and `needs-attention` (it gave up and a human should look). See
-[`docs/ISSUE_GUIDE.md`](docs/ISSUE_GUIDE.md) for the full set.
+`needs-infra`, and `needs-attention` (it gave up and a human should look). With the
+proposal gate on, it also uses `heal:proposed` (a proposal awaits you) and
+`heal:approved` (you approved it). It never selects an issue labelled `no-auto-heal`.
+See [`docs/ISSUE_GUIDE.md`](docs/ISSUE_GUIDE.md) for the full set.
 
 ## Safety model
 
@@ -191,7 +198,9 @@ The guardrails are layered, from softest to hardest:
 1. **Instructions** — `CLAUDE.md` and the loop command say never to merge or push
    to `main`.
 2. **Permission rules** — `.claude/settings.json` denies those commands and tools
-   outright, in every local, headless, and cloud session.
+   outright, in every local and headless session, and in cloud sessions that load
+   the repo's settings. Check a scheduled routine before relying on them there
+   ([`docs/ROUTINE.md`](docs/ROUTINE.md#the-first-dry-run)).
 3. **CI** — required checks run on every PR.
 4. **Branch ruleset** — GitHub itself refuses a direct push or unreviewed merge to
    `main`. You set this up once per repo.
@@ -216,6 +225,12 @@ The guardrails are layered, from softest to hardest:
 - The review hook finds the new PR's URL in `gh pr create`'s output. If you capture
   that output (`URL=$(gh pr create …)`), no review loop opens; start one by hand
   with `.claude/hooks/pr-review-state.sh seed <pr> <url>`.
+- A headless session cannot edit `.claude/`, so the loop cannot work an issue that
+  changes the loop itself. Label such issues `no-auto-heal` and work them in an
+  interactive session.
+- Run one loop per repository at a time, local or scheduled. Step 0 treats any
+  `in-progress` issue as a run that died, so two runners would recover each other's
+  work ([#57](https://github.com/highhair20/claude-code-repo-template/issues/57)).
 - The sync only ever adds deny rules. A rule later removed from the template stays
   in repos that already have it; delete it by hand.
 - Known issues and planned improvements are tracked in
