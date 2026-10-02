@@ -143,8 +143,8 @@ reset-db $env: _require-env
     ./scripts/reset-db.sh "$env"
 ```
 
-With npm scripts, chain a confirm script before the real one:
-`"reset-db": "./scripts/confirm.sh && ./scripts/reset-db.sh"`.
+With npm scripts, which pass arguments only to the last command in a chain, write
+one script per target: `"reset-db:dev": "./scripts/confirm.sh dev && ./scripts/reset-db.sh dev"`.
 
 The prompt is a speed bump, not a lock: an agent could pipe the answer in. Also
 deny the recipe in `.claude/settings.json` (for example `Bash(just reset-db*)`), so
