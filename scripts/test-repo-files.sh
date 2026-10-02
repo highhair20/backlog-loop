@@ -66,6 +66,61 @@ check "the Jest snippet makes jq fail on a missing field" "grep -q 'jq -e ' '$gu
 # The README's file list is how a reader finds the guide (#14 acceptance criterion).
 check "README's file list includes the hardening guide" "grep -qE '^docs/CI_HARDENING\\.md[[:space:]]' '$ROOT/README.md'"
 
+# --- deploy guide: pinned snippets, and a parity script that really compares ---
+deploy="$ROOT/docs/DEPLOYING.md"
+deploy_uses="$(grep -hE '^[[:space:]-]*uses:' "$deploy" 2>/dev/null || true)"
+check "deploy guide has at least one action snippet to check" "[ -n \"\$deploy_uses\" ]"
+deploy_unpinned="$(printf '%s\n' "$deploy_uses" | grep -vE 'uses:[[:space:]]*[^@[:space:]]+@[0-9a-f]{40}[[:space:]]+#[[:space:]]*v[0-9]' || true)"
+check "every action in the deploy guide is pinned to a SHA with a version comment" "[ -z \"\$deploy_unpinned\" ]"
+[ -z "$deploy_unpinned" ] || printf '     unpinned: %s\n' "$deploy_unpinned" >&2
+check "deploy guide: dev deploys on push to main" "grep -qE '^    branches: \\[main\\]' '$deploy'"
+check "deploy guide: prod deploys on a v* tag" "grep -qF \"tags: ['v*']\" '$deploy'"
+check "deploy guide says the loop is denied tag pushes" "grep -qF 'git push * v*' '$deploy'"
+check "deploy guide gives the dev-first example" "grep -q '2026-09-30' '$deploy'"
+check "deploy guide names no cloud vendor in its snippets" "! awk '/^\`\`\`/{ c = !c; next } c' '$deploy' | grep -qiE 'aws|gcp|gcloud|azure'"
+
+# Run the guide's parity script against sample workflows: the check is only worth
+# copying if a missing unit or a missing list really fails it.
+parity="$(awk '/^```bash/{ y = 1; next } y && /^```/{ exit } y' "$deploy" 2>/dev/null)"
+check "extracted the parity script from the deploy guide" "printf '%s' \"\$parity\" | grep -q 'units()'"
+parity_rc() { # parity_rc <dev unit line> <prod unit line>: exit status of the script
+  local d; d="$(mktemp -d)"
+  printf 'jobs:\n  deploy:\n    strategy:\n      matrix:\n%s\n' "$1" >"$d/dev.yml"
+  printf 'jobs:\n  deploy:\n    strategy:\n      matrix:\n%s\n' "$2" >"$d/prod.yml"
+  bash -c "$parity" parity "$d/dev.yml" "$d/prod.yml" >/dev/null 2>&1
+  local rc=$?; rm -rf "$d"; return "$rc"
+}
+check "parity passes the same units" "parity_rc '        unit: [api, worker]' '        unit: [api, worker]'"
+check "parity ignores order, quotes, and a trailing comment" "parity_rc '        unit: [api, worker]' \"        unit: ['worker', \\\"api\\\"]  # prod\""
+# Joined into one string, these two lists would be equal ("abc").
+check "parity compares unit names, not their concatenation" "! parity_rc '        unit: [ab, c]' '        unit: [a, bc]'"
+check "parity fails a unit missing from prod" "! parity_rc '        unit: [api, worker]' '        unit: [api]'"
+check "parity fails a unit missing from dev" "! parity_rc '        unit: [api]' '        unit: [api, worker]'"
+check "parity fails when neither workflow has a unit list" "! parity_rc '        os: [linux]' '        os: [linux]'"
+check "parity fails an empty unit list" "! parity_rc '        unit: []' '        unit: []'"
+# shellcheck disable=SC2034  # read inside check's eval string
+missing_out="$(bash -c "$parity" parity /nonexistent/dev.yml /nonexistent/prod.yml 2>&1)"
+missing_rc=$?
+check "parity fails a missing workflow file, naming it" "[ '$missing_rc' -ne 0 ] && printf '%s' \"\$missing_out\" | grep -q 'no such workflow: /nonexistent/dev.yml'"
+check "parity reads a list whose comment holds brackets" "parity_rc '        unit: [api]  # see [docs]' '        unit: [api]'"
+# The guide's own two workflow snippets must pass its own script.
+snippets_rc() {
+  local d; d="$(mktemp -d)"
+  awk '/^```yaml/{ n++; y = 1; next } y && /^```/{ y = 0 } y && n == 1' "$deploy" >"$d/dev.yml"
+  awk '/^```yaml/{ n++; y = 1; next } y && /^```/{ y = 0 } y && n == 2' "$deploy" >"$d/prod.yml"
+  bash -c "$parity" parity "$d/dev.yml" "$d/prod.yml" >/dev/null 2>&1
+  local rc=$?; rm -rf "$d"; return "$rc"
+}
+check "the guide's dev and prod snippets pass its parity script" "snippets_rc"
+# The guide cites these deny rules; it must stop being true only by failing here.
+for rule in 'Bash(git push * v*)' 'Bash(git push *--tags*)' 'Bash(git push *refs/tags/*)'; do
+  check "settings.json denies $rule, as the deploy guide says" "jq -e --arg r '$rule' '.permissions.deny | index(\$r)' '$ROOT/.claude/settings.json' >/dev/null"
+done
+
+check "README's file list includes the deploy guide" "grep -qE '^docs/DEPLOYING\\.md[[:space:]]' '$ROOT/README.md'"
+check "README links the deploy guide" "grep -qF '(docs/DEPLOYING.md)' '$ROOT/README.md'"
+check "BACKLOG.md links the deploy guide" "grep -qF '(./DEPLOYING.md)' '$ROOT/docs/BACKLOG.md'"
+
 # --- dependabot: updates the pinned actions ---
 check "dependabot.yml parses and updates github-actions" \
   "yaml 'd = YAML.load_file(ARGV[0]); exit(d[\"version\"] == 2 && d[\"updates\"].any? { |u| u[\"package-ecosystem\"] == \"github-actions\" } ? 0 : 1)' '$ROOT/.github/dependabot.yml'"

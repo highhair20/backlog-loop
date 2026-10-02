@@ -45,6 +45,7 @@ SEEDED=(
   .github/dependabot.yml
   docs/BACKLOG.md
   docs/CI_HARDENING.md
+  docs/DEPLOYING.md
   .claude/agent-context/_common.md
   .claude/agent-context/pr-test-analyzer.md
   .claude/agent-context/silent-failure-hunter.md

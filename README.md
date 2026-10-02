@@ -124,7 +124,7 @@ It treats files three ways, so re-running it later is safe:
 | Kind | Files | On every sync |
 |---|---|---|
 | **Managed** | review hooks, `work-next-item.md`, `backlog-loop.sh`, `check-verify-section.sh`, `gh-auth-check.sh`, `loop-lock.sh`, `protect-main.sh`, `seed-labels.sh`, `setup.sh`, `vendor-agents.sh`, `settings.local.json.example` | Overwritten. These hold no project-specific content; put customisation in `CLAUDE.md`. |
-| **Seeded** | `CLAUDE.md` (the skeleton in `templates/`), CI workflow, issue forms, PR template, `dependabot.yml`, `docs/ISSUE_GUIDE.md`, `docs/BACKLOG.md`, `docs/CI_HARDENING.md`, the reviewer agents and their `.claude/agent-context/`, the optional stack reviewer contexts in `.claude/agent-context/optional/` | Copied only if missing. Yours to edit. Nothing is added beside an equivalent you already have: the placeholder CI only goes into a repo with no workflows, the issue forms only into one with no issue templates of its own, the PR template only if GitHub finds none anywhere, and `dependabot.yml` not beside a `dependabot.yaml`. `.editorconfig` is never synced; its indent defaults could change how editors treat existing code. |
+| **Seeded** | `CLAUDE.md` (the skeleton in `templates/`), CI workflow, issue forms, PR template, `dependabot.yml`, `docs/ISSUE_GUIDE.md`, `docs/BACKLOG.md`, `docs/CI_HARDENING.md`, `docs/DEPLOYING.md`, the reviewer agents and their `.claude/agent-context/`, the optional stack reviewer contexts in `.claude/agent-context/optional/` | Copied only if missing. Yours to edit. Nothing is added beside an equivalent you already have: the placeholder CI only goes into a repo with no workflows, the issue forms only into one with no issue templates of its own, the PR template only if GitHub finds none anywhere, and `dependabot.yml` not beside a `dependabot.yaml`. `.editorconfig` is never synced; its indent defaults could change how editors treat existing code. |
 | **Merged** | `.claude/settings.json`, `.gitignore` | The template's deny rules, hooks, and ignore lines are added; yours are kept. |
 
 Each sync also writes `.claude/template-version`: the template commit your repo now
@@ -192,7 +192,9 @@ The guardrails are layered, from softest to hardest:
   `-C`.
 - The rule that blocks pushing a release tag (`git push origin v1.2.3`, because tags
   often trigger deploys) also blocks pushing any branch whose name starts with `v`.
-  The loop's `<type>/<issue>-<slug>` branch names never do.
+  The loop's `<type>/<issue>-<slug>` branch names never do. The deploy pattern this
+  rule assumes, and a test that keeps dev and prod deploying the same things, is in
+  [`docs/DEPLOYING.md`](docs/DEPLOYING.md).
 - The review hook finds the new PR's URL in `gh pr create`'s output. If you capture
   that output (`URL=$(gh pr create …)`), no review loop opens; start one by hand
   with `.claude/hooks/pr-review-state.sh seed <pr> <url>`.
@@ -218,6 +220,7 @@ The guardrails are layered, from softest to hardest:
 docs/ISSUE_GUIDE.md          how to write issues the loop can work
 docs/BACKLOG.md              operating the loop: drivers, one iteration, definition of done, why each guardrail
 docs/CI_HARDENING.md         CI patterns that keep a green check honest, with snippets
+docs/DEPLOYING.md            dev on main, prod on a v* tag, and a test that keeps the two in step
 scripts/
   backlog-loop.sh            unattended driver
   check-verify-section.sh    refuses to run without Verify commands
