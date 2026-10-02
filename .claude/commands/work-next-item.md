@@ -41,13 +41,18 @@ or killed (closed terminal) at any moment — possibly mid-issue. Therefore:
 - Prefer the Read/Grep/Glob/Edit/Write tools over shell `cat`/`grep`/`sed`/`find`.
   This loop runs headless under a tight bash allowlist; dedicated tools never need
   bash permission, so the iteration won't stall on a denied shell command.
-- **A tool call refused by the permission settings is a blocker, not a question.**
-  An unattended run has no one to approve it, so never end the turn asking for
-  approval or for a re-run. Once an issue is claimed, follow **Give up**, naming the
-  refused command or path in its comment, so the issue gets `needs-attention` and the
-  loop moves on; before Step 4 there is no branch, so do only its step 3. Before
-  anything is claimed, stop and report it. This is about the settings refusing a call;
-  a human declining a prompt in a live session can still tell you what to do instead.
+- **A tool call refused by the permission settings is a blocker only when no
+  permitted way round it exists.** First try one: a dedicated tool instead of a shell
+  command, or the command spelled as this file writes it (`git push -u origin
+  <branch>`, not a bare `git push`). When none exists, such as a refused edit to a
+  protected path, an unattended run has no one to approve it: never end the turn
+  asking for approval or for a re-run. With the issue claimed, follow **Give up**,
+  naming the refused command or path in its comment, so the issue gets
+  `needs-attention` and the loop moves on. In Steps 3 to 3.7 the issue has no branch
+  yet, so do only Give up's step 3; Step 0 works on a claimed issue that may have one,
+  so it follows Give up in full. Before anything is claimed, stop and report it. This
+  is about the settings refusing a call; a human declining a prompt in a live session
+  can still tell you what to do instead.
 
 ## The repo contract (CLAUDE.md sections this command reads)
 
