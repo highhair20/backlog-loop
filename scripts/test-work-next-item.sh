@@ -136,6 +136,12 @@ check "a closed PR already named in a comment is not rejected again" "printf '%s
 check "a rejected PR's remaining branch goes through Give up" "printf '%s' \"\$rejected_case\" | grep -q 'follow \\*\\*Give up\\*\\*'"
 check "the closed listing is not cut short by merged PRs" "grep 'gh pr list --state closed' '$CMD' | grep -q -- '--limit 1000'"
 check "the MCP closed listing pages" "grep '^| .gh pr list --state closed' '$CMD' | grep -q 'page until a short page'"
+# Review round 4 of #47.
+# shellcheck disable=SC2034  # read inside check's eval strings
+step3="$(section 'Step 3 ')"
+check "the claim names earlier closed PRs before adding in-progress" "printf '%s' \"\$step3\" | grep -q 'Earlier PRs closed without merging' && [ \$(printf '%s\n' \"\$step3\" | grep -n 'gh issue comment' | cut -d: -f1) -lt \$(printf '%s\n' \"\$step3\" | grep -n 'add-label in-progress' | cut -d: -f1) ]"
+check "a closed PR's url is matched whole, not as a prefix" "printf '%s' \"\$rejected_case\" | grep -q 'not a prefix'"
+check "a rejection with no branch stashes a dirty tree" "printf '%s' \"\$rejected_case\" | grep -q 'stash the edits'"
 check "the MCP table covers the closed-PR listing" "grep -q '^| .gh pr list --state closed' '$CMD'"
 
 echo

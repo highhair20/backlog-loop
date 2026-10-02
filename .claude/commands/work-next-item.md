@@ -156,9 +156,10 @@ Then:
 2. **No open PR, but a closed, unmerged PR from `#N`'s branch name** (`<type>/${N}-…`,
    in the closed listing) **that no comment on `#N` names yet** → a human rejected the
    work, and the loop has not handed it back. A closed PR whose url already appears in
-   the issue's comments was handed back before and a human re-queued the issue: ignore
-   that PR and go on to case 3 or 4 (it is a retry, perhaps one stopped before Step 4
-   created its branch).
+   the issue's comments was closed before this attempt began: either it was handed
+   back here, or Step 3 named it when it claimed the issue again. Ignore that PR and go
+   on to case 3 or 4 (this is a retry, perhaps one stopped before Step 4 created its
+   branch). Match the whole url, not a prefix: `…/pull/4` must not match `…/pull/47`.
    ```bash
    gh issue view ${N} --json comments --jq '.comments[].body'
    ```
@@ -174,6 +175,8 @@ Then:
      gh issue comment ${N} --body "The loop's PR for this issue was closed without merging: <closed PR url>. Not retrying it automatically; remove needs-attention to queue it again."
      gh issue edit ${N} --remove-label in-progress --add-label needs-attention
      ```
+     If `git status --porcelain` is then non-empty, stash the edits as case 4 does, so
+     Step 1 starts clean.
 3. **A branch exists (remote or local-only) but no open PR** → work was underway.
    Resume *that* issue as this iteration (do not pick a new one). First, if an earlier
    run stopped in the middle of a merge (`git rev-parse -q --verify MERGE_HEAD` prints
@@ -270,7 +273,14 @@ gh issue view <number> --json title,body
 
 ## Step 3 — Claim it
 
+First name any earlier rejections, so Step 0 never mistakes them for a rejection of
+this attempt. Run Step 0's closed listing; if it has unmerged PRs from
+`<type>/<number>-…` that no comment on the issue names yet (check as Step 0's case 2
+does), name them before claiming. Comment first: a run interrupted between the two
+then leaves an unclaimed issue, not a claim that Step 0 would hand back.
+
 ```bash
+gh issue comment <number> --body "Retrying this issue. Earlier PRs closed without merging: <closed PR urls>. This attempt starts fresh."
 gh issue edit <number> --add-label in-progress
 ```
 
