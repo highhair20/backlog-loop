@@ -33,10 +33,10 @@ case "\$*" in
   "auth status") exit \${FAKE_BARE_AUTH_RC:-\${FAKE_AUTH_RC:-0}} ;;
   "auth status --hostname github.com"|"auth status --hostname ghe.example.com") exit \${FAKE_AUTH_RC:-0} ;;
   "repo set-default --view") echo "\${FAKE_DEFAULT:-}" ;;
-  "repo view --json url --jq .url") echo https://github.com/o/r ;;
-  "label list"*) cat "$dir/.fake/labels" ;;
+  "repo view --json url --jq .url") echo "https://\${FAKE_HOST:-github.com}/o/r" ;;
+  "label list"*) echo "\$*" >>"$dir/.fake/label-calls"; cat "$dir/.fake/labels" ;;
   "label create"*) echo "\$3" >>"$dir/.fake/labels"; echo "\$*" >>"$dir/.fake/label-calls" ;;
-  "api repos/o/r/rulesets?includes_parents=false"*) cat "$dir/.fake/rulesets" ;;
+  "api repos/o/r/rulesets?includes_parents=false"*) echo "\$*" >>"$dir/.fake/api-calls"; cat "$dir/.fake/rulesets" ;;
   *) echo "fake gh: unexpected: \$*" >&2; exit 1 ;;
 esac
 FAKE
@@ -161,8 +161,17 @@ check "several remotes with a gh default checks that repo" "[ $rc -eq 0 ] && gre
 W="$(fresh_repo chosenfix)"
 git -C "$W" remote add upstream https://github.com/up/r.git
 FAKE_DEFAULT=o/r run "$W" --fix
-check "--fix with a gh default creates the labels" "[ -s '$W/.fake/label-calls' ] && grep -q 'repository o/r' '$W/.fake/out'"
-check "--fix creates every label on the printed repo" "! grep -v -- '--repo o/r' '$W/.fake/label-calls'"
+check "--fix with a gh default creates the labels" "grep -q '^label create' '$W/.fake/label-calls' && grep -q 'repository o/r (github.com)' '$W/.fake/out'"
+check "--fix creates every label on the printed repo" "! grep -v -- '--repo github.com/o/r' '$W/.fake/label-calls'"
+
+# A bare owner/repo means github.com to gh, so on GitHub Enterprise the host must
+# travel with it (PR #48 review): labels and rulesets are read and written there.
+E="$(fresh_repo ghefix)"
+git -C "$E" remote set-url origin https://ghe.example.com/o/r.git
+FAKE_HOST=ghe.example.com run "$E" --fix
+check "GHE: names the repo with its host" "grep -q 'repository o/r (ghe.example.com)' '$E/.fake/out'"
+check "GHE: every label call targets the GHE repo" "grep -q '^label create' '$E/.fake/label-calls' && ! grep -v -- '--repo ghe.example.com/o/r' '$E/.fake/label-calls'"
+check "GHE: the ruleset is read from the GHE host" "grep -q -- '--hostname ghe.example.com' '$E/.fake/api-calls'"
 
 S="$(configured_repo stale)"
 echo 0000000000000000000000000000000000000000 >"$S/.claude/template-version"
