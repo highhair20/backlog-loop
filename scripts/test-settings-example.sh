@@ -65,7 +65,7 @@ done
 
 # The deny list must still win for the pushes that matter, even with the allow rules.
 # A pushed release tag (v1.2.3) often triggers a deploy, so it counts as one of them.
-for cmd in "git push origin main" "git push -u origin HEAD:main" "git push --force origin x" "gh pr merge 1" "git push origin v1.2.3" "git push --follow-tags" "git push --follow origin x" "git push --tag origin x" "git push origin +v1.4.0"; do
+for cmd in "git push origin main" "git push -u origin HEAD:main" "git push --force origin x" "gh pr merge 1" "git push origin v1.2.3" "git push --follow-tags" "git push --follow origin x" "git push --tag origin x" "git push --ta origin x" "git push --foll origin x" "git push origin +v1.4.0"; do
   if matches_any "$cmd" "${DENY[@]}"; then echo "ok   still denied: $cmd"; else fail "not denied: $cmd"; fi
 done
 

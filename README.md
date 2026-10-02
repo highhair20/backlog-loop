@@ -101,7 +101,11 @@ It exits 0 once nothing is failing, so re-run it until it does. The steps it che
    It creates a branch ruleset that requires a pull request and the named CI
    checks, and lets admins bypass only by merging a PR. This is the only guardrail
    that holds no matter how a command is phrased (see [Limits](#limits)). It is
-   safe to re-run. Rulesets are free on public repositories; private repositories
+   safe to re-run. Add `--strict` to also require a PR's branch to be up to date
+   with `main` before it merges: each merge then re-runs CI against the latest `main`,
+   so two PRs that pass alone cannot merge into a red `main`. The cost is an update
+   and a CI run per merge. A re-run keeps the ruleset's current setting; `--no-strict` turns it
+   off. Rulesets are free on public repositories; private repositories
    need a paid GitHub plan.
 5. **Allow the loop's commands** if you will run it unattended — see
    [Running the backlog loop](#running-the-backlog-loop).

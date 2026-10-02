@@ -18,6 +18,7 @@ case "\$*" in
     cat >"$WORK/body.json"
     if [ -n "\${FAIL_WITH:-}" ]; then echo "\$FAIL_WITH" >&2; exit 1; fi
     echo '{"id": 99, "name": "protect-main", "enforcement": "active", "current_user_can_bypass": "pull_requests_only"}' ;;
+  *"rulesets/"[0-9]*) echo "\${EXISTING_RULESET:-null}" ;;
   *) echo "\${EXISTING:-[]}" ;;
 esac
 FAKE
@@ -52,6 +53,25 @@ run; rc=$?
 check "refuses a missing repo argument" "[ $rc -ne 0 ] && [ ! -e '$WORK/calls' ]"
 run not-a-repo; rc=$?
 check "refuses a malformed repo argument" "[ $rc -ne 0 ] && [ ! -e '$WORK/calls' ]"
+
+# --strict: a branch must be up to date with main before it merges (#43).
+run o/r test; rc=$?
+check "by default, a branch need not be up to date to merge" "[ $rc -eq 0 ] && jq -e '.rules[] | select(.type == \"required_status_checks\") | .parameters.strict_required_status_checks_policy == false' '$WORK/body.json' >/dev/null"
+run --strict o/r test; rc=$?
+check "--strict requires a branch to be up to date before merging" "[ $rc -eq 0 ] && jq -e '.rules[] | select(.type == \"required_status_checks\") | .parameters.strict_required_status_checks_policy == true' '$WORK/body.json' >/dev/null"
+
+# A flag after the repo would become a required check nothing reports (#44 review).
+run o/r --strict test; rc=$?
+check "refuses a flag placed after the repo" "[ $rc -ne 0 ] && ! grep -q -- '-X' '$WORK/calls'"
+run --strict o/r; rc=$?
+check "refuses --strict with no check names (it would be silently dropped)" "[ $rc -ne 0 ] && ! grep -q -- '-X' '$WORK/calls'"
+
+# A plain re-run keeps an existing ruleset's strict mode; --no-strict turns it off.
+STRICT_ON='{"rules": [{"type": "required_status_checks", "parameters": {"strict_required_status_checks_policy": true}}]}'
+EXISTING='[{"id": 42, "name": "protect-main"}]' EXISTING_RULESET="$STRICT_ON" run o/r test; rc=$?
+check "a re-run without a flag keeps strict mode on" "[ $rc -eq 0 ] && jq -e '.rules[] | select(.type == \"required_status_checks\") | .parameters.strict_required_status_checks_policy == true' '$WORK/body.json' >/dev/null"
+EXISTING='[{"id": 42, "name": "protect-main"}]' EXISTING_RULESET="$STRICT_ON" run --no-strict o/r test; rc=$?
+check "--no-strict turns strict mode off" "[ $rc -eq 0 ] && jq -e '.rules[] | select(.type == \"required_status_checks\") | .parameters.strict_required_status_checks_policy == false' '$WORK/body.json' >/dev/null"
 
 echo
 if [ "$failures" -eq 0 ]; then echo "all tests passed"; else echo "$failures test(s) failed" >&2; exit 1; fi
