@@ -211,7 +211,7 @@ guard="$(section 'Hard guardrails')"
 step36="$(section 'Step 3.6')"
 check "a call the permission settings refuse is a blocker that goes to Give up" "printf '%s' \"\$guard\" | grep -q 'refused by the permission settings' && printf '%s' \"\$guard\" | grep -q 'follow \*\*Give up\*\*'"
 check "a refusal with a permitted way round it is not a blocker" "printf '%s' \"\$guard\" | grep -q 'only when no' && printf '%s' \"\$guard\" | grep -q 'dedicated tool instead of a shell'"
-check "only Steps 3 to 3.7 skip straight to Give up's step 3; Step 0 saves its branch" "printf '%s' \"\$guard\" | grep -q 'In Steps 3 to 3.7 the issue has no branch' && printf '%s' \"\$guard\" | grep -q 'follows Give up in full'"
+check "only Steps 3 to 3.7 skip straight to Give up's step 3; Step 0 saves its branch" "printf '%s' \"\$guard\" | grep -q 'In Steps 3 to 3.7 the issue has no branch' && printf '%s' \"\$guard\" | grep -q 'Give up in full'"
 check "the run never ends its turn asking for approval" "printf '%s' \"\$guard\" | grep -q 'never end the turn'"
 check "the Give up comment names what was refused" "printf '%s' \"\$guard\" | grep -q 'refused command or path in its comment'"
 check "a human declining a prompt is not treated as a blocker" "printf '%s' \"\$guard\" | grep -q 'a human declining'"
@@ -219,6 +219,18 @@ check "Step 3.6 flags paths a headless run cannot edit" "printf '%s' \"\$step36\
 check "Step 5 makes the at-risk edit first, so a refusal costs nothing" "printf '%s' \"\$step5\" | grep -q 'first edit'"
 check "Give up lists a refused tool call among the ways in" "printf '%s' \"\$give_up\" | grep -q 'refused tool call'"
 check "BACKLOG.md says .claude/ issues are better no-auto-heal" "grep -q 'no-auto-heal' '$ROOT/docs/BACKLOG.md' && grep -q 'cannot edit .\.claude/' '$ROOT/docs/BACKLOG.md'"
+
+# --- A refusal every issue would hit stops the run instead of giving up (#60) ---
+check "a refused Verify or standard command is a setup problem" "printf '%s' \"\$guard\" | grep -q 'setup problem' && printf '%s' \"\$guard\" | grep -q '## Verify'"
+check "a setup problem does not follow Give up" "printf '%s' \"\$guard\" | grep -q 'follow Give up: stop and report'"
+check "a setup problem names the allow rule it needs" "printf '%s' \"\$guard\" | grep -q 'allow rule'"
+check "a setup problem keeps the claim, so the driver halts on no progress" "printf '%s' \"\$guard\" | grep -q 'claim and commit any work to the issue'"
+check "only Steps 3 to 3.7 release the claim on a setup problem" "printf '%s' \"\$guard\" | grep -q 'If the refusal came in Steps 3 to 3.7'"
+check "a command only this issue needs is not a setup problem" "printf '%s' \"\$guard\" | grep -q 'A command only this'"
+check "Give up's opening keeps setup problems out" "printf '%s' \"\$give_up\" | grep -q 'a setup problem never comes here'"
+check "a setup problem covers every command an iteration runs, helpers included" "printf '%s' \"\$guard\" | grep -q '.claude/hooks/. helper'"
+check "a setup problem with no branch releases the claim" "printf '%s' \"\$guard\" | grep -q 'release the claim instead'"
+check "a refusal specific to the issue still follows Give up" "printf '%s' \"\$guard\" | grep -qi 'specific to this issue'"
 
 echo
 if [ "$failures" -eq 0 ]; then echo "all tests passed"; else echo "$failures test(s) failed" >&2; exit 1; fi
