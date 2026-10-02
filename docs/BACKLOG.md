@@ -51,7 +51,9 @@ involved, see [`ROUTINE.md`](ROUTINE.md). Run one or the other on a repo, never 
    `P3` (only once no `P0`–`P2` issue is actionable),
    skipping anything `in-progress`, `in-review`, `blocked`, `needs-attention`, or
    `no-auto-heal`, and any `heal:proposed` issue not yet `heal:approved`.
-3. **Claim** it with `in-progress`, first naming in a comment any earlier PRs for it that were closed unmerged.
+3. **Claim** it with `in-progress`. First, a branch left over from an earlier
+   attempt is saved to `abandoned/` and deleted, and any earlier PRs closed unmerged
+   are named in a comment, so the attempt starts fresh.
 4. **Check the premise, then the scope.** Confirm the issue's claims against the
    code. Then work out what the change touches from the code itself (route tables,
    registries), not from the issue's list, and correct the issue if it is wrong or

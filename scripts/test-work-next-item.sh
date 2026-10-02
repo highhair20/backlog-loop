@@ -139,7 +139,7 @@ check "the MCP closed listing pages" "grep '^| .gh pr list --state closed' '$CMD
 # Review round 4 of #47.
 # shellcheck disable=SC2034  # read inside check's eval strings
 step3="$(section 'Step 3 ')"
-check "the claim names earlier closed PRs before adding in-progress" "printf '%s' \"\$step3\" | grep -q 'Earlier PRs closed without merging' && [ \$(printf '%s\n' \"\$step3\" | grep -n 'gh issue comment' | cut -d: -f1) -lt \$(printf '%s\n' \"\$step3\" | grep -n 'add-label in-progress' | cut -d: -f1) ]"
+check "the claim names earlier closed PRs before adding in-progress" "printf '%s' \"\$step3\" | grep -q 'Earlier PRs closed without merging' && [ \$(printf '%s\n' \"\$step3\" | grep -n 'gh issue comment.*Retrying this issue' | cut -d: -f1) -lt \$(printf '%s\n' \"\$step3\" | grep -n 'add-label in-progress' | cut -d: -f1) ]"
 check "a closed PR's url is matched whole, not as a prefix" "printf '%s' \"\$rejected_case\" | grep -q 'not a prefix'"
 check "a rejection with no branch stashes a dirty tree" "printf '%s' \"\$rejected_case\" | grep -q 'stash the edits'"
 check "the MCP table covers the closed-PR listing" "grep -q '^| .gh pr list --state closed' '$CMD'"
@@ -190,6 +190,20 @@ check "a dry run reports its selection and intended action" "printf '%s' \"\$dry
 check "a dry run shows the proposal it would post" "printf '%s' \"\$dry\" | grep -q 'full text of the proposal'"
 check "the dry run rules come before Step 0" "[ \$(grep -n '^## Dry run' '$CMD' | cut -d: -f1) -lt \$(grep -n '^## Step 0' '$CMD' | cut -d: -f1) ]"
 
+# --- A retry retires a leftover branch before claiming (#55) ---
+retire="$(printf '%s\n' "$step3" | grep -n -m1 'Retire a leftover branch' | cut -d: -f1)"
+claim="$(printf '%s\n' "$step3" | grep -n -m1 'add-label in-progress' | cut -d: -f1)"
+check "Step 3 retires a leftover branch before it claims" "[ -n '$retire' ] && [ -n '$claim' ] && [ '$retire' -lt '$claim' ]"
+check "it never treats an abandoned/ branch as leftover" "printf '%s' \"\$step3\" | grep -q 'never .abandoned/'"
+check "it saves before deleting, through Give up's steps" "printf '%s' \"\$step3\" | grep -q 'Give up\*\* steps 2, 4 and 5'"
+check "a failed retire leaves the issue unclaimed but marked for a human" "printf '%s' \"\$step3\" | grep -q 'do not claim' && printf '%s' \"\$step3\" | grep -q 'add-label needs-attention'"
+check "a branch with an open PR is never retired" "printf '%s' \"\$step3\" | grep -q 'open PR' && printf '%s' \"\$step3\" | grep -q 'add-label in-review'"
+check "every leftover branch name is retired, not just one" "printf '%s' \"\$step3\" | grep -q 'for every leftover branch'"
+check "a failed local delete or switch also stops the claim" "printf '%s' \"\$step3\" | grep -q 'step 5.s'"
+check "the claim names saved branches no comment mentions yet" "printf '%s' \"\$step3\" | grep -q 'abandoned/<number>-…. branch on the remote that no'"
+check "the success path is marked apart from the failure stop" "printf '%s' \"\$step3\" | grep -q '^Otherwise, once every leftover branch is retired'"
+check "a branch with no commits is reported as deleted, not saved" "printf '%s' \"\$step3\" | grep -q 'no commits to keep'"
+check "the claim comment says where the old branch went" "printf '%s' \"\$step3\" | grep -q 'saved as abandoned/'"
 # --- A refused tool call ends in Give up, never a request for approval (#54) ---
 # shellcheck disable=SC2034  # read inside check's eval strings
 guard="$(section 'Hard guardrails')"
