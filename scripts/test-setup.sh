@@ -9,21 +9,25 @@ trap 'rm -rf "$WORK"' EXIT
 
 failures=0
 check() { if eval "$2"; then echo "ok   $1"; else echo "FAIL $1" >&2; failures=$((failures + 1)); fi; }
+command -v ruby >/dev/null || { echo "FAIL ruby is needed to parse YAML" >&2; exit 1; }
 
 ALL_LABELS="$(sed -nE 's/^[[:space:]]*"([^|"]+)\|.*/\1/p' "$ROOT/scripts/seed-labels.sh")"
 TEMPLATE_HEAD="$(git -C "$ROOT" rev-parse HEAD)"
+GUIDE_URL=https://github.com/o/r/blob/main/docs/ISSUE_GUIDE.md
 
 # A repo as "Use this template" creates it: the template's placeholder CLAUDE.md
 # and CI, no labels, no ruleset. State the fake gh serves lives in $dir/.fake.
 fresh_repo() {
   local dir="$WORK/$1"
-  mkdir -p "$dir/scripts" "$dir/.claude" "$dir/.github/workflows" "$dir/.fake/bin" "$dir/templates"
+  mkdir -p "$dir/scripts" "$dir/.claude" "$dir/.github/workflows" "$dir/.github/ISSUE_TEMPLATE" "$dir/docs" "$dir/.fake/bin" "$dir/templates"
   git -C "$dir" init -q -b main
   git -C "$dir" remote add origin https://github.com/o/r.git
   cp "$ROOT"/scripts/{setup,check-verify-section,seed-labels,protect-main,gh-auth-check,gh-repo}.sh "$dir/scripts/"
   cp "$ROOT/templates/CLAUDE.md" "$dir/templates/"
   cp "$ROOT/templates/CLAUDE.md" "$dir/"
   cp "$ROOT/.github/workflows/ci.yml" "$dir/.github/workflows/"
+  cp "$ROOT/.github/ISSUE_TEMPLATE/config.yml" "$dir/.github/ISSUE_TEMPLATE/"
+  cp "$ROOT/docs/ISSUE_GUIDE.md" "$dir/docs/"
   cp "$ROOT/.claude/settings.local.json.example" "$dir/.claude/"
   : >"$dir/.fake/labels"
   echo '[]' >"$dir/.fake/rulesets"
@@ -32,6 +36,7 @@ fresh_repo() {
 case "\$*" in
   "auth status") exit \${FAKE_BARE_AUTH_RC:-\${FAKE_AUTH_RC:-0}} ;;
   "auth status --hostname github.com"|"auth status --hostname ghe.example.com") exit \${FAKE_AUTH_RC:-0} ;;
+  "repo view "*"/o/r --json url,defaultBranchRef"*) echo "\${FAKE_REPO_URL-https://github.com/o/r} \${FAKE_BRANCH-main}" ;;
   "repo set-default --view") echo "\${FAKE_DEFAULT:-}" ;;
   "repo view --json url --jq .url") echo "https://\${FAKE_HOST:-github.com}/o/r" ;;
   "label list"*) echo "\$*" >>"$dir/.fake/label-calls"; cat "$dir/.fake/labels" ;;
@@ -54,6 +59,7 @@ configured_repo() {
   echo '[{"id": 1, "name": "protect-main", "enforcement": "active"}]' >"$dir/.fake/rulesets"
   cp "$dir/.claude/settings.local.json.example" "$dir/.claude/settings.local.json"
   echo "$TEMPLATE_HEAD" >"$dir/.claude/template-version"
+  printf 'blank_issues_enabled: true\ncontact_links:\n  - name: Issue guide\n    url: %s\n    about: How to write an issue here\n' "$GUIDE_URL" >"$dir/.github/ISSUE_TEMPLATE/config.yml"
   echo "$dir"
 }
 
@@ -207,6 +213,102 @@ jq '.permissions.allow -= ["Bash(gh issue list *)"]' "$M/.claude/settings.local.
 run "$M"; rc=$?
 check "warns about allow rules the example has and the local file lacks" "[ $rc -eq 0 ] && grep -q 'missing 1 allow rule' '$M/.fake/out' && grep -qF 'Bash(gh issue list *)' '$M/.fake/out'"
 check "a local file with every example rule gets no such warning" "! grep -q 'missing .* allow rule' '$C/.fake/out'"
+
+# The issue chooser links to docs/ISSUE_GUIDE.md (#37). contact_links needs an
+# absolute URL, so the template cannot ship it; --fix adds it for the resolved repo.
+CFG=.github/ISSUE_TEMPLATE/config.yml
+yaml_urls() { ruby -ryaml -e 'puts((YAML.safe_load(File.read(ARGV[0]))["contact_links"] || []).map { |l| l["url"] })' "$1"; }
+chooser_repo() { # chooser_repo <name> <config.yml content>
+  local dir; dir="$(configured_repo "$1")"
+  printf '%s' "$2" >"$dir/$CFG"
+  echo "$dir"
+}
+check "a fresh repo warns that the issue chooser has no guide link" "grep -q 'issue chooser has no link to docs/ISSUE_GUIDE.md' '$F/.fake/out'"
+check "does not add the link without --fix" "cmp -s '$ROOT/$CFG' '$F/$CFG'"
+check "a configured repo's link counts" "grep -q 'issue chooser links to docs/ISSUE_GUIDE.md' '$C/.fake/out' && ! grep -q 'issue chooser has no link' '$C/.fake/out'"
+check "--fix adds the guide link for the resolved repo" "[ \"\$(yaml_urls '$X/$CFG')\" = '$GUIDE_URL' ]"
+check "--fix keeps the rest of config.yml, comments included" "grep -q '^blank_issues_enabled: true' '$X/$CFG' && grep -q '^# Keep blank issues' '$X/$CFG'"
+cp "$X/$CFG" "$X/.fake/cfg"
+run "$X" --fix
+check "a second --fix adds no duplicate" "cmp -s '$X/.fake/cfg' '$X/$CFG' && grep -q 'issue chooser links to' '$X/.fake/out'"
+
+K="$(chooser_repo keep "$(printf 'blank_issues_enabled: false\ncontact_links:\n  - name: Forum\n    url: https://example.com/forum\n    about: Questions\n')")"
+run "$K"; rc=$?
+check "a missing link is a warning, not a failure" "[ $rc -eq 0 ] && grep -q 'issue chooser has no link' '$K/.fake/out'"
+run "$K" --fix
+check "--fix keeps an existing contact link and adds ours" "[ \"\$(yaml_urls '$K/$CFG')\" = \"\$(printf '%s\n' '$GUIDE_URL' https://example.com/forum)\" ] && grep -q '^blank_issues_enabled: false' '$K/$CFG'"
+K0="$(chooser_repo keep0 "$(printf 'contact_links:\n- name: Forum\n  url: https://example.com/forum\n  about: Questions\n')")"
+run "$K0" --fix
+check "--fix matches a list written at column 0" "[ \"\$(yaml_urls '$K0/$CFG')\" = \"\$(printf '%s\n' '$GUIDE_URL' https://example.com/forum)\" ]"
+KN="$(chooser_repo empty "$(printf 'contact_links:\nblank_issues_enabled: true\n')")"
+run "$KN" --fix
+check "--fix fills an empty contact_links" "[ \"\$(yaml_urls '$KN/$CFG')\" = '$GUIDE_URL' ]"
+KF="$(chooser_repo flow "$(printf 'contact_links: []\n')")"
+cp "$KF/$CFG" "$KF/.fake/cfg"
+run "$KF" --fix; rc=$?
+check "--fix leaves a one-line contact_links alone and says how to add the link" "[ $rc -eq 0 ] && cmp -s '$KF/.fake/cfg' '$KF/$CFG' && grep -qF '$GUIDE_URL' '$KF/.fake/out'"
+KB="$(chooser_repo branch "$(printf 'contact_links:\n  - name: Guide\n    url: https://github.com/O/R/blob/master/docs/ISSUE_GUIDE.md\n    about: x\n')")"
+cp "$KB/$CFG" "$KB/.fake/cfg"
+run "$KB" --fix
+check "a link on another branch, in other case, counts" "cmp -s '$KB/.fake/cfg' '$KB/$CFG' && grep -q 'issue chooser links to' '$KB/.fake/out'"
+# A link written another way still counts, so --fix adds no second one.
+link_form() { # link_form <description> <config.yml content>
+  local dir; dir="$(chooser_repo form "$2")"
+  cp "$dir/$CFG" "$dir/.fake/cfg"
+  run "$dir" --fix
+  check "counts as linked: $1" "cmp -s '$dir/.fake/cfg' '$dir/$CFG' && grep -q 'issue chooser links to' '$dir/.fake/out'"
+  rm -rf "$dir"
+}
+link_form "a quoted url" "$(printf 'contact_links:\n  - name: G\n    url: "%s"\n    about: x\n' "$GUIDE_URL")"
+link_form "a url with an #anchor" "$(printf 'contact_links:\n  - name: G\n    url: %s#labels\n    about: x\n' "$GUIDE_URL")"
+link_form "a flow-style entry" "$(printf 'contact_links:\n  - {name: G, url: %s, about: x}\n' "$GUIDE_URL")"
+KL="$(chooser_repo longer "$(printf 'contact_links:\n  - name: G\n    url: %s.bak\n    about: x\n' "$GUIDE_URL")")"
+run "$KL"
+check "a longer path is not the guide" "grep -q 'issue chooser has no link' '$KL/.fake/out'"
+KQ="$(chooser_repo quoted "$(printf '"contact_links":\n  - name: Forum\n    url: https://example.com/forum\n    about: x\n')")"
+cp "$KQ/$CFG" "$KQ/.fake/cfg"
+run "$KQ" --fix; rc=$?
+check "--fix leaves a quoted contact_links key alone" "[ $rc -eq 0 ] && cmp -s '$KQ/.fake/cfg' '$KQ/$CFG' && grep -q 'quoted key' '$KQ/.fake/out'"
+KI="$(chooser_repo between "$(printf 'contact_links: # links\n\n    # the forum\n    - name: Forum\n      url: https://example.com/forum\n      about: x\n')")"
+run "$KI" --fix
+check "--fix indents past comments and blank lines" "[ \"\$(yaml_urls '$KI/$CFG')\" = \"\$(printf '%s\n' '$GUIDE_URL' https://example.com/forum)\" ]"
+KU="$(configured_repo nourl)"
+cp "$ROOT/$CFG" "$KU/$CFG"
+FAKE_REPO_URL='' run "$KU" --fix; rc=$?
+check "an unreadable repo URL is a warning, and nothing changes" "[ $rc -eq 0 ] && cmp -s '$ROOT/$CFG' '$KU/$CFG' && grep -q 'could not read the URL of o/r' '$KU/.fake/out'"
+KC="$(chooser_repo comment "$(printf 'blank_issues_enabled: true\n# url: %s\n' "$GUIDE_URL")")"
+run "$KC"
+check "a commented-out link does not count" "grep -q 'issue chooser has no link' '$KC/.fake/out'"
+KY="$(configured_repo yaml)"
+cp "$ROOT/$CFG" "$KY/${CFG%.yml}.yaml" && rm "$KY/$CFG"
+run "$KY" --fix
+check "--fix edits config.yaml when that is the file" "[ ! -e '$KY/$CFG' ] && [ \"\$(yaml_urls '$KY/${CFG%.yml}.yaml')\" = '$GUIDE_URL' ]"
+KE="$(configured_repo ghe)"
+cp "$ROOT/$CFG" "$KE/$CFG"
+FAKE_REPO_URL=https://ghe.example.com/o/r run "$KE" --fix
+check "--fix uses the repo's own host" "[ \"\$(yaml_urls '$KE/$CFG')\" = https://ghe.example.com/o/r/blob/main/docs/ISSUE_GUIDE.md ]"
+KD="$(configured_repo trunk)"
+cp "$ROOT/$CFG" "$KD/$CFG"
+FAKE_BRANCH=trunk run "$KD" --fix
+check "--fix links the default branch, so the link does not 404" "[ \"\$(yaml_urls '$KD/$CFG')\" = https://github.com/o/r/blob/trunk/docs/ISSUE_GUIDE.md ]"
+KZ="$(configured_repo nocommits)"
+cp "$ROOT/$CFG" "$KZ/$CFG"
+FAKE_BRANCH='' run "$KZ" --fix
+check "--fix falls back to main when there is no default branch yet" "[ \"\$(yaml_urls '$KZ/$CFG')\" = '$GUIDE_URL' ]"
+KM="$(configured_repo noconfig)"
+rm "$KM/$CFG"
+run "$KM" --fix; rc=$?
+check "no config.yml: skipped, and none created" "[ $rc -eq 0 ] && [ ! -e '$KM/$CFG' ] && ! grep -q 'issue chooser has no link' '$KM/.fake/out'"
+KG="$(configured_repo noguide)"
+cp "$ROOT/$CFG" "$KG/$CFG" && rm "$KG/docs/ISSUE_GUIDE.md"
+run "$KG" --fix
+check "no docs/ISSUE_GUIDE.md: skipped, so no link to a missing page" "cmp -s '$ROOT/$CFG' '$KG/$CFG' && ! grep -q 'issue chooser has no link' '$KG/.fake/out'"
+# The template's config.yml is seeded into every repo, so it must not carry its own URL.
+KT="$(configured_repo template)"
+cp "$ROOT/$CFG" "$KT/$CFG"
+git -C "$KT" remote set-url origin https://ghe.example.com/x/claude-code-repo-template.git
+run "$KT" --fix
+check "the template repo itself gets no link" "cmp -s '$ROOT/$CFG' '$KT/$CFG' && ! grep -q 'issue chooser has no link' '$KT/.fake/out'"
 
 run "$C" --bogus; rc=$?
 check "rejects an unknown argument" "[ $rc -eq 2 ]"
