@@ -68,7 +68,37 @@ too, and in `scripts/seed-labels.sh`, which creates them.
 | `needs-infra` | Infra change written but must be applied by a human |
 | `needs-attention` | Gave up after repeated attempts; needs a human |
 
-<!-- Add repo-specific label families here (e.g. which surface a change ships to). -->
+**Repo-specific families.** A repo can add its own family, such as which surface
+a change ships to. Define it here before anyone relies on it, giving each label
+its meaning, and add a "commonly misread as" line for any label whose name invites
+a wrong reading: a misread label quietly drops acceptance criteria from the work.
+Paste this example out of its fence and adapt it:
+
+```markdown
+**Surface** (exactly one — what has to ship when this merges):
+
+| Label | Meaning |
+|---|---|
+| `surface-none` | No mobile app change. Server, admin web app, CI, and docs changes all qualify. |
+| `surface-ota` | Mobile change that ships as an over-the-air update |
+| `surface-store` | Mobile change that needs a new store build |
+
+> **Commonly misread as:** `surface-none` read as "no UI change". The admin web
+> app is UI and is in scope: an issue labelled `surface-none` can still have UI
+> acceptance criteria. (A name like `mobile-none` would not invite the misreading.)
+```
+
+Then:
+
+- Create the labels in GitHub with gh label create. Do not add them to
+  `scripts/seed-labels.sh`: it is managed, so the next sync overwrites it. It
+  never deletes labels, so yours survive a re-seed.
+- Name the family in the Scope map section of `CLAUDE.md`, so the loop knows
+  which labels narrow or widen an issue's scope.
+
+In claude-code-repo-template itself, a standard label goes in both
+`scripts/seed-labels.sh` and the tables above. `scripts/test-labels.sh` fails
+when they differ; it skips fenced blocks, like the example.
 
 ## Lifecycle
 

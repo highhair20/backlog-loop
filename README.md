@@ -232,7 +232,7 @@ The guardrails are layered, from softest to hardest:
   workflows/ci.yml           CI skeleton (fails until configured)
   workflows/template-self-test.yml   tests this template's scripts; inert in your repo
 docs/ISSUE_GUIDE.md          how to write issues the loop can work
-docs/BACKLOG.md              operating the loop: drivers, one iteration, definition of done, why each guardrail
+docs/BACKLOG.md              operating the loop: drivers, one iteration, definition of done, task runner conventions, why each guardrail
 docs/CI_HARDENING.md         CI patterns that keep a green check honest, with snippets
 docs/DEPLOYING.md            dev on main, prod on a v* tag, and a test that keeps the two in step
 scripts/
