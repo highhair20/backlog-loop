@@ -110,7 +110,7 @@ step2="$(section 'Step 2')"
 check "Step 2 tries P3 after P2" "printf '%s' \"\$step2\" | grep -q 'then .P3.'"
 
 # Step 0 must not mistake a preserved branch for work in flight.
-check "Step 0 always ignores abandoned/ branches" "section 'Step 0' | grep -q 'always ignore them'"
+check "Step 0 always ignores abandoned/ branches" "printf '%s' \"\$step0\" | grep -q 'always ignore them'"
 # An abandoned/ branch outlives its attempt, so it cannot signal an interrupted
 # give-up: acting on it would delete a later retry's unsaved work (#24 review).
 check "Step 0 never resumes a give-up from an abandoned/ branch" "! section 'Step 0' | grep -qi 'finish it from'"
