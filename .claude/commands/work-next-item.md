@@ -321,10 +321,14 @@ gh issue view <number> --json title,body
 
 A claim starts on a fresh branch. Any branch for this issue that exists now
 (`<type>/<number>-…`, local or remote, never `abandoned/…`) is left over from an
-earlier attempt: Step 0 dealt with any attempt still in flight, so this one belongs
-to a PR a human closed. Resuming it later would redo rejected work, and its name
-blocks Step 4. Look with Step 0's `git ls-remote --heads origin` and
-`git branch --list`.
+earlier attempt. Resuming it later would redo rejected work, and its name blocks
+Step 4. Look with Step 0's `git ls-remote --heads origin` and `git branch --list`.
+
+But first check it against Step 0's open-PR listing: a branch with an **open PR** is
+not leftover (someone opened one without the `in-review` label), and deleting it
+would close that PR. Mark the issue
+`gh issue edit <number> --add-label in-review`, leave the branch alone, and go back
+to Step 2 for another issue.
 
 **Retire a leftover branch before claiming.** Check it out (the local copy if there
 is one, otherwise fetch the remote one), then run **Give up** steps 2, 4 and 5: save
@@ -332,8 +336,16 @@ its commits under `abandoned/<number>-<short-sha>`, delete the remote copy only 
 it is proven to hold nothing unsaved, then delete the local branch and return to
 `main`. Skip Give up's step 1 (Step 1 left nothing uncommitted) and step 3 (this
 issue is being claimed, not released). Its failure rule still holds, but nothing is
-claimed yet: if the save fails, or step 4 keeps the remote copy, stop and report it,
-leaving the issue unclaimed. The name is still taken, so Step 4 would fail.
+claimed yet: if the save fails, or step 4 keeps the remote copy, leave the issue
+unclaimed, but mark it for a human. Left unlabelled, Step 2 would select it again
+next run and fail the same way, so nothing else in the backlog would get worked:
+
+```bash
+gh issue comment <number> --body "Autonomous loop could not retire the leftover branch <name> before retrying: <what failed>. Nothing was deleted that was not saved. Remove or rename the branch, then remove needs-attention."
+gh issue edit <number> --add-label needs-attention
+```
+
+Then stop and report it.
 
 Then name what came before, so Step 0 never mistakes it for a rejection of this
 attempt: any unmerged PRs from `<type>/<number>-…` in Step 0's closed listing that no
@@ -342,7 +354,7 @@ retired. Comment first: a run interrupted between the two then leaves an unclaim
 issue, not a claim that Step 0 would hand back. With nothing to name, just claim.
 
 ```bash
-gh issue comment <number> --body "Retrying this issue. Earlier PRs closed without merging: <closed PR urls, or none>. Leftover branch: <name> saved as abandoned/<number>-<short-sha> and deleted (or none). This attempt starts fresh."
+gh issue comment <number> --body "Retrying this issue. Earlier PRs closed without merging: <closed PR urls, or none>. Leftover branch: <name> saved as abandoned/<number>-<short-sha> and deleted (or: deleted, no commits to keep; or none). This attempt starts fresh."
 gh issue edit <number> --add-label in-progress
 ```
 

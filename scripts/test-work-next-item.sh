@@ -139,7 +139,7 @@ check "the MCP closed listing pages" "grep '^| .gh pr list --state closed' '$CMD
 # Review round 4 of #47.
 # shellcheck disable=SC2034  # read inside check's eval strings
 step3="$(section 'Step 3 ')"
-check "the claim names earlier closed PRs before adding in-progress" "printf '%s' \"\$step3\" | grep -q 'Earlier PRs closed without merging' && [ \$(printf '%s\n' \"\$step3\" | grep -n 'gh issue comment' | cut -d: -f1) -lt \$(printf '%s\n' \"\$step3\" | grep -n 'add-label in-progress' | cut -d: -f1) ]"
+check "the claim names earlier closed PRs before adding in-progress" "printf '%s' \"\$step3\" | grep -q 'Earlier PRs closed without merging' && [ \$(printf '%s\n' \"\$step3\" | grep -n 'gh issue comment.*Retrying this issue' | cut -d: -f1) -lt \$(printf '%s\n' \"\$step3\" | grep -n 'add-label in-progress' | cut -d: -f1) ]"
 check "a closed PR's url is matched whole, not as a prefix" "printf '%s' \"\$rejected_case\" | grep -q 'not a prefix'"
 check "a rejection with no branch stashes a dirty tree" "printf '%s' \"\$rejected_case\" | grep -q 'stash the edits'"
 check "the MCP table covers the closed-PR listing" "grep -q '^| .gh pr list --state closed' '$CMD'"
@@ -196,7 +196,9 @@ claim="$(printf '%s\n' "$step3" | grep -n -m1 'add-label in-progress' | cut -d: 
 check "Step 3 retires a leftover branch before it claims" "[ -n '$retire' ] && [ -n '$claim' ] && [ '$retire' -lt '$claim' ]"
 check "it never treats an abandoned/ branch as leftover" "printf '%s' \"\$step3\" | grep -q 'never .abandoned/'"
 check "it saves before deleting, through Give up's steps" "printf '%s' \"\$step3\" | grep -q 'Give up\*\* steps 2, 4 and 5'"
-check "a failed save stops the run with the issue unclaimed" "printf '%s' \"\$step3\" | grep -q 'leaving the issue unclaimed'"
+check "a failed retire leaves the issue unclaimed but marked for a human" "printf '%s' \"\$step3\" | grep -q 'leave the issue' && printf '%s' \"\$step3\" | grep -q 'add-label needs-attention'"
+check "a branch with an open PR is never retired" "printf '%s' \"\$step3\" | grep -q 'open PR' && printf '%s' \"\$step3\" | grep -q 'add-label in-review'"
+check "a branch with no commits is reported as deleted, not saved" "printf '%s' \"\$step3\" | grep -q 'no commits to keep'"
 check "the claim comment says where the old branch went" "printf '%s' \"\$step3\" | grep -q 'saved as abandoned/'"
 
 echo
