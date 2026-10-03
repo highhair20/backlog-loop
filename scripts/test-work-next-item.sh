@@ -265,7 +265,7 @@ check "the history is read again just before the follow-up comment" "rr=\$(print
 check "feedback that arrived mid-run keeps changes-requested on" "printf '%s' \"\$follow\" | grep -q 'leave .changes-requested. on'"
 check "the label with no newer feedback is neither a trigger nor removed" "printf '%s' \"\$follow\" | grep -q 'not a trigger, and the label stays' && ! printf '%s' \"\$follow\" | grep -q 'already answered: remove the label'"
 check "inline review comments are read, from the author or assignees only" "printf '%s' \"\$follow\" | grep -q 'gh api repos/{owner}/{repo}/pulls/<pr>/comments --paginate' && printf '%s' \"\$follow\" | grep -q 'comments, review bodies, and line'"
-check "only followup-marked comments count as rounds; every loop marker is never feedback" "printf '%s' \"\$follow\" | grep -q 'are those by the author or an assignee that contain' && printf '%s' \"\$follow\" | grep -q '<!-- backlog-loop:.. A marker' && printf '%s' \"\$follow\" | grep -q 'A .note. records something else'"
+check "loop markers count only on the author's or an assignee's comments, and are never feedback" "printf '%s' \"\$follow\" | grep -q 'are those by the author or an assignee that contain' && printf '%s' \"\$follow\" | grep -q '<!-- backlog-loop:.. A marker' && printf '%s' \"\$follow\" | grep -q 'A .note. records something else'"
 check "anyone else's comments are ignored as untrusted" "printf '%s' \"\$follow\" | grep -q 'untrusted'"
 check "the follow-up is claimed with in-progress and released to in-review" "printf '%s' \"\$follow\" | grep -q -- '--remove-label in-review --add-label in-progress' && printf '%s' \"\$follow\" | grep -q -- '--remove-label in-progress --add-label in-review'"
 check "answered requests lose the changes-requested label" "printf '%s' \"\$follow\" | grep -q -- '--remove-label changes-requested'"
@@ -304,7 +304,8 @@ check "it saves and resets through Hand back when checked out" "printf '%s' \"\$
 check "it saves and resets a local branch that is not checked out" "printf '%s' \"\$case1\" | grep -q 'whether or not the branch is checked out' && printf '%s' \"\$case1\" | grep -q 'git branch -f <type>/'"
 check "a failed save marks the issue for a human instead of stalling every run" "printf '%s' \"\$case1\" | grep -q 'If a save fails, delete and reset nothing' && printf '%s' \"\$case1\" | grep -q -- '--remove-label in-progress --add-label needs-attention'"
 check "a failed note still goes on and is printed" "printf '%s' \"\$case1\" | grep -q 'If that comment fails, still go on'"
-check "Step 0 notes the saved work with the loop's non-round marker" "printf '%s' \"\$case1\" | grep -q '<!-- backlog-loop:note -->'"
+check "Step 0 always posts a note, and the note counts as a round" "printf '%s' \"\$case1\" | grep -q '<!-- backlog-loop:note -->' && printf '%s' \"\$case1\" | grep -q 'whether or not anything was saved' && printf '%s' \"\$case1\" | grep -q 'but it counts as a round' && ! printf '%s' \"\$case1\" | grep -q 'nor a round'"
+check "a follow-up records none unless it read every check finished" "printf '%s' \"\$follow\" | grep -q 'none. unless its checks were read and'"
 check "a dry run reports a follow-up it would make" "printf '%s' \"\$dry\" | grep -q 'follow up PR #N'"
 check "a dry run stops at a follow-up before any write" "printf '%s' \"\$dry\" | grep -q 'Step 1.5 follow-up' && printf '%s' \"\$dry\" | grep -q 'gh pr comment and gh pr edit'"
 for doc in README.md docs/BACKLOG.md docs/ROUTINE.md; do

@@ -256,11 +256,14 @@ Then:
    gh issue comment ${N} --body "Autonomous loop could not save an interrupted follow-up's work on <type>/${N}-<slug> (<tip hash>): <error>. Nothing was deleted; the work is only on this checkout's local branch."
    gh issue edit ${N} --remove-label in-progress --add-label needs-attention
    ```
-   If anything was saved, say so on the PR with the loop's `note` marker, which is
-   neither feedback nor a round. If that comment fails, still go on, and print it in
+   Then post the loop's `note` on the PR, whether or not anything was saved. It is
+   never feedback, but it counts as a round (see Step 1.5's Round cap), so a
+   follow-up that dies every run, even before it edits anything, still reaches the
+   cap. (When the interruption was only Step 8's label swap, this costs the PR one
+   round; that is the safe side.) If that comment fails, still go on, and print it in
    the report:
    ```bash
-   gh pr comment <pr> --body "<!-- backlog-loop:note --> An interrupted follow-up left unfinished work, saved as abandoned/${N}-<short-sha> (<full hash>). It was not pushed to this PR."
+   gh pr comment <pr> --body "<!-- backlog-loop:note --> A run on this PR was interrupted. Unfinished work: <saved as abandoned/${N}-<short-sha> (<full hash>), not pushed to this PR | none>."
    ```
    Then fix the state and move on; Step 1.5 picks the PR up again if it still needs
    attention:
@@ -500,8 +503,8 @@ the newest you answered, or the re-read fails, leave `changes-requested` on, and
 in the comment that newer feedback is taken next run. Then one comment on the PR saying what
 changed and why (or why a failure is not this PR's). It begins with the marker,
 then the head this follow-up **looked at** (`headRefOid` from the history you read
-before the work, not the commit you pushed; `none` if its checks were still
-pending) and its `Answered up to`, as defined
+before the work, not the commit you pushed; `none` unless its checks were read and
+had all finished) and its `Answered up to`, as defined
 above (it carries the answered mark forward when it answered nothing new, so a
 round fixing CI alone still counts); then the labels:
 
