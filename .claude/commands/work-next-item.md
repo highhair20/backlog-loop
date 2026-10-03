@@ -400,9 +400,10 @@ work beyond the issue. From that history:
   never feedback, even though they come from the maintainer's account.
   Only `followup` comments count as rounds; a `note` records something else.
 - Each `followup` comment records `Looked at: <sha>`, the head the follow-up started
-  from, and `Answered up to: <time>`, the newest feedback it answered, or `none`. A
-  field that is missing (as in comments from before these fields existed, which say
-  `Head:`) records no head and `none`.
+  from, and `Answered up to: <time>`: the newest feedback it answered, or, when it
+  answered none, the answered mark it started from carried forward (`none` only
+  when there was none). A comment from before these fields existed (it says
+  `Head:`) records no head, and its own `createdAt` as its `Answered up to`.
 - **The feedback** is the author's and assignees' comments, review bodies, and line
   comments, minus the loop's own. Their times are `createdAt` (comments),
   `submittedAt` (reviews), and `created_at` (line comments); compare them as UTC
@@ -494,8 +495,9 @@ the newest you answered, or the re-read fails, leave `changes-requested` on, and
 in the comment that newer feedback is taken next run. Then one comment on the PR saying what
 changed and why (or why a failure is not this PR's). It begins with the marker,
 then the head this follow-up **looked at** (`headRefOid` from the history you read
-before the work, not the commit you pushed) and the time of the newest feedback it
-answered (`none` if there was none); then the labels:
+before the work, not the commit you pushed) and its `Answered up to`, as defined
+above (it carries the answered mark forward when it answered nothing new, so a
+round fixing CI alone still counts); then the labels:
 
 ```bash
 gh pr comment <pr> --body "<!-- backlog-loop:followup --> Looked at: <sha>. Answered up to: <time>. <what was wrong, what changed, Verify results>"
@@ -536,11 +538,11 @@ steps 2 and 3 run on `main` would save `main`'s own commits.
    git branch -f <type>/<N>-<slug> origin/<type>/<N>-<slug>
    ```
 4. Comment and swap the labels. `Looked at` is the head you read before the work;
-   `Answered up to` is the newest feedback this follow-up actually answered, or
-   `none`. The issue is `in-progress` if you claimed it, or still `in-review` if the
+   `Answered up to` is the newest feedback this follow-up actually answered, or the
+   answered mark carried forward. The issue is `in-progress` if you claimed it, or still `in-review` if the
    round cap stopped it before the claim:
    ```bash
-   gh pr comment <pr> --body "<!-- backlog-loop:followup --> Looked at: <sha>. Answered up to: <time>. Handing this back. Blocker: <reason>. Still needs attention: <failing checks, unanswered requests, or conflicting files>. Work: <abandoned/… with its hash, or none>. The PR stays open. To queue it for the loop again, comment here with what to do, then swap needs-attention for in-review on #<N>."
+   gh pr comment <pr> --body "<!-- backlog-loop:followup --> Looked at: <sha>. Answered up to: <time>. Handing this back. Blocker: <reason>. Still needs attention: <failing checks, unanswered requests, or conflicting files>. Work: <abandoned/… with its hash, or none>. The PR stays open. To queue it for the loop again, comment here with what to do, add changes-requested to this PR, then swap needs-attention for in-review on #<N>."
    gh issue edit <N> --remove-label in-progress --add-label needs-attention
    ```
    Use `--remove-label in-review` instead when the issue was never claimed. Check
