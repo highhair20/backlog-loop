@@ -15,6 +15,7 @@
       "Bash(gh pr comment *)",
       "Bash(gh pr edit * --remove-label *)",
       "Bash(gh run view *)",
+      "Bash(gh api repos/{owner}/{repo}/pulls/*/comments --paginate)",
       "Bash(git fetch *)",
       "Bash(git merge --no-edit origin/main)",
       "Bash(git merge --abort)",
