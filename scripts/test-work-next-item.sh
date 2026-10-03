@@ -232,5 +232,41 @@ check "a setup problem covers every command an iteration runs, helpers included"
 check "a setup problem with no branch releases the claim" "printf '%s' \"\$guard\" | grep -q 'release the claim instead'"
 check "a refusal specific to the issue still follows Give up" "printf '%s' \"\$guard\" | grep -qi 'specific to this issue'"
 
+# --- The loop follows up on its own open PRs before new work (#70) ---
+# shellcheck disable=SC2034  # read inside check's eval strings
+follow="$(section 'Step 1.5')"
+s1="$(grep -n '^## Step 1 ' "$CMD" | cut -d: -f1)"
+s15="$(grep -n '^## Step 1.5' "$CMD" | cut -d: -f1)"
+s2="$(grep -n '^## Step 2' "$CMD" | cut -d: -f1)"
+check "Step 1.5 runs after Step 1 and before Step 2" "[ -n '$s15' ] && [ '$s1' -lt '$s15' ] && [ '$s15' -lt '$s2' ]"
+check "it takes the oldest PR that needs attention" "printf '%s' \"\$follow\" | grep -q 'oldest'"
+for trigger in 'changes-requested' 'gh pr checks' 'CONFLICTING'; do
+  check "a PR qualifies on $trigger" "printf '%s' \"\$follow\" | grep -q -- '$trigger'"
+done
+check "pending checks and an unknown mergeable state do not qualify" "printf '%s' \"\$follow\" | grep -q 'pending' && printf '%s' \"\$follow\" | grep -q 'UNKNOWN'"
+check "a follow-up ends the iteration instead of selecting new work" "printf '%s' \"\$follow\" | grep -q 'Do not go on to Step 2'"
+check "with nothing to follow up, it goes on to Step 2" "printf '%s' \"\$follow\" | grep -q 'go on to Step 2'"
+check "it brings the branch up to date by merging main" "printf '%s' \"\$follow\" | grep -q 'git merge --no-edit origin/main'"
+# Deleting the remote branch closes the PR, so a follow-up never deletes, rebases,
+# force-pushes, or goes through Give up (which deletes the branch).
+for pattern in 'git branch -D' '--delete' 'git rebase' '--force' 'follow \*\*Give up\*\*'; do
+  check "Step 1.5 never uses '$pattern'" "! printf '%s' \"\$follow\" | grep -q -- '$pattern'"
+done
+check "follow-up comments carry the loop's marker" "printf '%s' \"\$follow\" | grep -q '<!-- backlog-loop:followup -->'"
+check "feedback is read only from the PR's author or assignees" "printf '%s' \"\$follow\" | grep -q 'author or assignees'"
+check "anyone else's comments are ignored as untrusted" "printf '%s' \"\$follow\" | grep -q 'untrusted'"
+check "the follow-up is claimed with in-progress and released to in-review" "printf '%s' \"\$follow\" | grep -q -- '--remove-label in-review --add-label in-progress' && printf '%s' \"\$follow\" | grep -q -- '--remove-label in-progress --add-label in-review'"
+check "answered requests lose the changes-requested label" "printf '%s' \"\$follow\" | grep -q -- '--remove-label changes-requested'"
+check "the round cap is 3 in a row with no human feedback between" "printf '%s' \"\$follow\" | grep -q '3 follow-ups in a row'"
+check "at the cap the issue is handed back as needs-attention, keeping the PR" "printf '%s' \"\$follow\" | grep -q -- '--add-label needs-attention' && printf '%s' \"\$follow\" | grep -q 'PR stays open'"
+check "a failed follow-up saves its work under abandoned/ before resetting the branch" "save=\$(printf '%s\n' \"\$follow\" | grep -n -m1 'refs/heads/abandoned/' | cut -d: -f1); reset=\$(printf '%s\n' \"\$follow\" | grep -n -m1 'git branch -f' | cut -d: -f1); [ -n \"\$save\" ] && [ -n \"\$reset\" ] && [ \"\$save\" -lt \"\$reset\" ]"
+check "a failing check's log is read before changing code" "printf '%s' \"\$follow\" | grep -q 'gh run view .* --log-failed'"
+check "a failure that is not the PR's is reported, not fixed" "printf '%s' \"\$follow\" | grep -q 'also fails on .main.'"
+check "a follow-up runs the Verify gate and the specialist reviewers" "printf '%s' \"\$follow\" | grep -q 'Step 5' && printf '%s' \"\$follow\" | grep -q 'Step 6.5'"
+check "Step 0 finishes an interrupted follow-up before swapping the label back" "printf '%s' \"\$step0\" | grep -q 'interrupted follow-up'"
+check "a dry run reports a follow-up it would make" "printf '%s' \"\$dry\" | grep -q 'follow up PR #N'"
+check "changes-requested is a seeded label" "grep -q '\"changes-requested|' '$ROOT/scripts/seed-labels.sh'"
+check "the MCP table covers PR checks and reviews" "grep -q '^| .gh pr checks' '$CMD' && grep -q '^| .gh pr view N --json' '$CMD'"
+
 echo
 if [ "$failures" -eq 0 ]; then echo "all tests passed"; else echo "$failures test(s) failed" >&2; exit 1; fi

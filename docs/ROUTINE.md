@@ -84,6 +84,10 @@ gate on.
   `heal:proposed`.
 - **Hold back one issue** with `no-auto-heal` or `blocked`. **Stop everything** by
   pausing the routine on claude.ai/code/routines.
+- **Ask for changes on a PR** by commenting on it and adding `changes-requested` to
+  the PR. A later run makes them on the same branch. Runs also fix a PR's failing
+  checks and merge conflicts before starting new work. After three follow-ups with no
+  word from you, the issue is handed back as `needs-attention`; the PR stays open.
 - **Merging stays yours**, as with every other way of running the loop.
 
 ## Cadence and usage
