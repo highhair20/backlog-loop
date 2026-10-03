@@ -12,10 +12,10 @@
 #
 # Usage: scripts/setup.sh [--fix]
 #   TEMPLATE_REPO  repo to compare .claude/template-version with
-#                  (default: the public claude-code-repo-template)
+#                  (default: the public backlog-loop)
 set -uo pipefail
 
-TEMPLATE_REPO="${TEMPLATE_REPO:-https://github.com/highhair20/claude-code-repo-template.git}"
+TEMPLATE_REPO="${TEMPLATE_REPO:-https://github.com/highhair20/backlog-loop.git}"
 RULESET_NAME=protect-main
 CI_PLACEHOLDER='Verify (not configured)'
 LOCAL_SETTINGS=.claude/settings.local.json
@@ -25,8 +25,10 @@ OWN_BACKUP=CLAUDE.md.template-own
 # with this marker. In any other repo it is the wrong file: its Verify would make
 # the template's tests this repo's definition of green. The repo is recognised by
 # its origin's name, as CI does.
-TEMPLATE_MARKER='claude-code-repo-template: own instructions'
-TEMPLATE_ORIGIN_RE='[/:]claude-code-repo-template(\.git)?/?$'
+# Renamed from claude-code-repo-template (#68): repos made before the rename carry the
+# old marker, and a clone may still use the old URL, so both names count.
+TEMPLATE_MARKER_RE='(backlog-loop|claude-code-repo-template): own instructions'
+TEMPLATE_ORIGIN_RE='[/:](backlog-loop|claude-code-repo-template)(\.git)?/?$'
 
 fix=0
 case "${1:-}" in
@@ -83,7 +85,7 @@ workflows_run() { # workflows_run <command> <workflow>...
 }
 
 is_template_own_claude_md() {
-  grep -qF "$TEMPLATE_MARKER" CLAUDE.md || return 1
+  grep -qE "$TEMPLATE_MARKER_RE" CLAUDE.md || return 1
   ! git remote get-url origin 2>/dev/null | grep -qE "$TEMPLATE_ORIGIN_RE"
 }
 
@@ -111,7 +113,7 @@ check_claude_md() {
   fi
   if is_template_own_claude_md; then
     if [ ! -f "$SKELETON" ]; then
-      bad "CLAUDE.md is the template's own instructions, not this project's" "copy templates/CLAUDE.md from claude-code-repo-template over it"
+      bad "CLAUDE.md is the template's own instructions, not this project's" "copy templates/CLAUDE.md from backlog-loop over it"
       return
     fi
     if [ "$fix" -ne 1 ]; then

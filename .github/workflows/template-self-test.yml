@@ -1,8 +1,8 @@
 name: Template self-test
 
 # Tests the template's own scripts. Inert in repos created from the template
-# (the job only runs in a repo named claude-code-repo-template, i.e. this one and its
-# forks); safe to delete there.
+# (the job only runs in a repo named backlog-loop, or claude-code-repo-template before
+# the rename: this one and its forks); safe to delete there.
 on:
   push:
     branches-ignore: [main]
@@ -13,7 +13,7 @@ permissions:
 
 jobs:
   sync-guardrails:
-    if: github.event.repository.name == 'claude-code-repo-template'
+    if: contains(fromJSON('["backlog-loop", "claude-code-repo-template"]'), github.event.repository.name)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1

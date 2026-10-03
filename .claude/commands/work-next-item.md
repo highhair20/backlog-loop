@@ -91,7 +91,7 @@ scripts/check-verify-section.sh CLAUDE.md
 ```
 
 It fails when `## Verify` is missing or still a placeholder ("the loop has no
-definition of green"), and when `CLAUDE.md` is claude-code-repo-template's own
+definition of green"), and when `CLAUDE.md` is backlog-loop's own
 instructions in a repo created from it: that Verify runs the template's tests, which
 pass whatever this repo's code does. Report its message and stop. Never guess the
 build or test commands.

@@ -1,5 +1,5 @@
-<!-- claude-code-repo-template: own instructions -->
-# claude-code-repo-template — Project Instructions
+<!-- backlog-loop: own instructions -->
+# backlog-loop — Project Instructions
 
 > **In a repo created from this template, this is the wrong file.** It holds the
 > template repo's own instructions, and its Verify runs the template's tests, not

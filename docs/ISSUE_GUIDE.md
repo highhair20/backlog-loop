@@ -107,7 +107,7 @@ Then:
 - Name the family in the Scope map section of `CLAUDE.md`, so the loop knows
   which labels narrow or widen an issue's scope.
 
-In claude-code-repo-template itself, a standard label goes in both
+In backlog-loop itself, a standard label goes in both
 `scripts/seed-labels.sh` and the tables above. `scripts/test-labels.sh` fails
 when they differ; it skips fenced blocks, like the example.
 
