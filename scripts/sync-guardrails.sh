@@ -214,7 +214,7 @@ main() {
   [ -z "$(git -C "$TEMPLATE" status --porcelain)" ] || version="$version-dirty"
   printf '%s\n' "$version" >"$target/$VERSION_FILE"
 
-  echo "Synced from claude-code-repo-template @ $version."
+  echo "Synced from backlog-loop @ $version."
   git -C "$target" status --short
   echo "Review with: git diff  (in $target), then commit on a branch."
 }

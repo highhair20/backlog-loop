@@ -215,6 +215,12 @@ check "bug form requires steps to reproduce" "printf '%s\n' \"\$bug_fields\" | g
 check "bug form requires expected vs actual" "printf '%s\n' \"\$bug_fields\" | grep -q '^Expected vs actual|true|'"
 check "no Markdown issue templates remain beside the forms" "! ls '$ROOT'/.github/ISSUE_TEMPLATE/*.md >/dev/null 2>&1"
 
+# --- the rename to backlog-loop (#68): either name is the template repo ---
+for wf in ci.yml template-self-test.yml; do
+  check "$wf treats both repo names as the template" "grep 'repository.name' '$ROOT/.github/workflows/$wf' | grep -q '\"backlog-loop\"' && grep 'repository.name' '$ROOT/.github/workflows/$wf' | grep -q '\"claude-code-repo-template\"'"
+done
+check "the root CLAUDE.md carries the new marker" "head -1 '$ROOT/CLAUDE.md' | grep -qx '<!-- backlog-loop: own instructions -->'"
+
 # --- editor and PR defaults ---
 check ".editorconfig is a root config" "grep -qx 'root = true' '$ROOT/.editorconfig'"
 check "PR template links the issue it closes" "grep -q '^Closes #' '$ROOT/.github/pull_request_template.md'"

@@ -77,7 +77,7 @@ involved, see [`ROUTINE.md`](ROUTINE.md). Run one or the other on a repo, never 
 
 The command is [`.claude/commands/work-next-item.md`](../.claude/commands/work-next-item.md).
 It, the hooks, and the loop scripts are **managed** by
-[claude-code-repo-template](https://github.com/highhair20/claude-code-repo-template):
+[backlog-loop](https://github.com/highhair20/backlog-loop):
 `sync-guardrails.sh` overwrites them, so change them there. Everything specific to
 this repo belongs in `CLAUDE.md`.
 

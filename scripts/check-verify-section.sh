@@ -13,12 +13,14 @@ file="${1:-CLAUDE.md}"
 # The template repo's own CLAUDE.md starts with this marker. In any other repo it
 # is the wrong file: its Verify would make the template's tests this repo's
 # definition of green. The repo is recognised by its origin's name, as CI does.
-TEMPLATE_MARKER='claude-code-repo-template: own instructions'
-TEMPLATE_ORIGIN_RE='[/:]claude-code-repo-template(\.git)?/?$'
-if grep -qF "$TEMPLATE_MARKER" "$file"; then
+# Renamed from claude-code-repo-template (#68): repos made before the rename carry the
+# old marker, and a clone may still use the old URL, so both names count.
+TEMPLATE_MARKER_RE='(backlog-loop|claude-code-repo-template): own instructions'
+TEMPLATE_ORIGIN_RE='[/:](backlog-loop|claude-code-repo-template)(\.git)?/?$'
+if grep -qE "$TEMPLATE_MARKER_RE" "$file"; then
   origin="$(git -C "$(dirname "$file")" remote get-url origin 2>/dev/null || true)"
   if ! printf '%s' "$origin" | grep -qE "$TEMPLATE_ORIGIN_RE"; then
-    echo "check-verify-section: $file is claude-code-repo-template's own CLAUDE.md, not this project's. Run scripts/setup.sh --fix to replace it with the project skeleton." >&2
+    echo "check-verify-section: $file is backlog-loop's own CLAUDE.md, not this project's. Run scripts/setup.sh --fix to replace it with the project skeleton." >&2
     exit 1
   fi
 fi

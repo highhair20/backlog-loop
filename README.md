@@ -1,4 +1,4 @@
-# claude-code-repo-template
+# backlog-loop
 
 **A GitHub template for repositories where [Claude Code](https://code.claude.com/docs/en/overview) does the work and a human merges.**
 
@@ -72,7 +72,7 @@ your repo's `CLAUDE.md`:
 Click **Use this template** on GitHub, or:
 
 ```sh
-gh repo create my-app --private --template highhair20/claude-code-repo-template --clone
+gh repo create my-app --private --template highhair20/backlog-loop --clone
 cd my-app
 ```
 
@@ -129,8 +129,8 @@ The steps it checks:
 Clone this template next to your repo and sync it in:
 
 ```sh
-git clone https://github.com/highhair20/claude-code-repo-template.git
-claude-code-repo-template/scripts/sync-guardrails.sh ./my-app     # my-app must have a clean working tree
+git clone https://github.com/highhair20/backlog-loop.git
+backlog-loop/scripts/sync-guardrails.sh ./my-app     # my-app must have a clean working tree
 cd my-app && scripts/setup.sh --fix
 ```
 
@@ -230,11 +230,11 @@ The guardrails are layered, from softest to hardest:
   interactive session.
 - Run one loop per repository at a time, local or scheduled. Step 0 treats any
   `in-progress` issue as a run that died, so two runners would recover each other's
-  work ([#57](https://github.com/highhair20/claude-code-repo-template/issues/57)).
+  work ([#57](https://github.com/highhair20/backlog-loop/issues/57)).
 - The sync only ever adds deny rules. A rule later removed from the template stays
   in repos that already have it; delete it by hand.
 - Known issues and planned improvements are tracked in
-  [Issues](https://github.com/highhair20/claude-code-repo-template/issues).
+  [Issues](https://github.com/highhair20/backlog-loop/issues).
 
 ## What's in the repo
 
