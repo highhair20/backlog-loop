@@ -398,9 +398,10 @@ work beyond the issue. From that history:
   `<!-- backlog-loop:`. A marker on anyone else's comment is ignored, whoever wrote
   it: it could hide a failing check or a request. The loop's comments are
   never feedback, even though they come from the maintainer's account.
-  Only `followup` comments count as rounds; a `note` records something else.
+  A `note` records something else (see Round cap).
 - Each `followup` comment records `Looked at: <sha>`, the head the follow-up started
-  from, and `Answered up to: <time>`: the newest feedback it answered, or, when it
+  from, but only if every check on it had finished when the follow-up read them
+  (otherwise `none`: a check still pending then has not been seen fail), and `Answered up to: <time>`: the newest feedback it answered, or, when it
   answered none, the answered mark it started from carried forward (`none` only
   when there was none). A comment from before these fields existed (it says
   `Head:`) records no head, and its own `createdAt` as its `Answered up to`.
@@ -437,10 +438,14 @@ The PR **needs attention** if any of:
 
 Take the first PR that needs attention. If none does, go on to Step 2.
 
-**Round cap.** Count the rounds since the human last spoke: the `followup` comments
-whose `Answered up to` is at or after the newest feedback. With no feedback at all,
-every `followup` comment counts, so a PR the loop keeps fixing on CI alone still
-reaches the cap. After 3 follow-ups in a row with no human feedback between them,
+**Round cap.** Count the rounds since the human last spoke: the loop's `followup`
+and `note` comments created after the newest feedback (with no feedback at all,
+every one of them). A `note` counts here because it marks a follow-up that was
+interrupted, and one that dies every run must still reach the cap. Feedback posted
+while a follow-up runs is older than the comment that ends it, so that comment
+counts against it: at worst the PR is handed back one round early. Count by
+creation time, not by `Answered up to`, which only decides what is new feedback.
+After 3 follow-ups in a row with no human feedback between them,
 stop following this PR up: hand it back (below) with "follow-up limit reached" and
 what still needs attention, then stop. New feedback starts a fresh count.
 
@@ -495,7 +500,8 @@ the newest you answered, or the re-read fails, leave `changes-requested` on, and
 in the comment that newer feedback is taken next run. Then one comment on the PR saying what
 changed and why (or why a failure is not this PR's). It begins with the marker,
 then the head this follow-up **looked at** (`headRefOid` from the history you read
-before the work, not the commit you pushed) and its `Answered up to`, as defined
+before the work, not the commit you pushed; `none` if its checks were still
+pending) and its `Answered up to`, as defined
 above (it carries the answered mark forward when it answered nothing new, so a
 round fixing CI alone still counts); then the labels:
 
@@ -537,7 +543,8 @@ steps 2 and 3 run on `main` would save `main`'s own commits.
    git switch main
    git branch -f <type>/<N>-<slug> origin/<type>/<N>-<slug>
    ```
-4. Comment and swap the labels. `Looked at` is the head you read before the work;
+4. Comment and swap the labels. `Looked at` is the head you read before the work
+   (`none` if you never read its checks, or some were still pending);
    `Answered up to` is the newest feedback this follow-up actually answered, or the
    answered mark carried forward. The issue is `in-progress` if you claimed it, or still `in-review` if the
    round cap stopped it before the claim:
