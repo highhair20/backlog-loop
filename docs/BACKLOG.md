@@ -50,8 +50,8 @@ involved, see [`ROUTINE.md`](ROUTINE.md). Run one or the other on a repo, never 
 
    **Then follow up.** Before new work, take the oldest of the loop's open PRs that needs
    attention: a failing check, a conflict with `main`, or the `changes-requested`
-   label (the maintainer's changes are read from the PR's comments, by its author or
-   assignees only). Fix it on the same branch, merging `main` in if needed, until
+   label (the maintainer's changes are read from the PR's comments, reviews, and line
+   comments, by its author or assignees only). Fix it on the same branch, merging `main` in if needed, until
    Verify passes; push, comment, and end the iteration. After three follow-ups in a
    row with no human comment between them, or one that cannot get green, the issue is
    handed back as `needs-attention` with the PR left open and any unfinished work on

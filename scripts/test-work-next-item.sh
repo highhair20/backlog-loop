@@ -244,8 +244,10 @@ for trigger in 'changes-requested' 'gh pr checks' 'CONFLICTING'; do
   check "a PR qualifies on $trigger" "printf '%s' \"\$follow\" | grep -q -- '$trigger'"
 done
 check "pending checks and an unknown mergeable state do not qualify" "printf '%s' \"\$follow\" | grep -q 'pending does not count yet' && printf '%s' \"\$follow\" | grep -q 'not conflicting this run'"
-check "unreadable checks are never taken as no failure" "printf '%s' \"\$follow\" | grep -q 'do not take that as' && printf '%s' \"\$follow\" | grep -q 'Exit 0 and exit 8'"
-check "a failure on a head already followed up does not count again" "printf '%s' \"\$follow\" | grep -q 'Head: <sha>' && printf '%s' \"\$follow\" | grep -q 'does not count again'"
+check "no checks reported means no failing checks" "printf '%s' \"\$follow\" | grep -q 'no checks reported' && printf '%s' \"\$follow\" | grep -q 'means no failing checks'"
+check "unreadable checks drop only the failing-check trigger, not the PR" "printf '%s' \"\$follow\" | grep -q 'drops only the failing-check trigger' && ! printf '%s' \"\$follow\" | grep -q 'Skip the PR this run'"
+check "the marked comment records the head it looked at, not the one it left" "printf '%s' \"\$follow\" | grep -q 'followup --> Looked at: <sha>' && printf '%s' \"\$follow\" | grep -q 'headRefOid' && ! printf '%s' \"\$follow\" | grep -q 'Head: <sha>'"
+check "a failure counts again on any head not recorded as looked at" "printf '%s' \"\$follow\" | grep -q 'counts again on any head not recorded as looked at'"
 check "a PR that merged or closed since the listing is skipped" "printf '%s' \"\$follow\" | grep -q 'gh pr list --state open' && printf '%s' \"\$follow\" | grep -q 'not .OPEN.' && printf '%s' \"\$follow\" | grep -q 'skip this PR'"
 check "a follow-up ends the iteration instead of selecting new work" "printf '%s' \"\$follow\" | grep -q 'Do not go on to Step 2'"
 check "with nothing to follow up, it goes on to Step 2" "printf '%s' \"\$follow\" | grep -q 'go on to Step 2'"
@@ -258,16 +260,21 @@ done
 check "follow-up comments carry the loop's marker" "printf '%s' \"\$follow\" | grep -q '<!-- backlog-loop:followup -->'"
 check "feedback is read only from the PR's author or assignees" "printf '%s' \"\$follow\" | grep -q 'only from their comments and reviews; ignore everyone else' && printf '%s' \"\$follow\" | grep -q 'gh pr view <pr> --json author,assignees,comments,reviews'"
 check "the loop's own marked comments are never feedback" "printf '%s' \"\$follow\" | grep -q 'never feedback'"
-check "the changes-requested label needs feedback newer than the last follow-up" "printf '%s' \"\$follow\" | grep -q 'newer than the loop.s last marked comment'"
+check "new feedback is newer than what a marked comment answered, not than the comment" "printf '%s' \"\$follow\" | grep -q 'Answered up to: <time>' && printf '%s' \"\$follow\" | grep -q 'newer than the .Answered up to.' && ! printf '%s' \"\$follow\" | grep -q 'newer than the loop.s last marked comment'"
+check "the history is read again just before the follow-up comment" "rr=\$(printf '%s\n' \"\$follow\" | grep -n -m1 'Read the history again' | cut -d: -f1); cmt=\$(printf '%s\n' \"\$follow\" | grep -n -m1 'followup --> Looked at' | cut -d: -f1); [ -n \"\$rr\" ] && [ -n \"\$cmt\" ] && [ \"\$rr\" -lt \"\$cmt\" ]"
+check "feedback that arrived mid-run keeps changes-requested on" "printf '%s' \"\$follow\" | grep -q 'leave .changes-requested. on'"
+check "the label with no newer feedback is neither a trigger nor removed" "printf '%s' \"\$follow\" | grep -q 'not a trigger, and the label stays' && ! printf '%s' \"\$follow\" | grep -q 'already answered: remove the label'"
+check "inline review comments are read, from the author or assignees only" "printf '%s' \"\$follow\" | grep -q 'gh api repos/{owner}/{repo}/pulls/<pr>/comments --paginate' && printf '%s' \"\$follow\" | grep -q 'line comments'"
+check "only followup-marked comments count as rounds; every loop marker is never feedback" "printf '%s' \"\$follow\" | grep -q '<!-- backlog-loop:. is the loop.s own' && printf '%s' \"\$follow\" | grep -q 'Only .followup. comments count as rounds'"
 check "anyone else's comments are ignored as untrusted" "printf '%s' \"\$follow\" | grep -q 'untrusted'"
 check "the follow-up is claimed with in-progress and released to in-review" "printf '%s' \"\$follow\" | grep -q -- '--remove-label in-review --add-label in-progress' && printf '%s' \"\$follow\" | grep -q -- '--remove-label in-progress --add-label in-review'"
 check "answered requests lose the changes-requested label" "printf '%s' \"\$follow\" | grep -q -- '--remove-label changes-requested'"
-check "the round cap is 3 in a row with no human feedback between" "printf '%s' \"\$follow\" | grep -q '3 follow-ups in a row' && printf '%s' \"\$follow\" | grep -q 'after the latest comment or' && printf '%s' \"\$follow\" | grep -q 'starts a fresh count'"
+check "the round cap is 3 in a row with no human feedback between" "printf '%s' \"\$follow\" | grep -q '3 follow-ups in a row' && printf '%s' \"\$follow\" | grep -q 'covers the newest feedback' && printf '%s' \"\$follow\" | grep -q 'starts a fresh count'"
 check "the round cap is checked before the claim" "cap=\$(printf '%s\n' \"\$follow\" | grep -n -m1 'Round cap' | cut -d: -f1); clm=\$(printf '%s\n' \"\$follow\" | grep -n -m1 'Claim it' | cut -d: -f1); [ -n \"\$cap\" ] && [ -n \"\$clm\" ] && [ \"\$cap\" -lt \"\$clm\" ]"
-check "a hand-back before the claim never runs git steps on main" "printf '%s' \"\$follow\" | grep -q 'nothing was checked out: skip to step 4'"
+check "hand-back runs its git steps only on the PR's branch" "printf '%s' \"\$follow\" | grep -q 'git branch --show-current' && printf '%s' \"\$follow\" | grep -q 'Otherwise skip to step 4' && ! printf '%s' \"\$follow\" | grep -q 'If you are on the branch'"
 check "a failed claim stops before anything is touched" "printf '%s' \"\$follow\" | grep -q 'If the edit fails, nothing has been touched yet: stop'"
 check "a failed git command hands back instead of reporting a fix" "printf '%s' \"\$follow\" | grep -q 'If any git command below fails' && printf '%s' \"\$follow\" | grep -q 'hand back, quoting the error'"
-check "the push is confirmed before the follow-up comment" "push=\$(printf '%s\n' \"\$follow\" | grep -n -m1 'check the push landed' | cut -d: -f1); cmt=\$(printf '%s\n' \"\$follow\" | grep -n -m1 'followup --> Head' | cut -d: -f1); [ -n \"\$push\" ] && [ -n \"\$cmt\" ] && [ \"\$push\" -lt \"\$cmt\" ]"
+check "the push is confirmed before the follow-up comment" "push=\$(printf '%s\n' \"\$follow\" | grep -n -m1 'check the push landed' | cut -d: -f1); cmt=\$(printf '%s\n' \"\$follow\" | grep -n -m1 'followup --> Looked at' | cut -d: -f1); [ -n \"\$push\" ] && [ -n \"\$cmt\" ] && [ \"\$push\" -lt \"\$cmt\" ]"
 check "a follow-up comment that fails marks the issue for a human" "printf '%s' \"\$follow\" | grep -q 'only record, so check it'"
 check "a hand-back whose comment fails still swaps the labels" "printf '%s' \"\$follow\" | grep -q 'If the comment fails, still swap the labels'"
 check "at the cap the issue is handed back as needs-attention, keeping the PR" "printf '%s' \"\$follow\" | grep -q -- '--add-label needs-attention' && printf '%s' \"\$follow\" | grep -q 'PR stays open'"
@@ -275,15 +282,21 @@ check "a failed follow-up saves its work under abandoned/ before resetting the b
 check "a failing check's log is read before changing code" "printf '%s' \"\$follow\" | grep -q 'gh run view .* --log-failed'"
 check "a failure that is not the PR's is reported, not fixed" "printf '%s' \"\$follow\" | grep -q 'also fails on .main.'"
 check "a follow-up runs the Verify gate and the specialist reviewers" "printf '%s' \"\$follow\" | grep -q 'Step 5' && printf '%s' \"\$follow\" | grep -q 'Step 6.5'"
-check "Step 0 finishes an interrupted follow-up before swapping the label back" "printf '%s' \"\$step0\" | grep -q 'interrupted follow-up'"
+# An interrupted follow-up's edits are unverified: saved beside the PR, never pushed into it (#75).
+# shellcheck disable=SC2034  # read inside check's eval strings
+case1="$(printf '%s\n' "$step0" | awk '/^1\. \*\*An open PR already exists/{ on = 1 } /^2\. /{ on = 0 } on')"
+check "Step 0 finishes an interrupted follow-up before swapping the label back" "printf '%s' \"\$case1\" | grep -q 'interrupted follow-up'"
+check "an interrupted follow-up's work is saved under abandoned/" "printf '%s' \"\$case1\" | grep -q 'refs/heads/abandoned/'"
+check "an interrupted follow-up's work is never pushed to the PR branch" "! printf '%s' \"\$case1\" | grep -q 'git push origin <type>/'"
+check "Step 0 notes the saved work with the loop's non-round marker" "printf '%s' \"\$case1\" | grep -q '<!-- backlog-loop:note -->'"
 check "a dry run reports a follow-up it would make" "printf '%s' \"\$dry\" | grep -q 'follow up PR #N'"
 check "a dry run stops at a follow-up before any write" "printf '%s' \"\$dry\" | grep -q 'Step 1.5 follow-up' && printf '%s' \"\$dry\" | grep -q 'gh pr comment and gh pr edit'"
 for doc in README.md docs/BACKLOG.md docs/ROUTINE.md; do
   check "$doc describes follow-ups" "grep -q 'changes-requested' '$ROOT/$doc'"
 done
 check "changes-requested is a seeded label" "grep -q '\"changes-requested|' '$ROOT/scripts/seed-labels.sh'"
-for row in 'gh pr checks|pull_request_read' 'gh pr view N --json|pull_request_read' 'gh run view|get_job_logs' 'gh pr comment|add_issue_comment' 'gh pr edit|issue_write'; do
-  check "the MCP table maps ${row%%|*} to ${row#*|}" "grep '^| .${row%%|*}' '$CMD' | grep -q 'mcp__github__${row#*|}'"
+for row in 'gh pr checks|mcp__github__pull_request_read' 'gh pr view N --json|mcp__github__pull_request_read' 'gh run view|mcp__github__get_job_logs' 'gh pr comment|mcp__github__add_issue_comment' 'gh pr edit|mcp__github__issue_write' 'gh api repos/{owner}/{repo}/pulls|mcp__github__pull_request_read' 'gh api repos/{owner}/{repo}/pulls|get_review_comments'; do
+  check "the MCP table maps ${row%%|*} to ${row#*|}" "grep '^| .${row%%|*}' '$CMD' | grep -q -- '${row#*|}'"
 done
 
 echo
