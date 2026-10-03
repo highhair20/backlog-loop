@@ -58,12 +58,13 @@ too, and in `scripts/seed-labels.sh`, which creates them.
 
 **Type:** `enhancement` or `bug`.
 
-**Status** (the loop manages these; set manually only to steer):
+**Status** (the loop manages these; set manually only to steer, except `changes-requested`, which is yours):
 
 | Label | Meaning |
 |---|---|
 | `in-progress` | Claimed and being worked |
 | `in-review` | PR open, awaiting maintainer merge |
+| `changes-requested` | Set by the maintainer **on the PR**: the loop reads the changes from the PR's comments and reviews (by its author or assignees only), makes them, and removes the label. A label, because GitHub does not let a PR's author request changes on their own PR. |
 | `blocked` | Cannot proceed; skipped by the loop |
 | `needs-infra` | Infra change written but must be applied by a human |
 | `needs-attention` | Gave up after repeated attempts; needs a human |

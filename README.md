@@ -24,7 +24,7 @@ beyond the tools you already use.
 | Capability | What you get |
 |---|---|
 | **Merge and push guardrails** | A committed `.claude/settings.json` that denies merging PRs (CLI, REST API, and GitHub MCP tools), pushing to `main`, force pushes, tag pushes, and the GitHub MCP file-write tools. Because it is committed, it applies to headless sessions too, and to cloud sessions that load the repo's settings; check a scheduled routine with the first dry run in [`docs/ROUTINE.md`](docs/ROUTINE.md#the-first-dry-run). |
-| **Autonomous backlog loop** | `/work-next-item` takes the highest-priority open issue, checks that the issue's diagnosis matches the code, derives the full scope from the code rather than the issue text, implements it test-first, runs your verify commands, and opens a PR assigned to you. One issue, one branch, one PR — never merged. |
+| **Autonomous backlog loop** | Before new work, `/work-next-item` follows up on its own open PRs: it fixes failing checks and conflicts with `main`, and makes the changes you ask for with the `changes-requested` label, on the same branch. Otherwise it takes the highest-priority open issue, checks that the issue's diagnosis matches the code, derives the full scope from the code rather than the issue text, implements it test-first, runs your verify commands, and opens a PR assigned to you. One issue, one branch, one PR — never merged. |
 | **Scheduled routine** | [`docs/ROUTINE.md`](docs/ROUTINE.md) sets the loop up as a Claude Code routine that works one issue an hour in the cloud. A proposal gate in `CLAUDE.md` holds hand-written issues for your approval (`heal:approved`) before any code, and `/work-next-item --dry-run` shows what a run would do while writing nothing. |
 | **Cold-context driver** | `scripts/backlog-loop.sh` runs one issue per fresh `claude -p` session, so a long backlog never exhausts a context window. All state lives in git and issue labels, so it is safe to stop and resume at any time. |
 | **Specialist reviewers** | Two reviewer agents, `pr-test-analyzer` and `silent-failure-hunter`, that the loop runs before opening each PR in any repo whose `CLAUDE.md` lists them under `## Specialist reviewers`. The skeleton `CLAUDE.md` does; a repo synced with an existing `CLAUDE.md` must add that table (copy it from the template). They are vendored from [ECC](https://github.com/affaan-m/ECC) (MIT) by `scripts/vendor-agents.sh`, which adds your repo's context, so they work in cloud sessions that load no plugins. Optional stack reviewers (`go-reviewer`, `database-reviewer`, `typescript-reviewer`, `python-reviewer`) ship off by default in `.claude/agent-context/optional/`; see [`docs/BACKLOG.md`](docs/BACKLOG.md#reviewers) to enable one. |
@@ -46,6 +46,8 @@ flowchart LR
   D --> E[Push branch,<br/>open PR assigned to you]
   E --> F[Review loop until no<br/>critical/high findings]
   F --> G([You review and merge])
+  F -. CI fails, a conflict, or<br/>you add changes-requested .-> H[Next run follows up<br/>on the same branch]
+  H --> F
 ```
 
 The loop is generic. Everything specific to your project comes from sections of
@@ -186,7 +188,10 @@ reclaimed automatically, because it records its owner's PID. If a run is refused
 you know no loop is running, the message gives the `rm -rf` that clears the lock.
 
 The loop manages these status labels: `in-progress`, `in-review`, `blocked`,
-`needs-infra`, and `needs-attention` (it gave up and a human should look). With the
+`needs-infra`, and `needs-attention` (it gave up and a human should look). To ask
+for changes on one of its PRs, comment on the PR and add `changes-requested` to it;
+the next run makes them and removes the label. Its own PRs come before new issues:
+each run first fixes one that has failing checks, a conflict, or that label. With the
 proposal gate on, it also uses `heal:proposed` (a proposal awaits you) and
 `heal:approved` (you approved it). It never selects an issue labelled `no-auto-heal`.
 See [`docs/ISSUE_GUIDE.md`](docs/ISSUE_GUIDE.md) for the full set.

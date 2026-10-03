@@ -47,6 +47,15 @@ involved, see [`ROUTINE.md`](ROUTINE.md). Run one or the other on a repo, never 
    `in-review`; if its PR was closed unmerged, hand it back as `needs-attention`;
    if only its branch exists, resume it; if neither, release it.
 1. **Clean base.** Start from an up-to-date `main` with a clean working tree.
+
+   **Then follow up.** Before new work, take the oldest of the loop's open PRs that needs
+   attention: a failing check, a conflict with `main`, or the `changes-requested`
+   label (the maintainer's changes are read from the PR's comments, by its author or
+   assignees only). Fix it on the same branch, merging `main` in if needed, until
+   Verify passes; push, comment, and end the iteration. After three follow-ups in a
+   row with no human comment between them, or one that cannot get green, the issue is
+   handed back as `needs-attention` with the PR left open and any unfinished work on
+   `abandoned/`.
 2. **Select** the highest-priority actionable issue: `P0`, then `P1`, then `P2`, then
    `P3` (only once no `P0`–`P2` issue is actionable),
    skipping anything `in-progress`, `in-review`, `blocked`, `needs-attention`, or
