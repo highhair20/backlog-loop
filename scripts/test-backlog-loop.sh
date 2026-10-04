@@ -193,7 +193,8 @@ check "a session that reports the backlog drained ends the run with exit 0" "[ $
 
 # The report as a session may format it: quoted as Step 2 writes it, or as markdown.
 for form in "\"$DRAINED_LINE\"" "✅ **Backlog drained — no actionable issues remain.**" \
-            "### $DRAINED_LINE" "1. $DRAINED_LINE" "> $DRAINED_LINE" "Backlog drained — no actionable issues remain."; do
+            "### $DRAINED_LINE" "1. $DRAINED_LINE" "> $DRAINED_LINE" "Backlog drained — no actionable issues remain." \
+            "Step 2: $DRAINED_LINE" "**Result:** $DRAINED_LINE"; do
   RF="$(setup "drainedform-$(printf '%s' "$form" | cksum | cut -d' ' -f1)" steps)"
   echo 0 >"$RF/count"; echo "$IN_REVIEW" >"$RF/extra.json"
   printf 'cat <<'"'"'EOF'"'"'\nDone.\n%s\nEOF\n' "$form" >"$RF/step-1"

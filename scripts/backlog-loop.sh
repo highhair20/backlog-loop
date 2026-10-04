@@ -142,10 +142,10 @@ snapshot() {
   printf '%s\n%s\n' "$issues" "$prs"
 }
 
-# Step 2's report when nothing is left, whole, at the start of a line of a session's
-# log (after any quotes, or markdown emphasis, heading, quote or list markers, on
-# either side of the ✅).
-DRAINED_REPORT='^[[:space:]*_>#"`0-9.)-]*(✅[[:space:]*_"`-]*)?Backlog drained — no actionable issues remain'
+# Step 2's whole report when nothing is left. Matched anywhere in a line, so any
+# quotes, markdown or lead-in a session puts around it still count; a session that
+# only mentions "Backlog drained" does not.
+DRAINED_REPORT='Backlog drained — no actionable issues remain'
 
 drained() {
   echo "✅ Backlog drained — nothing left to work or follow up. Ran $count session(s) this run."
@@ -226,11 +226,9 @@ while [ "$count" -lt "$MAX_ITEMS" ]; do
   fi
   if [ "$after" = "$before" ]; then
     # Unless the session found nothing to follow up and nothing to select: that is
-    # how a run whose only open work is in-review PRs needing nothing stops. Only a
-    # line that starts with Step 2's report counts, so a stalled session that merely
-    # mentions it still stops the run as no progress. scripts/test-work-next-item.sh
-    # pins the wording in Step 2.
-    if grep -qE "$DRAINED_REPORT" "$log"; then
+    # how a run whose only open work is in-review PRs needing nothing stops.
+    # scripts/test-work-next-item.sh pins the wording in Step 2.
+    if grep -qF "$DRAINED_REPORT" "$log"; then
       drained
     fi
     echo "✗ The last item made no progress: it changed no issue's labels and no PR." >&2
