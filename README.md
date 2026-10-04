@@ -2,6 +2,22 @@
 
 **A GitHub template for repositories where [Claude Code](https://code.claude.com/docs/en/overview) does the work and a human merges.**
 
+## Quickstart
+
+From one issue to a PR assigned to you, given the [requirements](#requirements):
+
+1. `gh repo create my-app --private --template highhair20/backlog-loop --clone && cd my-app`
+2. `scripts/setup.sh --fix` swaps in the `CLAUDE.md` skeleton and creates the labels.
+3. Put your build and test commands in `CLAUDE.md` under `## Verify`.
+4. `rm CLAUDE.md.template-own && git add -A && git commit -m "chore: set up backlog-loop" && git push` (the loop starts only from a clean, pushed `main`).
+5. File one issue with the feature or bug form, and give it one priority label, `P0`–`P3`.
+6. In Claude Code, in the repo, run `/work-next-item`.
+
+CI stays red and `main` stays unprotected until you finish the
+[detailed setup](#getting-started), so do that before running the loop unattended.
+
+## What it is
+
 It gives an AI coding agent a structured backlog to work from, a definition of
 "done" to meet, a review loop to pass, and guardrails that keep it from merging or
 pushing to `main`. You file issues; the agent turns them into reviewed pull
