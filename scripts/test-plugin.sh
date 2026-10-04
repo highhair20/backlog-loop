@@ -46,7 +46,7 @@ for key in hooks agents skills mcpServers lspServers outputStyles workflows expe
   check "the marketplace entry declares no $key" "jq -e '.plugins[0] | has(\"$key\") | not' '$MARKET' >/dev/null 2>&1"
 done
 # Claude Code scans these at the plugin root even without a manifest key.
-for default in agents commands skills hooks/hooks.json .mcp.json .lsp.json settings.json bin output-styles workflows themes monitors; do
+for default in agents commands skills hooks .mcp.json .lsp.json settings.json bin output-styles workflows themes monitors; do
   check "the template root has no $default for the plugin to pick up" "[ ! -e '$ROOT/$default' ]"
 done
 
@@ -55,6 +55,8 @@ INSTALL="$ROOT/.claude-plugin/commands/install.md"
 UPDATE="$ROOT/.claude-plugin/commands/update.md"
 check "install runs the plugin's sync script" "grep -qF '\${CLAUDE_PLUGIN_ROOT}/scripts/sync-guardrails.sh' '$INSTALL'"
 check "install runs the repo's setup.sh --fix" "grep -qF 'scripts/setup.sh --fix' '$INSTALL'"
+# setup.sh comes from the sync, so the sync must run first; then the report.
+check "install syncs, then runs setup.sh, then reports" "awk '/sync-guardrails\\.sh/ && !s { s = NR } /scripts\\/setup\\.sh --fix/ && !f { f = NR } /\\*\\*Report\\*\\*/ && !r { r = NR } END { exit !(s && f && r && s < f && f < r) }' '$INSTALL'"
 check "update runs the plugin's sync script" "grep -qF '\${CLAUDE_PLUGIN_ROOT}/scripts/sync-guardrails.sh' '$UPDATE'"
 check "update shows the diff" "grep -qF 'git diff' '$UPDATE'"
 # Plugins outside the official marketplace do not auto-update, and the loaded copy
@@ -79,6 +81,19 @@ known="$(sed -n '/^PLUGIN_FILES=(/,/^)/p' "$ROOT/scripts/setup.sh" | sed -nE 's/
 # shellcheck disable=SC2034  # read inside check's eval strings
 shipped="$(cd "$ROOT" && find .claude-plugin -type f 2>/dev/null | sort)"
 check "setup.sh's PLUGIN_FILES list is what .claude-plugin/ ships" "[ -n \"\$known\" ] && [ \"\$known\" = \"\$shipped\" ]"
+
+# --- Claude Code's own validator, where this runner has it ---
+# The checks above prove the manifests say what we mean; only Claude Code proves
+# it accepts their shape. CI has no claude, so there this is skipped, not passed.
+if command -v claude >/dev/null && claude plugin validate --help >/dev/null 2>&1; then
+  # shellcheck disable=SC2034  # read inside check's eval strings
+  validate_out="$(claude plugin validate "$ROOT" 2>&1)"
+  before="$failures"
+  check "claude plugin validate passes the marketplace" "printf '%s\n' \"\$validate_out\" | grep -q 'Validation passed'"
+  [ "$failures" -eq "$before" ] || printf '%s\n' "$validate_out" | sed 's/^/     /' >&2
+else
+  echo "skip claude plugin validate: no claude CLI with plugin validate here"
+fi
 
 # --- README ---
 README="$ROOT/README.md"

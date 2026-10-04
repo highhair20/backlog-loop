@@ -214,8 +214,9 @@ check "says which version it synced" "grep -q '@ 0123456789ab' '$WORK/fromplugin
 check "a plugin copy syncs no .claude-plugin/ either" "[ ! -e '$Q/.claude-plugin' ]"
 plugin_copy "$CACHE/plugins/cache/backlog-loop/backlog-loop/unknown"
 U="$(new_target unknownversion)"
-bash "$CACHE/plugins/cache/backlog-loop/backlog-loop/unknown/scripts/sync-guardrails.sh" "$U" >/dev/null 2>&1
+bash "$CACHE/plugins/cache/backlog-loop/backlog-loop/unknown/scripts/sync-guardrails.sh" "$U" >"$WORK/unknown.out" 2>&1
 check "a copy whose directory names no commit stamps unknown" "[ \$? -eq 0 ] && [ \"\$(cat '$U/.claude/template-version')\" = unknown ]"
+check "and warns that the version is unknown" "grep -q 'warning: .*template version as unknown' '$WORK/unknown.out'"
 
 echo
 if [ "$failures" -eq 0 ]; then echo "all tests passed"; else echo "$failures test(s) failed" >&2; exit 1; fi

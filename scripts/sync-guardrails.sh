@@ -151,16 +151,18 @@ seed_source() {
 # to 12 characters. Only a repo whose top level is the template counts: a copy
 # inside another repo (a git-managed ~/.claude) must not report that repo's commit.
 template_version() {
-  local top real version
+  local top real version changes
   top="$(git -C "$TEMPLATE" rev-parse --show-toplevel 2>/dev/null)" || top=""
   real="$(cd "$TEMPLATE" && pwd -P)" || return 1
   if [ -n "$top" ] && [ "$(cd "$top" && pwd -P)" = "$real" ]; then
     version="$(git -C "$TEMPLATE" rev-parse HEAD)" || return 1
-    [ -z "$(git -C "$TEMPLATE" status --porcelain)" ] || version="$version-dirty"
+    changes="$(git -C "$TEMPLATE" status --porcelain)" || return 1
+    [ -z "$changes" ] || version="$version-dirty"
     echo "$version"
   elif printf '%s\n' "${real##*/}" | grep -qxE '[0-9a-f]{12}'; then
     echo "${real##*/}"
   else
+    echo "sync-guardrails: warning: $TEMPLATE is neither a git clone nor a plugin copy named after its commit; recording the template version as unknown, so setup.sh cannot tell how far behind it is" >&2
     echo unknown
   fi
 }

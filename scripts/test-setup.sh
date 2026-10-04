@@ -349,8 +349,17 @@ check "a short stamp that prefixes the template's HEAD is up to date" "[ $rc -eq
 SU="$(configured_repo unknownstamp)"
 echo unknown >"$SU/.claude/template-version"
 run "$SU"; rc=$?
-check "an unknown stamp is a warning, not up to date" "[ $rc -eq 0 ] && grep -q 'the template is now at' '$SU/.fake/out' && ! grep -q 'up to date with the template' '$SU/.fake/out'"
-check "the update hint names the plugin command" "grep -q '/backlog-loop:update' '$SU/.fake/out'"
+# Re-running the update would stamp unknown again, so the warning says why instead.
+check "an unknown stamp is a warning that says so, not up to date" "[ $rc -eq 0 ] && grep -q 'synced from is unknown (unknown)' '$SU/.fake/out' && ! grep -q 'up to date with the template' '$SU/.fake/out'"
+SM="$(configured_repo shortstale)"
+echo 000000000000 >"$SM/.claude/template-version"
+run "$SM"; rc=$?
+check "a short stamp that is not a prefix of HEAD is behind" "[ $rc -eq 0 ] && grep -q 'the template is now at' '$SM/.fake/out' && ! grep -q 'up to date with the template' '$SM/.fake/out'"
+check "the update hint names the plugin command" "grep -q '/backlog-loop:update' '$SM/.fake/out'"
+SP="$(configured_repo shortprefix)"
+echo "${TEMPLATE_HEAD:0:7}" >"$SP/.claude/template-version"
+run "$SP"
+check "a prefix shorter than 12 characters does not count as current" "! grep -q 'up to date with the template' '$SP/.fake/out'"
 
 run "$C" --bogus; rc=$?
 check "rejects an unknown argument" "[ $rc -eq 2 ]"

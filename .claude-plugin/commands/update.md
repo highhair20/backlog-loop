@@ -26,14 +26,20 @@ changes. The user reviews the diff and commits it.
    ```
 
    It refuses a repository with uncommitted changes, so that the diff afterwards
-   is exactly what the sync changed. If it refuses or fails, show its message,
-   say what the user must do (commit or stash their changes first), and stop.
+   is exactly what the sync changed. If it fails, show its own message and stop.
+   Only when that message is about uncommitted changes, tell the user to commit
+   or stash them first. Any other failure (`jq` not found, an error part way
+   through) may leave some files copied: show `git status --short`, and say that
+   the tree was clean before the sync, so those changes are the sync's alone and
+   can be discarded once the cause is fixed. Do not discard them yourself.
 
 4. **Show the diff for review.** From the repository root, run `git status --short`
    and `git diff --stat`, then `git diff` for the changed files, and summarise it:
    which managed files the template changed, what was added to
    `.claude/settings.json` and `.gitignore`, and the template version now in
-   `.claude/template-version` (a commit, or `unknown`). Seeded files the
+   `.claude/template-version`. If it reads `unknown`, say so plainly: the repo can
+   no longer tell how far behind the template it is, and the sync's warning says
+   why. Seeded files the
    repository already had are never touched, so a new file appearing means the
    template added it.
 

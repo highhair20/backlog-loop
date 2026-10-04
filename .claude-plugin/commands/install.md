@@ -17,8 +17,13 @@ changes. The user reviews the result and commits it.
    ```
 
    It refuses a repository with uncommitted changes, so that the diff afterwards
-   is exactly what the sync changed. If it refuses or fails, show its message,
-   say what the user must do (commit or stash their changes first), and stop.
+   is exactly what the sync changed. If it fails, show its own message and stop.
+   Only when that message is about uncommitted changes, tell the user to commit
+   or stash them first. Any other failure (`jq` not found, an error part way
+   through) may leave some files copied: show `git status --short`, and say that
+   the tree was clean before the sync, so those changes are the sync's alone and
+   can be discarded once the cause is fixed. Do not discard them yourself.
+   If it prints a warning that the template version is unknown, pass it on.
 
 3. **Check and fix the setup.** From the repository root, run:
 
@@ -27,8 +32,10 @@ changes. The user reviews the result and commits it.
    ```
 
    It creates the loop's labels and the local allowlist, swaps in the `CLAUDE.md`
-   skeleton when needed, and checks the rest. Exit 1 means some items still need
-   the user, not that this command failed.
+   skeleton when needed, and checks the rest. Exit 1 with its `✗` lines means
+   some items still need the user, not that this command failed. Any other
+   non-zero exit, or no `Ready:` or `problem(s)` summary line at the end, is a
+   failure: report its output as one.
 
 4. **Report**, briefly:
    - What the sync changed (`git status --short`).

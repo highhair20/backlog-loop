@@ -255,7 +255,10 @@ check_template_version() {
   # GIT_TERMINAL_PROMPT=0: a private or mistyped URL must fail, not wait for a password.
   latest="$(GIT_TERMINAL_PROMPT=0 git ls-remote "$TEMPLATE_REPO" HEAD 2>/dev/null | awk '$2 == "HEAD" { print $1; exit }')"
   # A sync from the installed plugin stamps the commit shortened to 12 characters.
-  if [ -z "$latest" ]; then
+  if ! printf '%s\n' "$have" | grep -qE '^[0-9a-f]{12,40}$'; then
+    warn "the template version this repo was synced from is unknown ($have)" \
+      "re-sync from a clone of the template, or from the plugin as installed from its marketplace: its copy is named after the template commit"
+  elif [ -z "$latest" ]; then
     warn "could not reach $TEMPLATE_REPO to compare versions"
   elif [ "${#have}" -ge 12 ] && [ "${latest#"$have"}" != "$latest" ]; then
     ok "up to date with the template"
