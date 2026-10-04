@@ -142,6 +142,10 @@ snapshot() {
   printf '%s\n%s\n' "$issues" "$prs"
 }
 
+# Step 2's report when nothing is left, at the start of a line of a session's log
+# (after any markdown bold, quote or list marker).
+DRAINED_REPORT='^[[:space:]*>-]*(✅ )?Backlog drained'
+
 drained() {
   echo "✅ Backlog drained — nothing left to work or follow up. Ran $count session(s) this run."
   exit 0
@@ -174,7 +178,9 @@ while [ "$count" -lt "$MAX_ITEMS" ]; do
     echo "✗ gh query failed — is gh authenticated? Stopping." >&2
     exit 1
   fi
-  [ "$remaining" -ne 0 ] || drained
+  if [ "$remaining" -eq 0 ]; then
+    drained
+  fi
   if ! before="$(snapshot)"; then
     echo "✗ gh could not read the open issues and PRs — is gh authenticated? Stopping." >&2
     exit 1
@@ -208,12 +214,6 @@ while [ "$count" -lt "$MAX_ITEMS" ]; do
   echo "  ─ last lines of this item:"
   tail -n 3 "$log" | sed 's/^/    /'
 
-  # The session found nothing to follow up and nothing to select. This is how a run
-  # whose only open work is in-review PRs that need nothing stops. The wording is
-  # Step 2's; scripts/test-work-next-item.sh pins it there.
-  if grep -qF 'Backlog drained' "$log"; then
-    drained
-  fi
   # Progress is any change in what GitHub shows, not a drop in the count: a
   # follow-up leaves its issue in-review, as it found it. A session that changed
   # nothing stopped early (dirty tree, bad Verify, a refused command, ...) and will
@@ -224,6 +224,14 @@ while [ "$count" -lt "$MAX_ITEMS" ]; do
     exit 1
   fi
   if [ "$after" = "$before" ]; then
+    # Unless the session found nothing to follow up and nothing to select: that is
+    # how a run whose only open work is in-review PRs needing nothing stops. Only a
+    # line that starts with Step 2's report counts, so a stalled session that merely
+    # mentions it still stops the run as no progress. scripts/test-work-next-item.sh
+    # pins the wording in Step 2.
+    if grep -qE "$DRAINED_REPORT" "$log"; then
+      drained
+    fi
     echo "✗ The last item made no progress: it changed no issue's labels and no PR." >&2
     echo "  Read its log in $LOG_DIR, fix the cause, and re-run." >&2
     exit 3

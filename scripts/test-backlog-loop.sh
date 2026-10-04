@@ -180,15 +180,23 @@ check "heal:approved without heal:proposed is remaining work" "[ \$(wc -l <'$H/c
 # Follow-ups (#77): an in-review issue may have a PR Step 1.5 should work, so it
 # keeps the driver running; the session, not the driver, decides whether it does.
 DRAINED_LINE='✅ Backlog drained — no actionable issues remain.'
-IN_REVIEW='[{"number": 10, "labels": [{"name": "P2"}, {"name": "in-review"}]}]'
+# No priority label: an in-review issue counts whatever its priority.
+IN_REVIEW='[{"number": 10, "labels": [{"name": "in-review"}]}]'
 pr_at() { printf '[{"number": 5, "headRefOid": "%s", "updatedAt": "%s"}]' "$1" "$2"; }
 
 R1="$(setup reviewonly steps)"
 echo 0 >"$R1/count"; echo "$IN_REVIEW" >"$R1/extra.json"
-printf 'echo "%s"\n' "$DRAINED_LINE" >"$R1/step-1"
+printf 'echo "Nothing to follow up."\necho "**%s**"\n' "$DRAINED_LINE" >"$R1/step-1"
 run "$R1"; rc=$?
-check "runs a session while only in-review issues are open" "[ \$(wc -l <'$R1/calls') -eq 1 ]"
+check "runs a session while only in-review issues are open, whatever their priority" "[ \$(wc -l <'$R1/calls') -eq 1 ]"
 check "a session that reports the backlog drained ends the run with exit 0" "[ $rc -eq 0 ] && grep -q 'nothing left to work or follow up' '$R1/out'"
+
+# A stalled session that only mentions the report must not end the run as drained.
+R7="$(setup quotesdrained steps)"
+echo 0 >"$R7/count"; echo "$IN_REVIEW" >"$R7/extra.json"
+echo "echo \"Stopped: dirty tree, so this never reached 'Backlog drained' in Step 2.\"" >"$R7/step-1"
+run "$R7"; rc=$?
+check "a log that merely mentions 'Backlog drained' is still no progress (exit 3)" "[ $rc -eq 3 ] && grep -q 'no progress' '$R7/out'"
 
 R2="$(setup reviewskipped steps)"
 echo 0 >"$R2/count"
@@ -208,10 +216,12 @@ echo 1 >"$R4/count"; echo "$IN_REVIEW" >"$R4/extra.json"
 pr_at a 2026-01-01T00:00:00Z >"$R4/prs.json"
 printf "printf '%%s' '%s' >prs.json\n" "$(pr_at a 2026-01-02T00:00:00Z)" >"$R4/step-1"
 printf "printf '%%s' '%s' >prs.json\n" "$(pr_at b 2026-01-02T00:00:00Z)" >"$R4/step-2"
-echo 'echo 0 >count' >"$R4/step-3"
-printf 'echo "%s"\n' "$DRAINED_LINE" >"$R4/step-4"
+# Then a label swap alone (the actionable P2 handed back as needs-attention, same
+# number), then the in-review issue's PR merged, which leaves nothing to work.
+echo 'echo needs-attention >label' >"$R4/step-3"
+echo 'echo "[]" >extra.json' >"$R4/step-4"
 run "$R4"; rc=$?
-check "a follow-up that changes only a PR counts as progress" "[ $rc -eq 0 ] && [ \$(wc -l <'$R4/calls') -eq 4 ] && ! grep -q 'no progress' '$R4/out'"
+check "a follow-up that changes only a PR, or only a label, counts as progress" "[ $rc -eq 0 ] && [ \$(wc -l <'$R4/calls') -eq 4 ] && ! grep -q 'no progress' '$R4/out'"
 
 # A setup refusal in Steps 3-3.7 claims and releases an issue: its updatedAt moves,
 # its labels do not. That must still halt the run, or every item hits the refusal.
