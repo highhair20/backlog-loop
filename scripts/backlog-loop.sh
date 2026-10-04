@@ -145,8 +145,21 @@ snapshot() {
 # Step 2 runs scripts/report-drained.sh when nothing is left to select or follow up,
 # which writes this marker. The driver reads the marker, never the session's words:
 # a model paraphrases its report (#77, measured in the review of #80). Cleared before
-# every session, so only the session just run can leave it.
-DRAINED_MARK="$(git rev-parse --git-common-dir)/backlog-loop.drained"
+# every attempt, so only the session just run can leave it.
+if ! git_common_dir="$(git rev-parse --path-format=absolute --git-common-dir)"; then
+  echo "✗ cannot find this checkout's git directory. Stopping." >&2
+  exit 1
+fi
+DRAINED_MARK="$git_common_dir/backlog-loop.drained"
+
+# Clears the marker, or stops the run: a marker that cannot be removed would make
+# every later stall read as drained.
+clear_drained_mark() {
+  if ! rm -f -- "$DRAINED_MARK" || [ -e "$DRAINED_MARK" ]; then
+    echo "✗ cannot remove $DRAINED_MARK. Stopping." >&2
+    exit 1
+  fi
+}
 
 drained() {
   echo "✅ Backlog drained — nothing left to work or follow up. Ran $count session(s) this run."
@@ -183,7 +196,6 @@ while [ "$count" -lt "$MAX_ITEMS" ]; do
   if [ "$remaining" -eq 0 ]; then
     drained
   fi
-  rm -f "$DRAINED_MARK"
   if ! before="$(snapshot)"; then
     echo "✗ gh could not read the open issues and PRs — is gh authenticated? Stopping." >&2
     exit 1
@@ -201,6 +213,7 @@ while [ "$count" -lt "$MAX_ITEMS" ]; do
     attempt=$((attempt + 1))
     # Each attempt gets its own log, so a retry cannot erase why the last one failed.
     [ "$attempt" -eq 1 ] || log="$base.attempt$attempt.log"
+    clear_drained_mark
     if run_item "$log"; then
       break
     fi
@@ -234,7 +247,8 @@ while [ "$count" -lt "$MAX_ITEMS" ]; do
     if [ -f "$DRAINED_MARK" ]; then
       drained
     fi
-    echo "✗ The last item made no progress: it changed no issue's labels and no PR." >&2
+    echo "✗ The last item made no progress: it changed no issue's labels and no PR," >&2
+    echo "  and did not record the backlog drained (scripts/report-drained.sh)." >&2
     echo "  Read its log in $LOG_DIR, fix the cause, and re-run." >&2
     exit 3
   fi

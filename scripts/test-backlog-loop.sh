@@ -213,6 +213,24 @@ printf 'cd /  # report-drained.sh run outside the repo fails, so no marker\n/bin
 run "$R8"; rc=$?
 check "a marker that could not be written leaves a stall as no progress (the safe side)" "[ $rc -eq 3 ] && grep -q 'no progress' '$R8/out'"
 
+# A marker counts only when the session also changed nothing. Session 1 here writes
+# it but also makes progress (one issue fewer), so the run must go on; session 2 then
+# stalls without writing it, so the marker session 1 left must have been cleared.
+R9="$(setup markerprogress steps)"
+echo 1 >"$R9/count"; echo "$IN_REVIEW" >"$R9/extra.json"
+printf 'scripts/report-drained.sh >/dev/null\necho $(( $(cat count) - 1 )) >count\n' >"$R9/step-1"
+run "$R9"; rc=$?
+check "a marker from a session that made progress does not end the run" "[ \$(wc -l <'$R9/calls') -eq 2 ]"
+check "the marker is cleared before every session, so a later stall is no progress" "[ $rc -eq 3 ] && grep -q 'no progress' '$R9/out'"
+
+# A marker from a failed attempt must not make a stalled retry of the same item
+# read as drained: it is cleared before every attempt, not once per item.
+R10="$(setup markerretry steps)"
+echo 0 >"$R10/count"; echo "$IN_REVIEW" >"$R10/extra.json"
+printf 'scripts/report-drained.sh >/dev/null\nexit 1\n' >"$R10/step-1"
+BACKOFF_SECONDS=0 run "$R10"; rc=$?
+check "a marker from a failed attempt is cleared before the retry, so a stalled retry is no progress" "[ \$(wc -l <'$R10/calls') -eq 2 ] && [ $rc -eq 3 ] && grep -q 'no progress' '$R10/out'"
+
 R2="$(setup reviewskipped steps)"
 echo 0 >"$R2/count"
 echo '[{"number": 10, "labels": [{"name": "in-review"}, {"name": "needs-attention"}]}, {"number": 11, "labels": [{"name": "in-review"}, {"name": "blocked"}]}, {"number": 12, "labels": [{"name": "in-review"}, {"name": "no-auto-heal"}]}]' >"$R2/extra.json"

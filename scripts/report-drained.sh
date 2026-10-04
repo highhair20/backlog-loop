@@ -7,7 +7,7 @@
 # Usage: scripts/report-drained.sh   (Step 2 of /work-next-item runs it)
 set -euo pipefail
 
-git_dir="$(git rev-parse --git-common-dir 2>/dev/null)" || {
+git_dir="$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null)" || {
   echo "report-drained: not a git repository: $PWD" >&2
   exit 1
 }
