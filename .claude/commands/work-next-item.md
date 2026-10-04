@@ -581,7 +581,10 @@ a human; see Step 3.7). Take the first actionable issue at the highest priority 
 has one; if `P0` has none, try `P1`, then `P2`, then `P3`. `P3` is the last tier:
 take one only when no `P0`–`P2` issue is actionable.
 
-If **no** actionable issue exists at any priority: report
+If **no** actionable issue exists at any priority, first run `scripts/report-drained.sh`
+(not in a dry run). It writes a marker that tells `scripts/backlog-loop.sh` the run is
+drained, which the driver cannot learn from your report. If it fails, say so in the
+report; the driver then stops as "no progress" instead, which is safe. Then report
 "✅ Backlog drained — no actionable issues remain." and STOP. (This ends the loop —
 do not schedule another iteration.)
 

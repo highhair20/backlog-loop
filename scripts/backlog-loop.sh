@@ -142,10 +142,11 @@ snapshot() {
   printf '%s\n%s\n' "$issues" "$prs"
 }
 
-# Step 2's whole report when nothing is left. Matched anywhere in a line, so any
-# quotes, markdown or lead-in a session puts around it still count; a session that
-# only mentions "Backlog drained" does not.
-DRAINED_REPORT='Backlog drained — no actionable issues remain'
+# Step 2 runs scripts/report-drained.sh when nothing is left to select or follow up,
+# which writes this marker. The driver reads the marker, never the session's words:
+# a model paraphrases its report (#77, measured in the review of #80). Cleared before
+# every session, so only the session just run can leave it.
+DRAINED_MARK="$(git rev-parse --git-common-dir)/backlog-loop.drained"
 
 drained() {
   echo "✅ Backlog drained — nothing left to work or follow up. Ran $count session(s) this run."
@@ -182,6 +183,7 @@ while [ "$count" -lt "$MAX_ITEMS" ]; do
   if [ "$remaining" -eq 0 ]; then
     drained
   fi
+  rm -f "$DRAINED_MARK"
   if ! before="$(snapshot)"; then
     echo "✗ gh could not read the open issues and PRs — is gh authenticated? Stopping." >&2
     exit 1
@@ -225,10 +227,11 @@ while [ "$count" -lt "$MAX_ITEMS" ]; do
     exit 1
   fi
   if [ "$after" = "$before" ]; then
-    # Unless the session found nothing to follow up and nothing to select: that is
-    # how a run whose only open work is in-review PRs needing nothing stops.
-    # scripts/test-work-next-item.sh pins the wording in Step 2.
-    if grep -qF "$DRAINED_REPORT" "$log"; then
+    # Unless the session found nothing to follow up and nothing to select, and said
+    # so with report-drained.sh: that is how a run whose only open work is in-review
+    # PRs needing nothing stops. A missing marker (the script was refused, or the
+    # session stopped early) reads as no progress, the safe side.
+    if [ -f "$DRAINED_MARK" ]; then
       drained
     fi
     echo "✗ The last item made no progress: it changed no issue's labels and no PR." >&2

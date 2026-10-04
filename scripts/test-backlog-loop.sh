@@ -32,7 +32,7 @@ setup() {
   mkdir -p "$dir/scripts" "$dir/bin"
   git -C "$dir" init -q -b main
   git -C "$dir" remote add origin https://github.com/o/r.git
-  cp "$HERE/backlog-loop.sh" "$HERE/check-verify-section.sh" "$HERE/loop-lock.sh" "$HERE/gh-auth-check.sh" "$HERE/gh-repo.sh" "$dir/scripts/"
+  cp "$HERE/backlog-loop.sh" "$HERE/check-verify-section.sh" "$HERE/loop-lock.sh" "$HERE/gh-auth-check.sh" "$HERE/gh-repo.sh" "$HERE/report-drained.sh" "$dir/scripts/"
   printf '## Verify\n```sh\nmake test\n```\n' >"$dir/CLAUDE.md"
   echo 3 >"$dir/count"
   : >"$dir/calls"
@@ -186,33 +186,32 @@ pr_at() { printf '[{"number": 5, "headRefOid": "%s", "updatedAt": "%s"}]' "$1" "
 
 R1="$(setup reviewonly steps)"
 echo 0 >"$R1/count"; echo "$IN_REVIEW" >"$R1/extra.json"
-printf 'echo "Nothing to follow up."\necho "**%s**"\n' "$DRAINED_LINE" >"$R1/step-1"
+printf 'scripts/report-drained.sh >/dev/null\necho "Nothing to follow up."\n' >"$R1/step-1"
 run "$R1"; rc=$?
 check "runs a session while only in-review issues are open, whatever their priority" "[ \$(wc -l <'$R1/calls') -eq 1 ]"
-check "a session that reports the backlog drained ends the run with exit 0" "[ $rc -eq 0 ] && grep -q 'nothing left to work or follow up' '$R1/out'"
+check "a session that records the backlog drained ends the run with exit 0" "[ $rc -eq 0 ] && grep -q 'nothing left to work or follow up' '$R1/out'"
 
-# The report as a session may format it: quoted as Step 2 writes it, or as markdown.
-for form in "\"$DRAINED_LINE\"" "✅ **Backlog drained — no actionable issues remain.**" \
-            "### $DRAINED_LINE" "1. $DRAINED_LINE" "> $DRAINED_LINE" "Backlog drained — no actionable issues remain." \
-            "Step 2: $DRAINED_LINE" "**Result:** $DRAINED_LINE"; do
-  RF="$(setup "drainedform-$(printf '%s' "$form" | cksum | cut -d' ' -f1)" steps)"
+# The driver reads the marker, never the session's words: a model paraphrases its
+# report (measured in backlog-loop#80's review), so prose cannot end a run as drained.
+for form in "$DRAINED_LINE" "✅ The backlog is drained: no issues are ready for the loop to work."; do
+  RF="$(setup "drainedwords-$(printf '%s' "$form" | cksum | cut -d' ' -f1)" steps)"
   echo 0 >"$RF/count"; echo "$IN_REVIEW" >"$RF/extra.json"
   printf 'cat <<'"'"'EOF'"'"'\nDone.\n%s\nEOF\n' "$form" >"$RF/step-1"
   run "$RF"; rc=$?
-  check "a drained report formatted as: $form" "[ $rc -eq 0 ] && grep -q 'nothing left to work or follow up' '$RF/out'"
+  check "a session that only says it is drained, with no marker, is no progress: $form" "[ $rc -eq 3 ] && grep -q 'no progress' '$RF/out'"
 done
 
-# A stalled session that only mentions the report must not end the run as drained.
-R7="$(setup quotesdrained steps)"
+# A marker left by an earlier session must not end a later, stalled one as drained.
+R7="$(setup stalemarker steps)"
 echo 0 >"$R7/count"; echo "$IN_REVIEW" >"$R7/extra.json"
-echo "echo \"Stopped: dirty tree, so this never reached 'Backlog drained' in Step 2.\"" >"$R7/step-1"
+echo stale >"$(git -C "$R7" rev-parse --absolute-git-dir)/backlog-loop.drained"
 run "$R7"; rc=$?
-check "a log that merely mentions 'Backlog drained' is still no progress (exit 3)" "[ $rc -eq 3 ] && grep -q 'no progress' '$R7/out'"
-R8="$(setup startsdrained steps)"
+check "a stale marker from before the session is cleared, so a stall is still no progress" "[ $rc -eq 3 ] && grep -q 'no progress' '$R7/out'"
+R8="$(setup failedmarker steps)"
 echo 0 >"$R8/count"; echo "$IN_REVIEW" >"$R8/extra.json"
-echo "echo 'Backlog drained? Not checked: the working tree is dirty.'" >"$R8/step-1"
+printf 'cd /  # report-drained.sh run outside the repo fails, so no marker\n/bin/sh -c "$OLDPWD/scripts/report-drained.sh" 2>/dev/null; cd "$OLDPWD"\n' >"$R8/step-1"
 run "$R8"; rc=$?
-check "a line that only starts like the report is still no progress (exit 3)" "[ $rc -eq 3 ] && grep -q 'no progress' '$R8/out'"
+check "a marker that could not be written leaves a stall as no progress (the safe side)" "[ $rc -eq 3 ] && grep -q 'no progress' '$R8/out'"
 
 R2="$(setup reviewskipped steps)"
 echo 0 >"$R2/count"
