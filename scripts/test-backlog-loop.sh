@@ -193,7 +193,7 @@ check "a session that reports the backlog drained ends the run with exit 0" "[ $
 
 # The report as a session may format it: quoted as Step 2 writes it, or as markdown.
 for form in "\"$DRAINED_LINE\"" "✅ **Backlog drained — no actionable issues remain.**" \
-            "### $DRAINED_LINE" "1. $DRAINED_LINE" "> $DRAINED_LINE" "Backlog drained."; do
+            "### $DRAINED_LINE" "1. $DRAINED_LINE" "> $DRAINED_LINE" "Backlog drained — no actionable issues remain."; do
   RF="$(setup "drainedform-$(printf '%s' "$form" | cksum | cut -d' ' -f1)" steps)"
   echo 0 >"$RF/count"; echo "$IN_REVIEW" >"$RF/extra.json"
   printf 'cat <<'"'"'EOF'"'"'\nDone.\n%s\nEOF\n' "$form" >"$RF/step-1"
@@ -207,6 +207,11 @@ echo 0 >"$R7/count"; echo "$IN_REVIEW" >"$R7/extra.json"
 echo "echo \"Stopped: dirty tree, so this never reached 'Backlog drained' in Step 2.\"" >"$R7/step-1"
 run "$R7"; rc=$?
 check "a log that merely mentions 'Backlog drained' is still no progress (exit 3)" "[ $rc -eq 3 ] && grep -q 'no progress' '$R7/out'"
+R8="$(setup startsdrained steps)"
+echo 0 >"$R8/count"; echo "$IN_REVIEW" >"$R8/extra.json"
+echo "echo 'Backlog drained? Not checked: the working tree is dirty.'" >"$R8/step-1"
+run "$R8"; rc=$?
+check "a line that only starts like the report is still no progress (exit 3)" "[ $rc -eq 3 ] && grep -q 'no progress' '$R8/out'"
 
 R2="$(setup reviewskipped steps)"
 echo 0 >"$R2/count"

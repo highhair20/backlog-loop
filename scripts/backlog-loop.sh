@@ -142,10 +142,10 @@ snapshot() {
   printf '%s\n%s\n' "$issues" "$prs"
 }
 
-# Step 2's report when nothing is left, at the start of a line of a session's log
-# (after any quotes, or markdown emphasis, heading, quote or list markers, on either
-# side of the ✅).
-DRAINED_REPORT='^[[:space:]*_>#"`0-9.)-]*(✅[[:space:]*_"`-]*)?Backlog drained'
+# Step 2's report when nothing is left, whole, at the start of a line of a session's
+# log (after any quotes, or markdown emphasis, heading, quote or list markers, on
+# either side of the ✅).
+DRAINED_REPORT='^[[:space:]*_>#"`0-9.)-]*(✅[[:space:]*_"`-]*)?Backlog drained — no actionable issues remain'
 
 drained() {
   echo "✅ Backlog drained — nothing left to work or follow up. Ran $count session(s) this run."
