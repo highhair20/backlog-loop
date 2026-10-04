@@ -221,6 +221,25 @@ for wf in ci.yml template-self-test.yml; do
 done
 check "the root CLAUDE.md carries the new marker" "head -1 '$ROOT/CLAUDE.md' | grep -qx '<!-- backlog-loop: own instructions -->'"
 
+# --- releases (#65) ---
+CHANGELOG="$ROOT/CHANGELOG.md"
+# setup.sh --fix removes the file from new repos only when it carries this marker.
+check "CHANGELOG.md carries the template's marker" "head -1 '$CHANGELOG' | grep -qx '<!-- backlog-loop: own changelog -->'"
+check "CHANGELOG.md has an Unreleased section" "grep -qx '## \\[Unreleased\\]' '$CHANGELOG'"
+check "CHANGELOG.md has the first release, dated" "grep -qE '^## \\[0\\.1\\.0\\] - [0-9]{4}-[0-9]{2}-[0-9]{2}\$' '$CHANGELOG'"
+# Seeded files do not update on sync, so every section says what to do by hand.
+every_section_has_manual_steps() {
+  awk '
+    /^## \[/ { if (open && !steps) bad = 1; open = 1; steps = 0; n++ }
+    /^### Manual steps for existing repos$/ { steps = 1 }
+    END { if (open && !steps) bad = 1; exit (bad || n < 2) }
+  ' "$CHANGELOG"
+}
+check "every CHANGELOG.md section has manual steps for existing repos" "every_section_has_manual_steps"
+check "CHANGELOG.md links each version heading" "grep -qF '[0.1.0]: https://github.com/highhair20/backlog-loop/releases/tag/v0.1.0' '$CHANGELOG' && grep -qF '[Unreleased]: https://github.com/highhair20/backlog-loop/compare/v0.1.0...HEAD' '$CHANGELOG'"
+check "README says how to cut a release" "grep -qx '### Cutting a release' '$ROOT/README.md' && grep -qF 'git tag -a vX.Y.Z' '$ROOT/README.md'"
+check "README's file list includes the changelog" "grep -qE '^CHANGELOG\\.md[[:space:]]' '$ROOT/README.md'"
+
 # --- editor and PR defaults ---
 check ".editorconfig is a root config" "grep -qx 'root = true' '$ROOT/.editorconfig'"
 check "PR template links the issue it closes" "grep -q '^Closes #' '$ROOT/.github/pull_request_template.md'"

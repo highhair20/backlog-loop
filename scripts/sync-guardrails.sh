@@ -210,12 +210,24 @@ main() {
 
   # Record which template commit this repo now matches, so drift is visible later
   # (in git history, and to any tool comparing it with the template's HEAD).
-  local version
+  # Line 1 is always the commit, so that comparison keeps working. A second line
+  # names the release tag (#65), only when the template is exactly on one and
+  # clean: a dirty tree is not the release, whatever tag its HEAD carries.
+  local version tag=""
   version="$(git -C "$TEMPLATE" rev-parse HEAD)"
-  [ -z "$(git -C "$TEMPLATE" status --porcelain)" ] || version="$version-dirty"
-  printf '%s\n' "$version" >"$target/$VERSION_FILE"
+  if [ -n "$(git -C "$TEMPLATE" status --porcelain)" ]; then
+    version="$version-dirty"
+  else
+    # A non-zero exit here only means HEAD carries no tag.
+    tag="$(git -C "$TEMPLATE" describe --tags --exact-match HEAD 2>/dev/null)" || tag=""
+  fi
+  printf '%s\n' "$version" ${tag:+"$tag"} >"$target/$VERSION_FILE"
 
-  echo "Synced from backlog-loop @ $version."
+  if [ -n "$tag" ]; then
+    echo "Synced from backlog-loop @ $tag ($version)."
+  else
+    echo "Synced from backlog-loop @ $version."
+  fi
   git -C "$target" status --short
   echo "Review with: git diff  (in $target), then commit on a branch."
 }

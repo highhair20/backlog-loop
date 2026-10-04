@@ -16,6 +16,7 @@
 | `docs/` | `ISSUE_GUIDE.md`, `BACKLOG.md`, and `CI_HARDENING.md`, all seeded into repos |
 | `scripts/` | The loop and setup scripts, and a `test-*.sh` for each |
 | `templates/CLAUDE.md` | The project skeleton that new and synced repos get as their `CLAUDE.md` |
+| `CHANGELOG.md` | The template's release notes, Keep a Changelog form. Never synced; `setup.sh --fix` removes it from repos made from the template |
 | `.claude/agent-context/optional/` | Optional stack reviewer contexts, seeded but inactive until a repo copies one into `.claude/agent-context/` |
 
 ## Verify
@@ -45,7 +46,10 @@ shellcheck --severity=warning scripts/*.sh .claude/hooks/*.sh
   `scripts/sync-guardrails.sh` (MANAGED or SEEDED), with a check in
   `scripts/test-sync-guardrails.sh`.
 - **Changed a seeded file:** existing repos keep their old copy. If they need the
-  change, say how to apply it in the PR body.
+  change, say how to apply it in the PR body, and under `## [Unreleased]` →
+  **Manual steps for existing repos** in `CHANGELOG.md`.
+- **Changed what repos receive:** a line under `## [Unreleased]` in `CHANGELOG.md`.
+  Tagging a release is the maintainer's step (README, "Cutting a release").
 
 ## Scope map
 

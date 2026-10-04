@@ -54,6 +54,8 @@ check "routes MCP PR creation to the review hook" "jq -e '[.hooks.PostToolUse[] 
 check "appends only missing .gitignore lines" "[ \"\$(grep -cx '.claude/state/' '$T/.gitignore')\" = 1 ] && grep -qx '.claude/settings.local.json' '$T/.gitignore'"
 check "ignores the backlog-loop log directory" "grep -qx '.loop-logs/' '$T/.gitignore'"
 check "stamps the template commit it synced from" "grep -qE \"^\$(git -C '$HERE' rev-parse HEAD)(-dirty)?\$\" '$T/.claude/template-version'"
+# The template's release notes; "Use this template" copies them, sync must not.
+check "does not copy the template's CHANGELOG.md" "[ ! -e '$T/CHANGELOG.md' ]"
 
 # --- idempotency: a second sync after committing changes nothing ---
 git -C "$T" add -A
@@ -186,6 +188,39 @@ mkdir -p "$W/.github/workflows" && echo "name: test" >"$W/.github/workflows/test
 git -C "$W" add -A && git -C "$W" -c user.name=t -c user.email=t@t commit -qm ci
 "$SYNC" "$W" >/dev/null 2>&1
 check "skips ci.yml when other workflows exist" "[ ! -e '$W/.github/workflows/ci.yml' ]"
+
+# --- template-version records the release tag the template is on (#65) ---
+# A copy of this checkout's working tree in a repo of its own, so tagging it
+# touches nothing real and the scripts under test are the ones being edited.
+tagged_template() {
+  local dir="$WORK/$1"
+  mkdir -p "$dir"
+  (cd "$HERE/.." && tar --exclude=./.git -cf - .) | (cd "$dir" && tar -xf -)
+  git -C "$dir" init -q -b main
+  git -C "$dir" add -A
+  git -C "$dir" -c user.name=t -c user.email=t@t commit -qm template
+  git -C "$dir" tag v9.9.9
+  echo "$dir"
+}
+
+TT="$(tagged_template tpl-tagged)"
+R="$(new_target ontag)"
+"$TT/scripts/sync-guardrails.sh" "$R" >"$WORK/ontag.out" 2>&1
+check "on a tag: line 1 is still the commit" "[ \"\$(sed -n 1p '$R/.claude/template-version')\" = \"\$(git -C '$TT' rev-parse HEAD)\" ]"
+check "on a tag: line 2 is the tag" "[ \"\$(sed -n 2p '$R/.claude/template-version')\" = v9.9.9 ]"
+check "on a tag: the sync names the tag" "grep -qF 'backlog-loop @ v9.9.9' '$WORK/ontag.out'"
+
+git -C "$TT" -c user.name=t -c user.email=t@t commit -q --allow-empty -m past-the-tag
+R2="$(new_target pasttag)"
+"$TT/scripts/sync-guardrails.sh" "$R2" >/dev/null 2>&1
+check "past a tag: records the commit only" "[ \"\$(cat '$R2/.claude/template-version')\" = \"\$(git -C '$TT' rev-parse HEAD)\" ]"
+
+git -C "$TT" checkout -q v9.9.9
+echo "# uncommitted" >>"$TT/README.md"
+R3="$(new_target dirtytag)"
+"$TT/scripts/sync-guardrails.sh" "$R3" >/dev/null 2>&1
+# A dirty tree is not the release, whatever tag its HEAD carries.
+check "on a tag with uncommitted changes: no tag, -dirty commit" "[ \"\$(cat '$R3/.claude/template-version')\" = \"\$(git -C '$TT' rev-parse HEAD)-dirty\" ]"
 
 echo
 if [ "$failures" -eq 0 ]; then echo "all tests passed"; else echo "$failures test(s) failed" >&2; exit 1; fi

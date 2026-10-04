@@ -184,6 +184,15 @@ echo 0000000000000000000000000000000000000000 >"$S/.claude/template-version"
 run "$S"; rc=$?
 check "a stale template stamp is a warning" "[ $rc -eq 0 ] && grep -q 'the template is now at' '$S/.fake/out'"
 
+# A sync from a tagged template records the tag on line 2 (#65).
+TG="$(configured_repo tagged)"
+printf '%s\nv0.1.0\n' "$TEMPLATE_HEAD" >"$TG/.claude/template-version"
+run "$TG"; rc=$?
+check "a current stamp names its tag" "[ $rc -eq 0 ] && grep -qF 'up to date with the template (v0.1.0)' '$TG/.fake/out'"
+printf '0000000000000000000000000000000000000000\nv0.1.0\n' >"$TG/.claude/template-version"
+run "$TG"; rc=$?
+check "a stale stamp names the tag it was synced from" "[ $rc -eq 0 ] && grep -qF 'synced from template v0.1.0 (0000000)' '$TG/.fake/out'"
+
 R="$(configured_repo disabled)"
 echo '[{"id": 1, "name": "protect-main", "enforcement": "disabled"}]' >"$R/.fake/rulesets"
 run "$R"; rc=$?
@@ -205,6 +214,25 @@ check "--fix keeps the replaced file, edits included" "cmp -s '$O/.fake/edited' 
 cp "$ROOT/CLAUDE.md" "$O/CLAUDE.md"
 run "$O" --fix; rc=$?
 check "--fix refuses when a backup already exists" "[ $rc -eq 1 ] && cmp -s '$ROOT/CLAUDE.md' '$O/CLAUDE.md' && cmp -s '$O/.fake/edited' '$O/CLAUDE.md.template-own'"
+
+# "Use this template" also copies the template's release notes (#65).
+L="$(configured_repo changelog)"
+cp "$ROOT/CHANGELOG.md" "$L/CHANGELOG.md"
+run "$L"; rc=$?
+check "flags the template's CHANGELOG.md as a warning" "[ $rc -eq 0 ] && grep -q \"CHANGELOG.md is the template's\" '$L/.fake/out'"
+check "does not remove it without --fix" "cmp -s '$ROOT/CHANGELOG.md' '$L/CHANGELOG.md'"
+run "$L" --fix; rc=$?
+check "--fix removes the template's CHANGELOG.md" "[ $rc -eq 0 ] && [ ! -e '$L/CHANGELOG.md' ] && grep -q 'removed CHANGELOG.md' '$L/.fake/out'"
+LO="$(configured_repo own-changelog)"
+printf '# Changelog\n\n## [1.0.0]\n- our release\n' >"$LO/CHANGELOG.md"
+cp "$LO/CHANGELOG.md" "$LO/.fake/changelog"
+run "$LO" --fix
+check "--fix keeps a repo's own CHANGELOG.md, and says nothing about it" "cmp -s '$LO/.fake/changelog' '$LO/CHANGELOG.md' && ! grep -q 'CHANGELOG' '$LO/.fake/out'"
+LT="$(configured_repo template-changelog)"
+cp "$ROOT/CHANGELOG.md" "$LT/CHANGELOG.md"
+git -C "$LT" remote set-url origin https://github.com/highhair20/backlog-loop.git
+run "$LT" --fix
+check "--fix keeps the template repo's own CHANGELOG.md" "cmp -s '$ROOT/CHANGELOG.md' '$LT/CHANGELOG.md' && ! grep -q 'CHANGELOG' '$LT/.fake/out'"
 
 # A machine's own allowlist predates rules the example gained later (#30 review):
 # name each missing rule, or an unattended run stops at the command it needs.

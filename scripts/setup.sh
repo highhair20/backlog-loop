@@ -4,7 +4,8 @@
 # creates missing labels, copies the local allowlist example, adds a link to
 # docs/ISSUE_GUIDE.md to the issue chooser, and replaces the
 # template repo's own CLAUDE.md with the project skeleton, moving the old file to
-# CLAUDE.md.template-own rather than discarding it. The ruleset is
+# CLAUDE.md.template-own rather than discarding it, and removes the template's
+# CHANGELOG.md, which describes the template, not the project. The ruleset is
 # never created here, because it needs your CI job names and admin rights; the
 # check prints the exact command instead.
 #
@@ -29,6 +30,7 @@ OWN_BACKUP=CLAUDE.md.template-own
 # old marker, and a clone may still use the old URL, so both names count.
 TEMPLATE_MARKER_RE='(backlog-loop|claude-code-repo-template): own instructions'
 TEMPLATE_ORIGIN_RE='[/:](backlog-loop|claude-code-repo-template)(\.git)?/?$'
+CHANGELOG_MARKER_RE='^<!-- backlog-loop: own changelog -->$'
 
 fix=0
 case "${1:-}" in
@@ -201,24 +203,46 @@ check_local_settings() {
   fi
 }
 
+# The template's release notes (#65). "Use this template" copies them into every
+# new repo, where they describe the template, not the project. Recognised by the
+# marker on their first line, so a repo's own CHANGELOG.md is never touched.
+check_template_changelog() {
+  [ -f CHANGELOG.md ] || return 0
+  head -1 CHANGELOG.md | grep -qE "$CHANGELOG_MARKER_RE" || return 0
+  git remote get-url origin 2>/dev/null | grep -qE "$TEMPLATE_ORIGIN_RE" && return 0
+  if [ "$fix" -ne 1 ]; then
+    warn "CHANGELOG.md is the template's release notes, not this project's" \
+      "scripts/setup.sh --fix  (removes it; git keeps the committed copy)"
+  elif rm -f CHANGELOG.md; then
+    ok "removed CHANGELOG.md, the template's release notes"
+  else
+    warn "could not remove CHANGELOG.md, the template's release notes" "delete it by hand"
+  fi
+}
+
 check_template_version() {
   echo "Template"
+  check_template_changelog
   if [ ! -f .claude/template-version ]; then
     info "no .claude/template-version (written by sync-guardrails.sh); skipped"
     return
   fi
-  local have latest
+  local have tag latest
   have="$(head -1 .claude/template-version)"
   have="${have%-dirty}"
+  # Line 2, when present, is the release tag that commit carried (#65).
+  tag="$(sed -n 2p .claude/template-version)"
   # The HEAD pattern also matches refs like refs/remotes/origin/HEAD; take the exact one.
   # GIT_TERMINAL_PROMPT=0: a private or mistyped URL must fail, not wait for a password.
   latest="$(GIT_TERMINAL_PROMPT=0 git ls-remote "$TEMPLATE_REPO" HEAD 2>/dev/null | awk '$2 == "HEAD" { print $1; exit }')"
   if [ -z "$latest" ]; then
     warn "could not reach $TEMPLATE_REPO to compare versions"
   elif [ "$have" = "$latest" ]; then
-    ok "up to date with the template"
+    ok "up to date with the template${tag:+ ($tag)}"
   else
-    warn "synced from template ${have:0:7}; the template is now at ${latest:0:7}" \
+    local from="${have:0:7}"
+    [ -z "$tag" ] || from="$tag ($from)"
+    warn "synced from template $from; the template is now at ${latest:0:7}" \
       "from a fresh clone of the template: scripts/sync-guardrails.sh $root"
   fi
 }
