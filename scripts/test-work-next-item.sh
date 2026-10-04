@@ -108,6 +108,11 @@ check "it never runs gh auth status itself" "! printf '%s\n' \"\$code\" | grep -
 # shellcheck disable=SC2034  # read inside check's eval string
 step2="$(section 'Step 2')"
 check "Step 2 tries P3 after P2" "printf '%s' \"\$step2\" | grep -q 'then .P3.'"
+# backlog-loop.sh ends a drained run on the marker report-drained.sh writes, never on
+# the session's words (#77 review of #80): Step 2 must run it before it stops.
+check "Step 2 records a drained backlog with scripts/report-drained.sh before stopping" "printf '%s' \"\$step2\" | grep -q 'run .scripts/report-drained.sh.' && printf '%s' \"\$step2\" | grep -q 'not in a dry run'"
+check "a PR Step 1.5 could not read keeps the run from recording drained" "printf '%s' \"\$step2\" | grep -q 'Step 1.5 read every PR' && printf '%s' \"\$step2\" | grep -q 'skipped one as unread'"
+check "the driver no longer reads the session's words to decide it is drained" "! grep -q 'DRAINED_REPORT' '$ROOT/scripts/backlog-loop.sh'"
 
 # Step 0 must not mistake a preserved branch for work in flight.
 check "Step 0 always ignores abandoned/ branches" "printf '%s' \"\$step0\" | grep -q 'always ignore them'"

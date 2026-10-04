@@ -143,7 +143,7 @@ It treats files three ways, so re-running it later is safe:
 
 | Kind | Files | On every sync |
 |---|---|---|
-| **Managed** | review hooks, `work-next-item.md`, `backlog-loop.sh`, `check-verify-section.sh`, `gh-auth-check.sh`, `gh-repo.sh`, `loop-lock.sh`, `protect-main.sh`, `seed-labels.sh`, `setup.sh`, `vendor-agents.sh`, `settings.local.json.example`, `docs/ROUTINE.md` | Overwritten. These hold no project-specific content; put customisation in `CLAUDE.md`. |
+| **Managed** | review hooks, `work-next-item.md`, `backlog-loop.sh`, `check-verify-section.sh`, `gh-auth-check.sh`, `gh-repo.sh`, `loop-lock.sh`, `protect-main.sh`, `report-drained.sh`, `seed-labels.sh`, `setup.sh`, `vendor-agents.sh`, `settings.local.json.example`, `docs/ROUTINE.md` | Overwritten. These hold no project-specific content; put customisation in `CLAUDE.md`. |
 | **Seeded** | `CLAUDE.md` (the skeleton in `templates/`), CI workflow, issue forms, PR template, `dependabot.yml`, `docs/ISSUE_GUIDE.md`, `docs/BACKLOG.md`, `docs/CI_HARDENING.md`, `docs/DEPLOYING.md`, the reviewer agents and their `.claude/agent-context/`, the optional stack reviewer contexts in `.claude/agent-context/optional/` | Copied only if missing. Yours to edit. Nothing is added beside an equivalent you already have: the placeholder CI only goes into a repo with no workflows, the issue forms only into one with no issue templates of its own, the PR template only if GitHub finds none anywhere, and `dependabot.yml` not beside a `dependabot.yaml`. `.editorconfig` is never synced; its indent defaults could change how editors treat existing code. |
 | **Merged** | `.claude/settings.json`, `.gitignore` | The template's deny rules, hooks, and ignore lines are added; yours are kept. |
 
@@ -160,7 +160,7 @@ Write issues with the templates, give each exactly one priority label (`P0`–`P
 |---|---|
 | `/work-next-item` in a Claude Code session | Work one issue while you watch. |
 | `/loop /work-next-item` | Keep working issues in one session. |
-| `scripts/backlog-loop.sh` | Unattended. Each issue gets a fresh `claude -p` session; stops when the backlog is empty, when an item makes no progress, or after `MAX_ITEMS` (default 25). |
+| `scripts/backlog-loop.sh` | Unattended. Each issue or PR follow-up gets a fresh `claude -p` session; stops when nothing is left to work or follow up, when an item changes nothing on GitHub, or after `MAX_ITEMS` (default 25). |
 | A scheduled routine | Unattended in the cloud, one issue per run, starting in dry run. See [`docs/ROUTINE.md`](docs/ROUTINE.md). |
 | `/work-next-item --dry-run` | See which issue a run would take and what it would do, without writing anything. |
 
@@ -272,6 +272,7 @@ scripts/
   gh-auth-check.sh           is gh logged in to origin's host? (other hosts don't count)
   gh-repo.sh                 which repo gh acts on; stops if several remotes and no gh default
   loop-lock.sh               one loop run per clone; reclaims a crashed run's lock
+  report-drained.sh          tells backlog-loop.sh a session found nothing to do
   sync-guardrails.sh         update an existing repo from this template
   setup.sh                   check the repo is ready for the loop; --fix the safe parts
   vendor-agents.sh           rebuild .claude/agents/ from ECC plus .claude/agent-context/

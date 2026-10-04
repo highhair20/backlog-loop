@@ -15,8 +15,15 @@ To write the issues it works, see [ISSUE_GUIDE.md](./ISSUE_GUIDE.md).
 | `/loop /work-next-item` | You want several issues in one session. Context carries over between items. |
 | `scripts/backlog-loop.sh` | Unattended runs. Each issue gets a fresh `claude -p` session, so a long backlog never fills the context window. |
 
-`backlog-loop.sh` stops when the backlog is empty, when an item makes no progress,
-or after `MAX_ITEMS`. Its settings are environment variables: `MAX_ITEMS` (25),
+`backlog-loop.sh` starts a session while any issue is actionable or `in-review`
+(the session may follow up its PR). It stops when none is, when a session finds the
+backlog drained (nothing to select, and no PR needing a follow-up), when a session
+makes no progress (it changed no open issue's labels and no open PR), or after
+`MAX_ITEMS`. A drained session says so by running `scripts/report-drained.sh`, which
+writes `.git/backlog-loop.drained`; the driver reads that file, not the session's
+report, whose wording a model paraphrases. While any issue is `in-review`, a run
+costs at least one session, because only a session can tell whether its PR needs a
+follow-up. Its settings are environment variables: `MAX_ITEMS` (25),
 `PACE_SECONDS` (5), `MAX_RETRIES` (3), `BACKOFF_SECONDS` (300), `MODEL`,
 `LOG_DIR` (`.loop-logs`), and `BG_WAIT_SECONDS` (2700): how long each session waits
 for its background reviewers and PR review before they are cut off. Each retry of

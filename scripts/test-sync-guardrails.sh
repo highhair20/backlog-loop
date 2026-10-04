@@ -68,6 +68,7 @@ git -C "$T" -c user.name=t -c user.email=t@t commit -qam drift
 check "copies the generic loop command and driver" "[ -f '$T/.claude/commands/work-next-item.md' ] && [ -x '$T/scripts/backlog-loop.sh' ] && [ -x '$T/scripts/check-verify-section.sh' ]"
 # The driver and the command both call it; without it neither starts.
 check "copies loop-lock.sh, executable" "[ -x '$T/scripts/loop-lock.sh' ]"
+check "copies report-drained.sh, executable" "[ -x '$T/scripts/report-drained.sh' ]"
 # The driver and setup.sh call it to check gh auth.
 check "copies gh-auth-check.sh, executable" "[ -x '$T/scripts/gh-auth-check.sh' ]"
 # The driver and setup.sh call it to pick the repo they act on (#17).

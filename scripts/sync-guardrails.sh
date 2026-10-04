@@ -30,6 +30,7 @@ MANAGED=(
   scripts/gh-repo.sh
   scripts/loop-lock.sh
   scripts/protect-main.sh
+  scripts/report-drained.sh
   scripts/seed-labels.sh
   scripts/setup.sh
   scripts/vendor-agents.sh
