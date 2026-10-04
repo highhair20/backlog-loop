@@ -32,7 +32,7 @@ beyond the tools you already use.
 | **Issue conventions** | Feature and bug issue forms (the key sections are required fields) and a guide (`docs/ISSUE_GUIDE.md`) that make each issue a self-contained work item an agent can pick up cold, plus a script that creates the priority, status, and proposal-gate labels the loop uses. |
 | **CI skeleton** | A workflow that runs on branches and PRs with read-only permissions, and fails until you configure it — so a new repo never shows a green check that tests nothing. Actions are pinned to commit SHAs, and Dependabot keeps the pins current. |
 | **Repo defaults** | A PR template for PRs opened by hand, and an `.editorconfig` with LF endings, final newlines, and tabs where a format requires them. |
-| **Sync for existing repos** | `scripts/sync-guardrails.sh` brings any existing repository up to date with this template without overwriting the parts you have customised. |
+| **Sync for existing repos** | `scripts/sync-guardrails.sh` brings any existing repository up to date with this template without overwriting the parts you have customised. The `backlog-loop` Claude Code plugin runs it for you: `/backlog-loop:install` to adopt the template, `/backlog-loop:update` to catch up later. |
 
 ## How it works
 
@@ -95,7 +95,8 @@ The steps it checks:
 1. **Fill in `CLAUDE.md`**, above all the `## Verify` section. A new repo starts
    with this template's own `CLAUDE.md`; `setup.sh --fix` replaces it with the
    project skeleton from `templates/CLAUDE.md`, and the loop refuses to run until it
-   is replaced. Write every command to run from the repo root and never `cd`,
+   is replaced. It also removes the template's plugin manifests (`.claude-plugin/`),
+   which a new repo does not need. Write every command to run from the repo root and never `cd`,
    because the loop may run several in one shell.
 2. **Configure CI.** Replace the failing placeholder step in
    `.github/workflows/ci.yml` with the same Verify commands, so CI and the loop
@@ -128,7 +129,27 @@ The steps it checks:
 
 ### An existing repository
 
-Clone this template next to your repo and sync it in:
+**With the plugin.** In a Claude Code session in your repo (with a clean working
+tree):
+
+```text
+/plugin marketplace add highhair20/backlog-loop
+/plugin install backlog-loop@backlog-loop
+/backlog-loop:install
+```
+
+`/backlog-loop:install` runs the sync below from the plugin's copy of the template,
+then your repo's `scripts/setup.sh --fix`, and reports what is left to do. Later,
+`/backlog-loop:update` re-syncs and shows the diff for you to review; it never
+commits. Plugins from this marketplace do not update themselves, so first run
+`claude plugin marketplace update backlog-loop` and
+`claude plugin update backlog-loop@backlog-loop`, then `/reload-plugins`.
+
+The plugin only delivers files. It adds no hooks, agents, or loop command of its
+own: the guardrails must be committed in the repo, because a plugin cannot carry
+deny rules and a cloud session does not install a repo's plugins.
+
+**Without the plugin.** Clone this template next to your repo and sync it in:
 
 ```sh
 git clone https://github.com/highhair20/backlog-loop.git
@@ -148,8 +169,10 @@ It treats files three ways, so re-running it later is safe:
 | **Merged** | `.claude/settings.json`, `.gitignore` | The template's deny rules, hooks, and ignore lines are added; yours are kept. |
 
 Each sync also writes `.claude/template-version`: the template commit your repo now
-matches (suffixed `-dirty` if the template clone had uncommitted changes). Commit
-it with the rest, so you can tell later how far behind the template a repo is.
+matches (suffixed `-dirty` if the template clone had uncommitted changes; shortened
+to 12 characters when synced from the plugin). Commit it with the rest, so you can
+tell later how far behind the template a repo is. The plugin's own manifests
+(`.claude-plugin/`) are never synced.
 
 ## Running the backlog loop
 
@@ -250,6 +273,7 @@ The guardrails are layered, from softest to hardest:
 ## What's in the repo
 
 ```text
+.claude-plugin/              the installer plugin: marketplace, manifest, /backlog-loop:install and :update (removed in new repos)
 .claude/
   settings.json              deny rules + hook registration (committed on purpose)
   settings.local.json.example  allowlist for unattended runs (copy, then add Verify)

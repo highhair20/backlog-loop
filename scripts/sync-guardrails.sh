@@ -15,6 +15,8 @@
 # exactly what the sync changed — review it, then commit on a branch.
 #
 # Usage (from a clone of the template): scripts/sync-guardrails.sh <target-repo-dir>
+# The installer plugin's /backlog-loop:install and :update run it the same way,
+# from the plugin's installed copy of the template.
 set -euo pipefail
 
 TEMPLATE="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -143,6 +145,26 @@ seed_source() {
   esac
 }
 
+# The template commit being synced. A clone gives its HEAD (with -dirty for
+# uncommitted changes). The installed plugin (#64) is a copy with no .git, in
+# cache/<marketplace>/<plugin>/<version>/, whose <version> is the commit shortened
+# to 12 characters. Only a repo whose top level is the template counts: a copy
+# inside another repo (a git-managed ~/.claude) must not report that repo's commit.
+template_version() {
+  local top real version
+  top="$(git -C "$TEMPLATE" rev-parse --show-toplevel 2>/dev/null)" || top=""
+  real="$(cd "$TEMPLATE" && pwd -P)" || return 1
+  if [ -n "$top" ] && [ "$(cd "$top" && pwd -P)" = "$real" ]; then
+    version="$(git -C "$TEMPLATE" rev-parse HEAD)" || return 1
+    [ -z "$(git -C "$TEMPLATE" status --porcelain)" ] || version="$version-dirty"
+    echo "$version"
+  elif printf '%s\n' "${real##*/}" | grep -qxE '[0-9a-f]{12}'; then
+    echo "${real##*/}"
+  else
+    echo unknown
+  fi
+}
+
 main() {
   [ $# -eq 1 ] || die "usage: $0 <target-repo-dir>"
   command -v jq >/dev/null || die "jq not found"
@@ -211,8 +233,7 @@ main() {
   # Record which template commit this repo now matches, so drift is visible later
   # (in git history, and to any tool comparing it with the template's HEAD).
   local version
-  version="$(git -C "$TEMPLATE" rev-parse HEAD)"
-  [ -z "$(git -C "$TEMPLATE" status --porcelain)" ] || version="$version-dirty"
+  version="$(template_version)" || die "could not read the template's version"
   printf '%s\n' "$version" >"$target/$VERSION_FILE"
 
   echo "Synced from backlog-loop @ $version."
