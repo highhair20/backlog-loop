@@ -21,8 +21,10 @@ check() { if eval "$2"; then echo "ok   $1"; else echo "FAIL $1" >&2; failures=$
 
 # A throwaway repo with the driver, its helper scripts, and a CLAUDE.md.
 # $1 = name, $2 = claude fake behaviour: "progress" (decrements the count), "stall",
-# or "block" (progress, but the first call waits for a `go` file, so a test can act
-# while the driver is mid-item).
+# "block" (progress, but the first call waits for a `go` file, so a test can act
+# while the driver is mid-item), or "steps" (call n sources the fixture's `step-n`
+# if there is one, and otherwise changes nothing).
+# Open PRs are the fixture's prs.json (none by default).
 # Every fake claude also runs the lock check /work-next-item runs, recording its
 # exit code, since the driver's own session must pass it.
 setup() {
@@ -37,10 +39,10 @@ setup() {
   # gh: `issue list ... --jq ...` prints the remaining count.
   # Issues as gh prints them: <count> actionable ones labelled $(cat label) (P2 by
   # default), plus any in extra.json, so the driver's own filter is exercised.
-  printf '#!/usr/bin/env bash\n[ -f "%s/extra.json" ] || echo "[]" >"%s/extra.json"\njq -n --argjson n "$(cat "%s/count")" --arg lab "$(cat "%s/label" 2>/dev/null || echo P2)" --slurpfile extra "%s/extra.json" '"'"'[range($n) | {labels: [{name: $lab}]}] + $extra[0]'"'"'\n' "$dir" "$dir" "$dir" "$dir" "$dir" >"$dir/bin/issues-json"
+  printf '#!/usr/bin/env bash\n[ -f "%s/extra.json" ] || echo "[]" >"%s/extra.json"\njq -n --argjson n "$(cat "%s/count")" --arg lab "$(cat "%s/label" 2>/dev/null || echo P2)" --slurpfile extra "%s/extra.json" '"'"'[range($n) | {number: (. + 1), labels: [{name: $lab}]}] + $extra[0]'"'"'\n' "$dir" "$dir" "$dir" "$dir" "$dir" >"$dir/bin/issues-json"
   # gh-base answers the repo lookups gh-repo.sh makes (a default only when the
-  # fixture has a `default` file); tests that replace gh fall through to it.
-  printf '#!/usr/bin/env bash\ncase "$*" in\n  "repo set-default --view") cat "%s/default" 2>/dev/null; exit 0 ;;\n  "repo view --json url --jq .url") echo https://github.com/o/r; exit 0 ;;\nesac\n"%s/bin/issues-json"\n' "$dir" "$dir" >"$dir/bin/gh-base"
+  # fixture has a `default` file) and `pr list`; tests that replace gh fall through to it.
+  printf '#!/usr/bin/env bash\ncase "$*" in\n  "repo set-default --view") cat "%s/default" 2>/dev/null; exit 0 ;;\n  "repo view --json url --jq .url") echo https://github.com/o/r; exit 0 ;;\n  "pr list "*) cat "%s/prs.json" 2>/dev/null || echo "[]"; exit 0 ;;\nesac\n"%s/bin/issues-json"\n' "$dir" "$dir" "$dir" >"$dir/bin/gh-base"
   printf '#!/usr/bin/env bash\nexec "%s/bin/gh-base" "$@"\n' "$dir" >"$dir/bin/gh"
   {
     printf '#!/usr/bin/env bash\ncd "%s" || exit 1\necho x >>calls\n' "$dir"
@@ -62,7 +64,10 @@ setup() {
       # remove a script the driver needs and replace the driver itself.
       printf 'rm -f scripts/loop-lock.sh scripts/check-verify-section.sh\nprintf "#!/usr/bin/env bash\\nexit 99\\n" >scripts/backlog-loop.sh\n'
     fi
-    [ "$2" = stall ] || printf 'echo $(( $(cat count) - 1 )) >count\n'
+    if [ "$2" = steps ]; then
+      printf 'n=$(wc -l <calls | tr -d " ")\n[ ! -f "step-$n" ] || . "./step-$n"\n'
+    fi
+    case "$2" in stall|steps) ;; *) printf 'echo $(( $(cat count) - 1 )) >count\n' ;; esac
     printf ': >finished\n'
   } >"$dir/bin/claude"
   chmod +x "$dir/bin/"* "$dir/scripts/"*
@@ -171,6 +176,56 @@ echo 0 >"$H/count"
 echo '[{"labels": [{"name": "P1"}, {"name": "heal:approved"}]}]' >"$H/extra.json"
 run "$H"
 check "heal:approved without heal:proposed is remaining work" "[ \$(wc -l <'$H/calls') -eq 1 ]"
+
+# Follow-ups (#77): an in-review issue may have a PR Step 1.5 should work, so it
+# keeps the driver running; the session, not the driver, decides whether it does.
+DRAINED_LINE='✅ Backlog drained — no actionable issues remain.'
+IN_REVIEW='[{"number": 10, "labels": [{"name": "P2"}, {"name": "in-review"}]}]'
+pr_at() { printf '[{"number": 5, "headRefOid": "%s", "updatedAt": "%s"}]' "$1" "$2"; }
+
+R1="$(setup reviewonly steps)"
+echo 0 >"$R1/count"; echo "$IN_REVIEW" >"$R1/extra.json"
+printf 'echo "%s"\n' "$DRAINED_LINE" >"$R1/step-1"
+run "$R1"; rc=$?
+check "runs a session while only in-review issues are open" "[ \$(wc -l <'$R1/calls') -eq 1 ]"
+check "a session that reports the backlog drained ends the run with exit 0" "[ $rc -eq 0 ] && grep -q 'nothing left to work or follow up' '$R1/out'"
+
+R2="$(setup reviewskipped steps)"
+echo 0 >"$R2/count"
+echo '[{"number": 10, "labels": [{"name": "in-review"}, {"name": "needs-attention"}]}, {"number": 11, "labels": [{"name": "in-review"}, {"name": "blocked"}]}, {"number": 12, "labels": [{"name": "in-review"}, {"name": "no-auto-heal"}]}]' >"$R2/extra.json"
+run "$R2"; rc=$?
+check "in-review issues Step 1.5 skips start no session" "[ $rc -eq 0 ] && [ ! -s '$R2/calls' ] && grep -q 'Backlog drained' '$R2/out'"
+
+R3="$(setup reviewidle steps)"
+echo 0 >"$R3/count"; echo "$IN_REVIEW" >"$R3/extra.json"
+run "$R3"; rc=$?
+check "a session that neither drains nor changes anything stops the run (exit 3)" "[ $rc -eq 3 ] && [ \$(wc -l <'$R3/calls') -eq 1 ] && grep -q 'no progress' '$R3/out'"
+
+# A follow-up leaves every label as it was (in-review -> in-progress -> in-review);
+# only the PR shows it: a comment (updatedAt), then a pushed fix (headRefOid).
+R4="$(setup followup steps)"
+echo 1 >"$R4/count"; echo "$IN_REVIEW" >"$R4/extra.json"
+pr_at a 2026-01-01T00:00:00Z >"$R4/prs.json"
+printf "printf '%%s' '%s' >prs.json\n" "$(pr_at a 2026-01-02T00:00:00Z)" >"$R4/step-1"
+printf "printf '%%s' '%s' >prs.json\n" "$(pr_at b 2026-01-02T00:00:00Z)" >"$R4/step-2"
+echo 'echo 0 >count' >"$R4/step-3"
+printf 'echo "%s"\n' "$DRAINED_LINE" >"$R4/step-4"
+run "$R4"; rc=$?
+check "a follow-up that changes only a PR counts as progress" "[ $rc -eq 0 ] && [ \$(wc -l <'$R4/calls') -eq 4 ] && ! grep -q 'no progress' '$R4/out'"
+
+# A setup refusal in Steps 3-3.7 claims and releases an issue: its updatedAt moves,
+# its labels do not. That must still halt the run, or every item hits the refusal.
+R5="$(setup touched steps)"
+echo 0 >"$R5/count"
+echo '[{"number": 7, "labels": [{"name": "P1"}], "updatedAt": "2026-01-01T00:00:00Z"}]' >"$R5/extra.json"
+echo "echo '[{\"number\": 7, \"labels\": [{\"name\": \"P1\"}], \"updatedAt\": \"2026-01-02T00:00:00Z\"}]' >extra.json" >"$R5/step-1"
+run "$R5"; rc=$?
+check "an issue touched but left with the same labels is no progress" "[ $rc -eq 3 ] && [ \$(wc -l <'$R5/calls') -eq 1 ]"
+
+R6="$(setup prsfail steps)"
+printf '#!/usr/bin/env bash\n[ "$1 $2" = "pr list" ] && exit 1\nexec "%s/bin/gh-base" "$@"\n' "$R6" >"$R6/bin/gh"
+run "$R6"; rc=$?
+check "stops before any session when the open PRs cannot be read" "[ $rc -eq 1 ] && [ ! -s '$R6/calls' ] && grep -q 'could not read' '$R6/out'"
 
 N="$(setup noverify progress)"
 printf '## Verify\n```sh\n# test:\n```\n' >"$N/CLAUDE.md"

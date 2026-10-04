@@ -107,19 +107,44 @@ mkdir -p "$LOG_DIR"
 trap '"$HERE/loop-lock.sh" release $$; rm -rf "$HERE"' EXIT
 export BACKLOG_LOOP_PID=$$
 
-# Count open, prioritized issues that still need loop work. in-progress counts
-# (Step 0 recovers it); blocked / needs-attention / in-review do not.
-# P3 counts too: /work-next-item takes a P3 once no P0-P2 issue is actionable (#45).
-# no-auto-heal never counts, nor does a heal:proposed issue a human has not yet
-# approved with heal:approved: Step 2 skips both (#13).
+# Count open issues a session might work. Two kinds count (#77):
+# - prioritized issues Step 2 could select. in-progress counts (Step 0 recovers it).
+#   P3 counts too: /work-next-item takes a P3 once no P0-P2 issue is actionable (#45).
+#   A heal:proposed issue a human has not yet approved with heal:approved does not:
+#   Step 2 skips it (#13).
+# - in-review issues, whatever their priority: Step 1.5 may follow up their PR. Only
+#   the session can tell whether a PR needs attention, so the driver starts one and
+#   stops when its log says the backlog is drained (see the loop below).
+# blocked, needs-attention and no-auto-heal never count: Steps 1.5 and 2 skip them.
 # Filtered with jq here rather than gh --jq, so the test's fake gh exercises it.
 work_remaining() {
   gh issue list --state open --limit 1000 --json labels | jq '
     [ .[] | ([.labels[].name]) as $l
-      | select( ($l | any(. == "P0" or . == "P1" or . == "P2" or . == "P3"))
-            and (($l | any(. == "blocked" or . == "needs-attention" or . == "in-review" or . == "no-auto-heal")) | not)
-            and ((($l | any(. == "heal:proposed")) and (($l | any(. == "heal:approved")) | not)) | not) )
+      | select( (($l | any(. == "blocked" or . == "needs-attention" or . == "no-auto-heal")) | not)
+            and ( ($l | any(. == "in-review"))
+                  or ( ($l | any(. == "P0" or . == "P1" or . == "P2" or . == "P3"))
+                       and ((($l | any(. == "heal:proposed")) and (($l | any(. == "heal:approved")) | not)) | not) ) ) )
     ] | length'
+}
+
+# What GitHub shows of the loop's work, to tell whether a session changed anything:
+# each open issue's number and labels, and each open PR's number, head and updatedAt.
+# An issue's updatedAt is left out on purpose: a session stopped by a setup refusal
+# in Steps 3-3.7 claims the issue and releases it again, which moves updatedAt but
+# leaves the labels as they were, and that must still read as no progress. A
+# follow-up shows on its PR instead (a comment moves updatedAt, a fix moves the head).
+snapshot() {
+  local issues prs
+  issues="$(gh issue list --state open --limit 1000 --json number,labels \
+    | jq -c 'map({number, labels: ([.labels[].name] | sort)}) | sort_by(.number)')" || return 1
+  prs="$(gh pr list --state open --limit 1000 --json number,headRefOid,updatedAt \
+    | jq -c 'map({number, headRefOid, updatedAt}) | sort_by(.number)')" || return 1
+  printf '%s\n%s\n' "$issues" "$prs"
+}
+
+drained() {
+  echo "✅ Backlog drained — nothing left to work or follow up. Ran $count session(s) this run."
+  exit 0
 }
 
 # One cold-context invocation. acceptEdits auto-approves file writes; bash is still
@@ -149,28 +174,18 @@ while [ "$count" -lt "$MAX_ITEMS" ]; do
     echo "✗ gh query failed — is gh authenticated? Stopping." >&2
     exit 1
   fi
-  if [ "$remaining" -eq 0 ]; then
-    echo "✅ Backlog drained — no actionable issues remain. Completed $count item(s) this run."
-    exit 0
+  [ "$remaining" -ne 0 ] || drained
+  if ! before="$(snapshot)"; then
+    echo "✗ gh could not read the open issues and PRs — is gh authenticated? Stopping." >&2
+    exit 1
   fi
-  # Every productive iteration moves one issue out of the count (PR opened →
-  # in-review, gave up → needs-attention, premise false → closed). An unchanged
-  # count means the command stopped early (dirty tree, bad Verify, ...) and will
-  # stop again, so don't spend a cold session per MAX_ITEMS finding that out.
-  # Issues filed mid-run can mask progress; stopping then is safe — just re-run.
-  if [ -n "${previous:-}" ] && [ "$remaining" -ge "$previous" ]; then
-    echo "✗ The last item made no progress ($remaining actionable before and after)." >&2
-    echo "  Read its log in $LOG_DIR, fix the cause, and re-run." >&2
-    exit 3
-  fi
-  previous="$remaining"
 
   count=$((count + 1))
   ts="$(date +%Y%m%d-%H%M%S)"
   # The item number keeps names unique even when two items start in the same second.
   base="$LOG_DIR/item-$ts-$count"
   log="$base.log"
-  echo "▶ [$count/$MAX_ITEMS] $remaining actionable item(s) remain → /work-next-item (log: $log)"
+  echo "▶ [$count/$MAX_ITEMS] $remaining issue(s) to work or follow up → /work-next-item (log: $log)"
 
   attempt=0
   while :; do
@@ -192,6 +207,27 @@ while [ "$count" -lt "$MAX_ITEMS" ]; do
 
   echo "  ─ last lines of this item:"
   tail -n 3 "$log" | sed 's/^/    /'
+
+  # The session found nothing to follow up and nothing to select. This is how a run
+  # whose only open work is in-review PRs that need nothing stops. The wording is
+  # Step 2's; scripts/test-work-next-item.sh pins it there.
+  if grep -qF 'Backlog drained' "$log"; then
+    drained
+  fi
+  # Progress is any change in what GitHub shows, not a drop in the count: a
+  # follow-up leaves its issue in-review, as it found it. A session that changed
+  # nothing stopped early (dirty tree, bad Verify, a refused command, ...) and will
+  # stop again, so don't spend a cold session per MAX_ITEMS finding that out. An
+  # edit someone else makes mid-run can mask a stall; that costs one more session.
+  if ! after="$(snapshot)"; then
+    echo "✗ gh could not read the open issues and PRs — is gh authenticated? Stopping." >&2
+    exit 1
+  fi
+  if [ "$after" = "$before" ]; then
+    echo "✗ The last item made no progress: it changed no issue's labels and no PR." >&2
+    echo "  Read its log in $LOG_DIR, fix the cause, and re-run." >&2
+    exit 3
+  fi
   sleep "$PACE_SECONDS"
 done
 

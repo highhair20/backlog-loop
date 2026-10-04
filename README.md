@@ -160,7 +160,7 @@ Write issues with the templates, give each exactly one priority label (`P0`–`P
 |---|---|
 | `/work-next-item` in a Claude Code session | Work one issue while you watch. |
 | `/loop /work-next-item` | Keep working issues in one session. |
-| `scripts/backlog-loop.sh` | Unattended. Each issue gets a fresh `claude -p` session; stops when the backlog is empty, when an item makes no progress, or after `MAX_ITEMS` (default 25). |
+| `scripts/backlog-loop.sh` | Unattended. Each issue or PR follow-up gets a fresh `claude -p` session; stops when nothing is left to work or follow up, when an item changes nothing on GitHub, or after `MAX_ITEMS` (default 25). |
 | A scheduled routine | Unattended in the cloud, one issue per run, starting in dry run. See [`docs/ROUTINE.md`](docs/ROUTINE.md). |
 | `/work-next-item --dry-run` | See which issue a run would take and what it would do, without writing anything. |
 
