@@ -32,6 +32,18 @@ says how to clear the lock.
 Before a first unattended run, `scripts/setup.sh` checks that everything the loop
 needs is in place.
 
+**Reviews in unattended runs.** The review that runs after each PR is Claude Code's
+built-in `/code-review`, and the allowlist must cover the commands it reads the PR
+with (`gh pr view`, `gh pr diff`). Without them it reviews only the local commit and
+says so in its report, rather than failing. Those commands come from Claude Code, not
+this repo, so a later version can need others. After upgrading Claude Code, re-check
+with one review of any open PR, then add read-only commands it was refused:
+
+```sh
+claude -p "/code-review <pr-url>" --output-format stream-json --verbose > review.jsonl
+jq -r 'select(.type=="result") | .permission_denials[] | .tool_input.command' review.jsonl
+```
+
 A headless session cannot edit `.claude/` (the loop's own command, hooks, and
 settings). An issue that changes those files is better labelled `no-auto-heal` and
 worked in an interactive session. If one is selected anyway, the loop makes that

@@ -386,7 +386,10 @@ gh api repos/{owner}/{repo}/pulls/<pr>/comments --paginate
 ```
 
 The second lists the line comments on the diff, which the first leaves out; a
-review made only of line comments has an empty body. If either command fails, the
+review made only of line comments has an empty body.
+Run the second exactly as written, `{owner}/{repo}` included: `gh` fills them in
+from this repo, and the allow rule for unattended runs matches only this spelling.
+If either command fails, the
 PR is unread: judging it without its feedback could bury a request. Name it in the
 report and go on to the next PR. If `state` is not `OPEN` (it merged or closed since
 the listing), skip this PR and look at the next one: a fix pushed now would never

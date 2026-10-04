@@ -52,6 +52,15 @@ for cmd in "${CMDS[@]}"; do
   if matches_any "$cmd" "${ALLOW[@]}"; then echo "ok   allowed: $cmd"; else fail "not allowed: $cmd"; fi
 done
 
+# The PR review hooks start /code-review, a built-in command this test cannot read, so
+# its commands are pinned here as measured: `claude -p "/code-review <pr-url>"
+# --output-format stream-json --verbose` with this example as the allowlist, Claude
+# Code 2.1.289 (#78). Without gh pr diff, an unattended review sees no diff. Re-measure
+# after a Claude Code upgrade (docs/BACKLOG.md, "Reviews in unattended runs").
+for cmd in "gh pr view 3 --json title,body,headRefName,baseRefName,state" "gh pr view 3 --repo o/r --json title,body,headRefName,baseRefName,state,files" "gh pr diff 3" "gh pr diff 3 --repo o/r"; do
+  if matches_any "$cmd" "${ALLOW[@]}"; then echo "ok   review command allowed: $cmd"; else fail "review command not allowed: $cmd"; fi
+done
+
 # Every way of running the loop must refuse a CLAUDE.md the checker rejects (such as
 # the template repo's own), not just backlog-loop.sh.
 if grep -qF 'scripts/check-verify-section.sh CLAUDE.md' "$COMMAND"; then echo "ok   the loop command runs check-verify-section.sh"; else fail "the loop command does not run check-verify-section.sh"; fi
