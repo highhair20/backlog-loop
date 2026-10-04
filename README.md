@@ -233,6 +233,12 @@ The guardrails are layered, from softest to hardest:
 - A headless session cannot edit `.claude/`, so the loop cannot work an issue that
   changes its own command, hooks, or settings there (`scripts/` is fine). Label such issues `no-auto-heal` and work them in an
   interactive session.
+- In an unattended run, the review after each PR is Claude Code's built-in
+  `/code-review`, and the allowlist covers the commands it reads the PR with
+  (`gh pr view`, `gh pr diff`). A command it is refused, such as one a later Claude
+  Code version adds, makes it fall back (to the PR's file list, say) and say so in
+  its report, rather than fail. [`docs/BACKLOG.md`](docs/BACKLOG.md) shows how to
+  re-check after upgrading.
 - Run one loop per repository at a time, local or scheduled. Step 0 treats any
   `in-progress` issue as a run that died, so two runners would recover each other's
   work ([#57](https://github.com/highhair20/backlog-loop/issues/57)).

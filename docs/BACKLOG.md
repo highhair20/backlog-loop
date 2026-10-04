@@ -32,6 +32,35 @@ says how to clear the lock.
 Before a first unattended run, `scripts/setup.sh` checks that everything the loop
 needs is in place.
 
+**Reviews in unattended runs.** The review that runs after each PR is Claude Code's
+built-in `/code-review`, and the allowlist must cover the commands it reads the PR
+with (`gh pr view`, `gh pr diff`). Without them it falls back (to the PR's file list,
+or only the local commit) and says so in its report, rather than failing. Those
+commands come from Claude Code, not this repo, so a later version can need others.
+After upgrading Claude Code, re-check with one review of any open PR:
+
+```sh
+claude -p "/code-review <pr-url>" --output-format stream-json --verbose < /dev/null > review.jsonl
+jq -r 'select(.type=="result") | if .is_error then "ERROR: \(.result)"
+  elif (.permission_denials | length) == 0 then "no denials"
+  else "\(.permission_denials | length) refused; reasons below" end' review.jsonl
+jq -rs '(map(select(.type=="assistant") | .message.content[]? | select(.type=="tool_use")
+    | {(.id): "\(.name): \(.input.command // (.input | tostring))"}) | add // {}) as $call
+  | .[] | select(.type=="user") | .message.content[]?
+  | select(.type=="tool_result" and .is_error)
+  | (.content | tostring | split("\n")[0]) as $why
+  | select($why | test("requires approval|hook error"))
+  | "\($why)\n    \($call[.tool_use_id] // "?")"' review.jsonl
+```
+
+The first prints `no denials`, an `ERROR`, or how many calls were refused; no output
+at all means the run never finished, which proves nothing. The second prints each
+refusal's reason above the call it refused. Only a reason that says `requires
+approval` means the allowlist lacks a rule (for a compound command it names the
+part); add the read-only ones. A `PreToolUse:Bash hook error` came from one of your
+hooks (one that gates a session's first command, say), and the session usually
+retries; it needs no allow rule.
+
 A headless session cannot edit `.claude/` (the loop's own command, hooks, and
 settings). An issue that changes those files is better labelled `no-auto-heal` and
 worked in an interactive session. If one is selected anyway, the loop makes that

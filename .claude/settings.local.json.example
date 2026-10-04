@@ -10,6 +10,7 @@
       "Bash(gh issue comment *)",
       "Bash(gh pr list *)",
       "Bash(gh pr view *)",
+      "Bash(gh pr diff *)",
       "Bash(gh pr create *)",
       "Bash(gh pr checks *)",
       "Bash(gh pr comment *)",
