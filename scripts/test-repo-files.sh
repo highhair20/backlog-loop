@@ -179,10 +179,13 @@ check "README's file list mentions the task-runner conventions" "grep -qE '^docs
 quick="$(awk '/^## /{ on = ($0 == "## Quickstart") } on' "$ROOT/README.md" 2>/dev/null)"
 check "README has a Quickstart section" "[ -n \"\$quick\" ]"
 check "the Quickstart comes directly under the tagline" "awk 'NR > 1 && NF { print; exit }' '$ROOT/README.md' | grep -q '^\\*\\*' && awk 'NR > 1 && NF { n++ } n == 2 { print; exit }' '$ROOT/README.md' | grep -qx '## Quickstart'"
-# Each step is one numbered line; a wrapped step would continue on an indented line.
+# Each step is one numbered line: the list, from its first step to the next blank
+# line, is nothing but numbered lines, so a wrapped step (indented or not) fails.
 # shellcheck disable=SC2034  # read inside check's eval strings
 steps="$(printf '%s\n' "$quick" | grep -E '^[0-9]+\. ')"
-check "every Quickstart step is a single line" "! printf '%s\n' \"\$quick\" | grep -qE '^[[:space:]]+[^[:space:]]'"
+# shellcheck disable=SC2034  # read inside check's eval strings
+step_block="$(printf '%s\n' "$quick" | awk '/^[0-9]+\. /{ on = 1 } on && !NF { exit } on')"
+check "every Quickstart step is a single line" "[ -n \"\$step_block\" ] && ! printf '%s\n' \"\$step_block\" | grep -vqE '^[0-9]+\\. '"
 # The steps, in the order a new repo needs them: setup.sh --fix dirties the tree, and
 # the loop stops on a dirty tree, so the setup is committed and pushed before it runs.
 step_of() { printf '%s\n' "$steps" | grep -nE -- "$1" | head -1 | cut -d: -f1; }
@@ -200,7 +203,9 @@ check "the Quickstart has exactly those six steps" "[ \"\$(printf '%s\n' \"\$ste
 # shellcheck disable=SC2034  # read inside check's eval strings
 backup="$(grep -E '^OWN_BACKUP=' "$ROOT/scripts/setup.sh" | cut -d= -f2)"
 check "setup.sh names its CLAUDE.md backup" "[ -n \"\$backup\" ]"
-check "the Quickstart's push step removes that backup first" "printf '%s\n' \"\$steps\" | grep 'git push' | grep -qF \"rm \$backup\""
+# Chained with &&, so a failed add or commit never pushes; rm -f, so a backup that
+# is already gone does not stop the chain.
+check "the Quickstart's push step removes that backup, then commits and pushes" "printf '%s\n' \"\$steps\" | grep -qE \"rm -f \$backup && git add -A && git commit .* && git push\""
 check "the Quickstart links the detailed setup" "printf '%s\n' \"\$quick\" | grep -qF '(#getting-started)'"
 check "the detailed setup is still in the README" "grep -qx '## Getting started' '$ROOT/README.md'"
 

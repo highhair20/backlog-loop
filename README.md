@@ -9,7 +9,7 @@ From one issue to a PR assigned to you, given the [requirements](#requirements):
 1. `gh repo create my-app --private --template highhair20/backlog-loop --clone && cd my-app`
 2. `scripts/setup.sh --fix` swaps in the `CLAUDE.md` skeleton and creates the labels.
 3. Put your build and test commands in `CLAUDE.md` under `## Verify`.
-4. `rm CLAUDE.md.template-own && git add -A && git commit -m "chore: set up backlog-loop" && git push` (the loop starts only from a clean, pushed `main`).
+4. `rm -f CLAUDE.md.template-own && git add -A && git commit -m "chore: set up backlog-loop" && git push` (the loop starts only from a clean, pushed `main`).
 5. File one issue with the feature or bug form, and give it one priority label, `P0`–`P3`.
 6. In Claude Code, in the repo, run `/work-next-item`.
 
