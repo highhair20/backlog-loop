@@ -54,6 +54,8 @@ check "routes MCP PR creation to the review hook" "jq -e '[.hooks.PostToolUse[] 
 check "appends only missing .gitignore lines" "[ \"\$(grep -cx '.claude/state/' '$T/.gitignore')\" = 1 ] && grep -qx '.claude/settings.local.json' '$T/.gitignore'"
 check "ignores the backlog-loop log directory" "grep -qx '.loop-logs/' '$T/.gitignore'"
 check "stamps the template commit it synced from" "grep -qE \"^\$(git -C '$HERE' rev-parse HEAD)(-dirty)?\$\" '$T/.claude/template-version'"
+# The plugin's manifests belong to the template repo, not to the repos it syncs (#64).
+check "never copies the plugin's .claude-plugin/" "[ ! -e '$T/.claude-plugin' ]"
 
 # --- idempotency: a second sync after committing changes nothing ---
 git -C "$T" add -A
@@ -186,6 +188,34 @@ mkdir -p "$W/.github/workflows" && echo "name: test" >"$W/.github/workflows/test
 git -C "$W" add -A && git -C "$W" -c user.name=t -c user.email=t@t commit -qm ci
 "$SYNC" "$W" >/dev/null 2>&1
 check "skips ci.yml when other workflows exist" "[ ! -e '$W/.github/workflows/ci.yml' ]"
+
+# --- run from an installed plugin: a copy of the template, not a git checkout (#64) ---
+# Claude Code copies the plugin to cache/<marketplace>/<plugin>/<version>/, and the
+# version is the template commit shortened to 12 characters. The copy sits inside
+# a git repo here, as it would under a git-managed ~/.claude: that repo's commit
+# must never be recorded as the template's.
+plugin_copy() { # plugin_copy <dir>: the template's files, without .git
+  local f
+  mkdir -p "$1"
+  git -C "$HERE/.." ls-files --cached --others --exclude-standard | while IFS= read -r f; do
+    [ -e "$HERE/../$f" ] || continue
+    mkdir -p "$1/$(dirname "$f")" && cp -p "$HERE/../$f" "$1/$f"
+  done
+}
+CACHE="$WORK/dot-claude"
+git -C "$WORK" init -q dot-claude
+git -C "$CACHE" -c user.name=t -c user.email=t@t commit -q --allow-empty -m enclosing
+plugin_copy "$CACHE/plugins/cache/backlog-loop/backlog-loop/0123456789ab"
+Q="$(new_target fromplugin)"
+bash "$CACHE/plugins/cache/backlog-loop/backlog-loop/0123456789ab/scripts/sync-guardrails.sh" "$Q" >"$WORK/fromplugin.out" 2>&1
+check "syncs from a plugin copy that is not a git checkout" "[ \$? -eq 0 ] && [ -x '$Q/scripts/setup.sh' ]"
+check "stamps the commit the plugin's cache directory is named after" "[ \"\$(cat '$Q/.claude/template-version')\" = 0123456789ab ]"
+check "says which version it synced" "grep -q '@ 0123456789ab' '$WORK/fromplugin.out'"
+check "a plugin copy syncs no .claude-plugin/ either" "[ ! -e '$Q/.claude-plugin' ]"
+plugin_copy "$CACHE/plugins/cache/backlog-loop/backlog-loop/unknown"
+U="$(new_target unknownversion)"
+bash "$CACHE/plugins/cache/backlog-loop/backlog-loop/unknown/scripts/sync-guardrails.sh" "$U" >/dev/null 2>&1
+check "a copy whose directory names no commit stamps unknown" "[ \$? -eq 0 ] && [ \"\$(cat '$U/.claude/template-version')\" = unknown ]"
 
 echo
 if [ "$failures" -eq 0 ]; then echo "all tests passed"; else echo "$failures test(s) failed" >&2; exit 1; fi
