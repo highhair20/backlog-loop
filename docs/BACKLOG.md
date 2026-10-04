@@ -40,9 +40,21 @@ this repo, so a later version can need others. After upgrading Claude Code, re-c
 with one review of any open PR, then add read-only commands it was refused:
 
 ```sh
-claude -p "/code-review <pr-url>" --output-format stream-json --verbose > review.jsonl
-jq -r 'select(.type=="result") | .permission_denials[] | .tool_input.command' review.jsonl
+claude -p "/code-review <pr-url>" --output-format stream-json --verbose < /dev/null > review.jsonl
+jq -r 'select(.type=="result") | if .is_error then "ERROR: \(.result)"
+  elif (.permission_denials | length) == 0 then "no denials"
+  else .permission_denials[].tool_input.command end' review.jsonl
+jq -r 'select(.type=="user") | .message.content[]? | select(.type=="tool_result" and .is_error)
+  | .content | tostring | split("\n")[0]' review.jsonl
 ```
+
+The first prints `no denials`, an `ERROR`, or each refused command; no output at all
+means the run never finished, which proves nothing. The second gives each refusal's
+reason, in the same order. Only a reason that says `requires approval` means the
+allowlist lacks a rule (for a compound command it names the part). A `PreToolUse:Bash hook error` came from one of your hooks (one that
+gates a session's first command, say), and the session usually retries; it needs no
+allow rule. Read the review's own report too: it says when it could not read the
+diff.
 
 A headless session cannot edit `.claude/` (the loop's own command, hooks, and
 settings). An issue that changes those files is better labelled `no-auto-heal` and
