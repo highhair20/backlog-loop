@@ -191,6 +191,16 @@ run "$R1"; rc=$?
 check "runs a session while only in-review issues are open, whatever their priority" "[ \$(wc -l <'$R1/calls') -eq 1 ]"
 check "a session that reports the backlog drained ends the run with exit 0" "[ $rc -eq 0 ] && grep -q 'nothing left to work or follow up' '$R1/out'"
 
+# The report as a session may format it: quoted as Step 2 writes it, or as markdown.
+for form in "\"$DRAINED_LINE\"" "✅ **Backlog drained — no actionable issues remain.**" \
+            "### $DRAINED_LINE" "1. $DRAINED_LINE" "> $DRAINED_LINE" "Backlog drained."; do
+  RF="$(setup "drainedform-$(printf '%s' "$form" | cksum | cut -d' ' -f1)" steps)"
+  echo 0 >"$RF/count"; echo "$IN_REVIEW" >"$RF/extra.json"
+  printf 'cat <<'"'"'EOF'"'"'\nDone.\n%s\nEOF\n' "$form" >"$RF/step-1"
+  run "$RF"; rc=$?
+  check "a drained report formatted as: $form" "[ $rc -eq 0 ] && grep -q 'nothing left to work or follow up' '$RF/out'"
+done
+
 # A stalled session that only mentions the report must not end the run as drained.
 R7="$(setup quotesdrained steps)"
 echo 0 >"$R7/count"; echo "$IN_REVIEW" >"$R7/extra.json"

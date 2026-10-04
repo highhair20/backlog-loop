@@ -110,7 +110,7 @@ step2="$(section 'Step 2')"
 check "Step 2 tries P3 after P2" "printf '%s' \"\$step2\" | grep -q 'then .P3.'"
 # backlog-loop.sh ends a run when a session's log says this (#77), so a rewording
 # must break here rather than leave the driver running idle sessions.
-check "Step 2 reports a drained backlog in the words the driver reads" "printf '%s' \"\$step2\" | grep -qF '\"✅ Backlog drained' && grep -qF \"DRAINED_REPORT='^[[:space:]*>-]*(✅ )?Backlog drained'\" '$ROOT/scripts/backlog-loop.sh'"
+check "Step 2 reports a drained backlog in the words the driver reads" "printf '%s' \"\$step2\" | grep -qF '\"✅ Backlog drained' && grep -q \"^DRAINED_REPORT=.*Backlog drained'\$\" '$ROOT/scripts/backlog-loop.sh'"
 
 # Step 0 must not mistake a preserved branch for work in flight.
 check "Step 0 always ignores abandoned/ branches" "printf '%s' \"\$step0\" | grep -q 'always ignore them'"

@@ -143,8 +143,9 @@ snapshot() {
 }
 
 # Step 2's report when nothing is left, at the start of a line of a session's log
-# (after any markdown bold, quote or list marker).
-DRAINED_REPORT='^[[:space:]*>-]*(✅ )?Backlog drained'
+# (after any quotes, or markdown emphasis, heading, quote or list markers, on either
+# side of the ✅).
+DRAINED_REPORT='^[[:space:]*_>#"`0-9.)-]*(✅[[:space:]*_"`-]*)?Backlog drained'
 
 drained() {
   echo "✅ Backlog drained — nothing left to work or follow up. Ran $count session(s) this run."
