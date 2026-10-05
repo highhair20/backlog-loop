@@ -361,6 +361,175 @@ echo "${TEMPLATE_HEAD:0:7}" >"$SP/.claude/template-version"
 run "$SP"
 check "a prefix shorter than 12 characters does not count as current" "! grep -q 'up to date with the template' '$SP/.fake/out'"
 
+# Setup proposes Verify commands from the stack files at the repo root (#71), and
+# --fix writes them only for exactly one stack into the skeleton's placeholders.
+stack_repo() { # stack_repo <name>: a fresh repo with no stack files yet
+  local dir; dir="$(fresh_repo "stack-$1")"
+  mkdir -p "$dir/.claude/agent-context/optional"
+  echo "$dir"
+}
+# The lines of CLAUDE.md's Verify code block, comments included.
+verify_block() { awk '/^## /{ v = ($0 ~ /^## Verify/) } v && /^```/{ if (c++) exit; next } v && c' "$1/CLAUDE.md"; }
+# commands_are <dir> <command>...: the block's commands are exactly these, in order.
+commands_are() {
+  local dir="$1"; shift
+  [ "$(verify_block "$dir" | grep -Ev '^[[:space:]]*(#|$)')" = "$(printf '%s\n' "$@")" ]
+}
+unchanged() { cmp -s "$ROOT/templates/CLAUDE.md" "$1/CLAUDE.md"; }
+
+SK="$(stack_repo make)"
+printf '.PHONY: lint test\nlint:\n\tshellcheck *.sh\ntest: lint\n\t./run.sh\n' >"$SK/Makefile"
+echo 'module example.com/x' >"$SK/go.mod"
+run "$SK"; rc=$?
+check "make: proposes make lint and make test without --fix" "[ $rc -eq 1 ] && grep -q '^        make lint$' '$SK/.fake/out' && grep -q '^        make test$' '$SK/.fake/out'"
+check "make: wins over go.mod, so go is not proposed" "! grep -q 'go vet' '$SK/.fake/out'"
+check "make: no --fix, no write" "unchanged '$SK'"
+cp "$SK/.github/workflows/ci.yml" "$SK/.fake/ci"
+run "$SK" --fix
+check "make: --fix writes the commands into Verify and says so" "commands_are '$SK' 'make lint' 'make test' && grep -q 'wrote 2 Verify command' '$SK/.fake/out'"
+check "make: the written file passes check-verify-section.sh" "'$ROOT/scripts/check-verify-section.sh' '$SK/CLAUDE.md'"
+check "make: --fix replaces the skeleton placeholders" "! verify_block '$SK' | grep -Eq '^# (build|lint|test):'"
+check "make: the rest of CLAUDE.md is unchanged" "[ \"\$(grep -Ev '^make (lint|test)\$' '$SK/CLAUDE.md')\" = \"\$(grep -Ev '^# (build|lint|test):\$' '$ROOT/templates/CLAUDE.md')\" ]"
+check "make: workflows are never edited" "cmp -s '$SK/.fake/ci' '$SK/.github/workflows/ci.yml'"
+check "make: still names go-reviewer for go.mod" "grep -q 'go-reviewer' '$SK/.fake/out'"
+cp "$SK/CLAUDE.md" "$SK/.fake/claude"
+run "$SK" --fix
+check "make: a second --fix leaves the written Verify alone" "cmp -s '$SK/.fake/claude' '$SK/CLAUDE.md' && grep -q 'Verify has commands' '$SK/.fake/out'"
+
+SM="$(stack_repo makeonlytest)"
+printf 'test:\n\t./run.sh\n' >"$SM/Makefile"
+run "$SM" --fix
+check "make: only a test target proposes only make test" "commands_are '$SM' 'make test'"
+SN="$(stack_repo makenotest)"
+printf 'TEST := 1\ntest-e2e:\n\t./e2e.sh\nlint:\n\tshellcheck *.sh\n' >"$SN/Makefile"
+echo 'module example.com/x' >"$SN/go.mod"
+run "$SN" --fix
+check "make: a Makefile without a test target is not the stack" "commands_are '$SN' 'go vet ./...' 'go test ./...'"
+SNP="$(stack_repo makephony)"
+printf '.PHONY: test\nall:\n\tcc x.c\n' >"$SNP/Makefile"
+echo 'module example.com/x' >"$SNP/go.mod"
+run "$SNP" --fix
+check "make: .PHONY: test alone is not a test target" "commands_are '$SNP' 'go vet ./...' 'go test ./...'"
+SMN="$(stack_repo makenode)"
+printf 'lint test:\n\t./check.sh\n' >"$SMN/Makefile"
+printf '%s\n' '{"scripts": {"test": "jest"}, "devDependencies": {"typescript": "^5"}}' >"$SMN/package.json"
+run "$SMN" --fix
+check "make: a multi-target line wins over package.json" "commands_are '$SMN' 'make lint' 'make test' && grep -q 'typescript-reviewer' '$SMN/.fake/out'"
+
+SG="$(stack_repo go)"
+echo 'module example.com/x' >"$SG/go.mod"
+run "$SG" --fix
+check "go: --fix writes go vet and go test" "commands_are '$SG' 'go vet ./...' 'go test ./...'"
+check "go: CI hint names the run lines and actions/setup-go" "grep -q 'fix: .*ci.yml' '$SG/.fake/out' && grep -q 'actions/setup-go' '$SG/.fake/out' && grep -qF -- '- run: go vet ./...' '$SG/.fake/out' && grep -qF -- '- run: go test ./...' '$SG/.fake/out'"
+check "go: names go-reviewer with the cp and vendor-agents.sh commands" "grep -qF 'cp .claude/agent-context/optional/go-reviewer.md .claude/agent-context/' '$SG/.fake/out' && grep -q 'scripts/vendor-agents.sh' '$SG/.fake/out'"
+SGE="$(stack_repo goenabled)"
+echo 'module example.com/x' >"$SGE/go.mod"
+echo ctx >"$SGE/.claude/agent-context/go-reviewer.md"
+run "$SGE"
+check "go: an enabled reviewer is reported as on, with no cp command" "grep -q 'go-reviewer is on' '$SGE/.fake/out' && ! grep -qF 'optional/go-reviewer.md' '$SGE/.fake/out'"
+
+SR="$(stack_repo cargo)"
+printf '[package]\nname = "x"\n' >"$SR/Cargo.toml"
+run "$SR" --fix
+check "cargo: --fix writes fmt, clippy, and test" "commands_are '$SR' 'cargo fmt --check' 'cargo clippy --all-targets -- -D warnings' 'cargo test'"
+check "cargo: CI hint names a Rust toolchain action with rustfmt and clippy" "grep -q 'dtolnay/rust-toolchain' '$SR/.fake/out' && grep -q 'rustfmt, clippy' '$SR/.fake/out'"
+check "cargo: no reviewer is named" "! grep -q 'reviewer' '$SR/.fake/out'"
+
+# node_case <name> <lockfile or -> <package.json> <expected command>...; sets ND.
+node_case() {
+  local name="$1" lock="$2" pkg="$3"; shift 3
+  ND="$(stack_repo "$name")"
+  [ "$lock" = - ] || : >"$ND/$lock"
+  printf '%s\n' "$pkg" >"$ND/package.json"
+  run "$ND" --fix
+  check "node ($name): --fix writes $*" "commands_are '$ND' $(printf "'%s' " "$@")"
+}
+NP='{"scripts": {"test": "vitest", "lint": "eslint .", "build": "tsc", "start": "node ."}}'
+node_case npm - "$NP" 'npm run lint' 'npm run build' 'npm run test'
+check "node (npm): CI hint names actions/setup-node and npm ci" "grep -q 'actions/setup-node' '$ND/.fake/out' && grep -q 'run: npm ci' '$ND/.fake/out'"
+check "node (npm): no typescript, no typescript-reviewer" "! grep -q 'typescript-reviewer' '$ND/.fake/out'"
+node_case pnpm pnpm-lock.yaml "$NP" 'pnpm run lint' 'pnpm run build' 'pnpm run test'
+check "node (pnpm): CI hint names pnpm/action-setup" "grep -q 'pnpm/action-setup' '$ND/.fake/out'"
+check "node (pnpm): the hint says pnpm/action-setup needs a version" "grep -q 'pnpm/action-setup.*packageManager' '$ND/.fake/out'"
+node_case yarn yarn.lock "$NP" 'yarn run lint' 'yarn run build' 'yarn run test'
+node_case bun bun.lockb "$NP" 'bun run lint' 'bun run build' 'bun run test'
+check "node (bun): CI hint names oven-sh/setup-bun" "grep -q 'oven-sh/setup-bun' '$ND/.fake/out'"
+node_case buntext bun.lock "$NP" 'bun run lint' 'bun run build' 'bun run test'
+node_case ts - '{"scripts": {"typecheck": "tsc --noEmit", "test": "jest"}, "devDependencies": {"typescript": "^5"}}' 'npm run typecheck' 'npm run test'
+check "node (ts): names typescript-reviewer" "grep -qF 'cp .claude/agent-context/optional/typescript-reviewer.md .claude/agent-context/' '$ND/.fake/out'"
+node_case all4 - '{"scripts": {"test": "jest", "build": "tsc", "typecheck": "tsc --noEmit", "lint": "eslint ."}, "dependencies": {"typescript": "^5"}}' 'npm run lint' 'npm run typecheck' 'npm run build' 'npm run test'
+check "node (all4): typescript in dependencies names typescript-reviewer" "grep -q 'typescript-reviewer' '$ND/.fake/out'"
+node_case npminit - '{"scripts": {"lint": "eslint .", "test": "echo \"Error: no test specified\" && exit 1"}}' 'npm run lint'
+SNS="$(stack_repo noscripts)"
+echo '{"name": "x"}' >"$SNS/package.json"
+run "$SNS" --fix; rc=$?
+check "node: a package.json with none of the scripts writes nothing and says so" "[ $rc -eq 1 ] && unchanged '$SNS' && grep -q 'package.json.*none of' '$SNS/.fake/out'"
+SNB="$(stack_repo badjson)"
+echo '{ not json' >"$SNB/package.json"
+run "$SNB" --fix; rc=$?
+check "node: an unreadable package.json writes nothing and says so" "[ $rc -eq 1 ] && unchanged '$SNB' && grep -q 'could not read package.json' '$SNB/.fake/out'"
+
+SPY="$(stack_repo python)"
+printf '[project]\nname = "x"\n\n[tool.ruff]\nline-length = 100\n\n[tool.pytest.ini_options]\naddopts = "-q"\n' >"$SPY/pyproject.toml"
+run "$SPY" --fix
+check "python: --fix writes only the configured tools" "commands_are '$SPY' 'ruff check .' 'pytest'"
+check "python: CI hint names actions/setup-python" "grep -q 'actions/setup-python' '$SPY/.fake/out'"
+check "python: names python-reviewer" "grep -qF 'optional/python-reviewer.md' '$SPY/.fake/out'"
+SPM="$(stack_repo mypy)"
+printf '[tool.mypy]\nstrict = true\n' >"$SPM/pyproject.toml"
+run "$SPM" --fix
+check "python: [tool.mypy] proposes mypy ." "commands_are '$SPM' 'mypy .'"
+SP0="$(stack_repo pynotools)"
+printf '[project]\nname = "x"\n# [tool.ruff] is not configured\n' >"$SP0/pyproject.toml"
+run "$SP0" --fix; rc=$?
+check "python: no configured tools writes nothing, and says so" "[ $rc -eq 1 ] && unchanged '$SP0' && grep -q 'pyproject.toml.*none of' '$SP0/.fake/out' && ! grep -q 'ruff check' '$SP0/.fake/out'"
+check "python: still names python-reviewer" "grep -q 'python-reviewer' '$SP0/.fake/out'"
+
+SGN="$(stack_repo gonode)"
+echo 'module example.com/x' >"$SGN/go.mod"
+printf '%s\n' "$NP" >"$SGN/package.json"
+run "$SGN" --fix; rc=$?
+check "several stacks: nothing is written" "[ $rc -eq 1 ] && unchanged '$SGN'"
+check "several stacks: both proposals are printed" "grep -q 'go vet ./...' '$SGN/.fake/out' && grep -q 'npm run test' '$SGN/.fake/out' && grep -q 'several stacks' '$SGN/.fake/out'"
+check "several stacks: each proposal has its CI hint" "grep -q 'actions/setup-go' '$SGN/.fake/out' && grep -q 'actions/setup-node' '$SGN/.fake/out' && grep -qF -- '- run: go vet ./...' '$SGN/.fake/out' && grep -qF -- '- run: npm run test' '$SGN/.fake/out'"
+SGP="$(stack_repo goemptypy)"
+echo 'module example.com/x' >"$SGP/go.mod"
+printf '[project]\nname = "x"\n' >"$SGP/pyproject.toml"
+run "$SGP" --fix
+check "a stack with nothing to propose still counts, so nothing is written" "unchanged '$SGP'"
+
+check "no stack: nothing proposed or written" "! grep -q 'proposed Verify' '$F/.fake/out' && unchanged '$F'"
+S0="$(stack_repo none)"
+run "$S0" --fix; rc=$?
+check "no stack: --fix writes nothing and says no stack file was found" "[ $rc -eq 1 ] && unchanged '$S0' && grep -q 'no stack file' '$S0/.fake/out'"
+
+SE="$(configured_repo stackfilled)"
+echo 'module example.com/x' >"$SE/go.mod"
+cp "$SE/CLAUDE.md" "$SE/.fake/claude"
+run "$SE" --fix; rc=$?
+check "an existing Verify block is untouched" "[ $rc -eq 0 ] && cmp -s '$SE/.fake/claude' '$SE/CLAUDE.md' && ! grep -q 'proposed Verify' '$SE/.fake/out'"
+
+SC="$(stack_repo comments)"
+echo 'module example.com/x' >"$SC/go.mod"
+awk '{ print } /^# test:$/ { print "# when api/ changes, also run the e2e suite" }' "$ROOT/templates/CLAUDE.md" >"$SC/CLAUDE.md"
+run "$SC" --fix
+check "--fix keeps the user's own comments in the block" "verify_block '$SC' | grep -q '^# when api/ changes' && commands_are '$SC' 'go vet ./...' 'go test ./...'"
+# A comment above a command scopes it to paths, so the kept one must not end up above ours.
+check "--fix writes the commands above a kept comment, so it scopes none of them" "[ \"\$(verify_block '$SC' | head -2)\" = \"\$(printf '%s\n' 'go vet ./...' 'go test ./...')\" ]"
+SV="$(stack_repo noblock)"
+echo 'module example.com/x' >"$SV/go.mod"
+printf '# acme\n\n## Verify\n\nTo do.\n' >"$SV/CLAUDE.md"
+cp "$SV/CLAUDE.md" "$SV/.fake/claude"
+run "$SV" --fix; rc=$?
+check "a Verify with no code block is not written, but the proposal is printed" "[ $rc -eq 1 ] && cmp -s '$SV/.fake/claude' '$SV/CLAUDE.md' && grep -q 'go vet ./...' '$SV/.fake/out'"
+
+# The template's own CLAUDE.md is swapped for the skeleton first, then filled in.
+SO="$(stack_repo ownthenfill)"
+echo 'module example.com/x' >"$SO/go.mod"
+cp "$ROOT/CLAUDE.md" "$SO/CLAUDE.md"
+run "$SO" --fix
+check "--fix swaps in the skeleton, then fills its Verify" "[ -f '$SO/CLAUDE.md.template-own' ] && commands_are '$SO' 'go vet ./...' 'go test ./...'"
+
 run "$C" --bogus; rc=$?
 check "rejects an unknown argument" "[ $rc -eq 2 ]"
 

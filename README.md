@@ -100,7 +100,7 @@ command that fixes each item:
 
 ```sh
 scripts/setup.sh          # check only
-scripts/setup.sh --fix    # also swap in the CLAUDE.md skeleton, create the labels and the local allowlist, and link the issue guide
+scripts/setup.sh --fix    # also swap in the CLAUDE.md skeleton, fill in Verify for one detected stack, create the labels and the local allowlist, and link the issue guide
 ```
 
 It exits 0 once nothing is failing, so re-run it until it does. It names the GitHub
@@ -115,6 +115,16 @@ The steps it checks:
    is replaced. It also removes the template's plugin manifests (`.claude-plugin/`),
    which a new repo does not need. Write every command to run from the repo root and never `cd`,
    because the loop may run several in one shell.
+
+   `setup.sh` proposes the Verify commands from the stack file at the repo root:
+   a `Makefile` with a `test` target (which wins over the rest), `package.json`
+   (its `lint`, `typecheck`, `build`, and `test` scripts, run with the package
+   manager its lockfile names), `go.mod`, `Cargo.toml`, or `pyproject.toml` (only
+   the ruff, mypy, and pytest it configures). With one stack, `--fix` writes them
+   into the skeleton's Verify block; it never touches a block that already has
+   commands. With several, it writes nothing and prints each proposal. It also
+   prints the matching `ci.yml` step for step 2, and for Go, TypeScript, or
+   Python, the optional reviewer to turn on and the commands that do it.
 2. **Configure CI.** Replace the failing placeholder step in
    `.github/workflows/ci.yml` with the same Verify commands, so CI and the loop
    agree on what "green" means. `setup.sh` warns about any Verify command that no
