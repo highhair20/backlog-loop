@@ -1,0 +1,14 @@
+{
+  "name": "backlog-loop",
+  "description": "Installs the backlog-loop template's guardrails, loop command, and setup into a repository",
+  "owner": {
+    "name": "highhair20"
+  },
+  "plugins": [
+    {
+      "name": "backlog-loop",
+      "source": "./",
+      "description": "Sync the backlog-loop template into the current repo, then check and fix its setup. The files land in the repo, committed by you, so local, headless, and cloud sessions all see them."
+    }
+  ]
+}

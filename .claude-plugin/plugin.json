@@ -1,0 +1,21 @@
+{
+  "name": "backlog-loop",
+  "description": "Brings a repository up to the backlog-loop template, and later up to date with it. The template's files land in the repo, where you review and commit them; the plugin itself adds no hooks, agents, or loop command.",
+  "author": {
+    "name": "highhair20"
+  },
+  "homepage": "https://github.com/highhair20/backlog-loop",
+  "repository": "https://github.com/highhair20/backlog-loop",
+  "license": "MIT",
+  "keywords": ["backlog", "autonomous", "guardrails", "github", "template"],
+  "commands": {
+    "install": {
+      "source": "./.claude-plugin/commands/install.md",
+      "description": "Sync the backlog-loop template into this repo, run its setup.sh --fix, and report what is left to do"
+    },
+    "update": {
+      "source": "./.claude-plugin/commands/update.md",
+      "description": "Re-sync this repo from the installed template and show the diff for review; never commits"
+    }
+  }
+}

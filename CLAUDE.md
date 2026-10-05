@@ -11,6 +11,7 @@
 
 | Path | What it is |
 |---|---|
+| `.claude-plugin/` | The installer plugin: this repo is a marketplace whose one plugin is the template itself, with `/backlog-loop:install` and `:update`. Never synced; `setup.sh --fix` removes it from repos made from the template |
 | `.claude/` | Settings (deny rules, hooks), the `/work-next-item` command, the PR review hooks, and the vendored reviewer agents with their context |
 | `.github/` | Issue forms, PR template, Dependabot, the placeholder `ci.yml` for new repos, and `template-self-test.yml`, this repo's CI |
 | `docs/` | `ISSUE_GUIDE.md`, `BACKLOG.md`, and `CI_HARDENING.md`, all seeded into repos |
