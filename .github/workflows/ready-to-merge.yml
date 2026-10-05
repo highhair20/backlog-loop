@@ -10,21 +10,27 @@ on:
   workflow_run:
     workflows: [CI, Template self-test]
     types: [completed]
-  # When a PR changes, so a new push or a label clears a stale ready-to-merge.
-  pull_request:
-    types: [synchronize, reopened, labeled, unlabeled]
+  # When an issue's labels change: the loop's Step 8 swaps in-progress for in-review
+  # once it is done with a PR, which may be after that PR's CI has finished.
+  issues:
+    types: [labeled, unlabeled]
   # When main moves, so PRs that fell behind lose the label.
   push:
     branches: [main]
+  # No pull_request trigger: a run there adds its own check to the PR it judges, and
+  # while that check runs GitHub can report the PR as not mergeable yet. A new push
+  # is judged when its CI completes (workflow_run).
 
 permissions:
   contents: read
   issues: read
   pull-requests: write
 
+# Runs queue rather than cancel: each reads fresh state, and a cancelled one could
+# leave a PR labelled but not announced.
 concurrency:
   group: ready-to-merge
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   label:

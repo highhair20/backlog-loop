@@ -225,7 +225,8 @@ check "the root CLAUDE.md carries the new marker" "head -1 '$ROOT/CLAUDE.md' | g
 RTM="$ROOT/.github/workflows/ready-to-merge.yml"
 check "ready-to-merge.yml exists" "[ -f '$RTM' ]"
 check "it can only read contents and issues and write pull requests" "yaml 'p = YAML.load_file(ARGV[0])[\"permissions\"]; exit(p == {\"contents\" => \"read\", \"issues\" => \"read\", \"pull-requests\" => \"write\"} ? 0 : 1)' '$RTM'"
-check "it runs on CI completing, PR changes and pushes to main, never on a schedule" "yaml 'on = YAML.load_file(ARGV[0])[true] || YAML.load_file(ARGV[0])[\"on\"]; exit(on.key?(\"workflow_run\") && on.key?(\"pull_request\") && on.key?(\"push\") && !on.key?(\"schedule\") ? 0 : 1)' '$RTM'"
+check "it runs on CI completing, issue label changes and pushes to main; no schedule, no pull_request" "yaml 'on = YAML.load_file(ARGV[0])[true] || YAML.load_file(ARGV[0])[\"on\"]; exit(on.key?(\"workflow_run\") && on.key?(\"issues\") && on.key?(\"push\") && !on.key?(\"schedule\") && !on.key?(\"pull_request\") ? 0 : 1)' '$RTM'"
+check "its runs queue rather than cancel each other" "yaml 'c = YAML.load_file(ARGV[0])[\"concurrency\"]; exit(c[\"cancel-in-progress\"] == false ? 0 : 1)' '$RTM'"
 check "it checks out the default branch, so a PR cannot change the script that judges it" "grep -q 'ref: \${{ github.event.repository.default_branch }}' '$RTM'"
 check "it runs scripts/ready-to-merge.sh" "grep -q 'run: scripts/ready-to-merge.sh' '$RTM'"
 

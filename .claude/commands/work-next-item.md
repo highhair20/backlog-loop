@@ -460,7 +460,8 @@ all pass, is ready except for that. Bring it up to date with `gh pr update-branc
 GitHub merges `main` into the branch, never a rebase, and CI runs again; the
 ready-to-merge workflow tells the maintainer once it passes. This is not a follow-up:
 no claim, no comment, no round. If the update fails (a conflict appeared), leave it:
-the next run sees the conflict. Then judge the next PR.
+the next run sees the conflict. In a dry run, note `would: gh pr update-branch <pr>`
+instead. Then judge the next PR.
 
 Take the first PR that needs attention. If none does, go on to Step 2.
 
