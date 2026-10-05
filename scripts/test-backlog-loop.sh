@@ -15,6 +15,8 @@ unset BACKLOG_LOOP_PID BACKLOG_LOOP_STAGED BACKLOG_LOOP_ROOT GH_REPO
 # passes them to every session, and its Verify then ran these nested drivers
 # with a cap of 2 against 3-issue fixtures (#41).
 unset MAX_ITEMS PACE_SECONDS MAX_RETRIES BACKOFF_SECONDS MODEL LOG_DIR BG_WAIT_SECONDS
+# The template the start-up check compares with is set per test, never the network's.
+unset TEMPLATE_REPO TEMPLATE_GH_REPO
 
 failures=0
 check() { if eval "$2"; then echo "ok   $1"; else echo "FAIL $1" >&2; failures=$((failures + 1)); fi; }
@@ -32,7 +34,7 @@ setup() {
   mkdir -p "$dir/scripts" "$dir/bin"
   git -C "$dir" init -q -b main
   git -C "$dir" remote add origin https://github.com/o/r.git
-  cp "$HERE/backlog-loop.sh" "$HERE/check-verify-section.sh" "$HERE/loop-lock.sh" "$HERE/gh-auth-check.sh" "$HERE/gh-repo.sh" "$HERE/missing-allow-rules.sh" "$HERE/report-drained.sh" "$dir/scripts/"
+  cp "$HERE/backlog-loop.sh" "$HERE/check-verify-section.sh" "$HERE/loop-lock.sh" "$HERE/gh-auth-check.sh" "$HERE/gh-repo.sh" "$HERE/missing-allow-rules.sh" "$HERE/report-drained.sh" "$HERE/template-version.sh" "$dir/scripts/"
   printf '## Verify\n```sh\nmake test\n```\n' >"$dir/CLAUDE.md"
   echo 3 >"$dir/count"
   : >"$dir/calls"
@@ -386,6 +388,42 @@ AN="$(allow_repo allownone none)"
 run "$AN"; rc=$?
 check "a missing local file gets a one-line warning" "[ \$(grep -c 'no .claude/settings.local.json' '$AN/out') -eq 1 ] && [ \$(grep -c 'allow rule\\|settings.local' '$AN/out') -eq 1 ]"
 check "a missing local file does not stop the run" "[ $rc -eq 0 ] && [ \$(wc -l <'$AN/calls') -eq 3 ]"
+
+# Behind the template (#73): a repo that runs the loop unattended hears it at
+# start-up, without running setup.sh. The template is a local bare repo.
+TSRC="$WORK/template-src"
+git init -q -b main "$TSRC"
+git -C "$TSRC" -c user.name=t -c user.email=t@t commit -q --allow-empty -m one
+TOLD="$(git -C "$TSRC" rev-parse HEAD)"
+git -C "$TSRC" -c user.name=t -c user.email=t@t commit -q --allow-empty -m two
+TNEW="$(git -C "$TSRC" rev-parse HEAD)"
+TBARE="$WORK/template.git"
+git clone -q --bare "$TSRC" "$TBARE"
+stamped_repo() { # stamped_repo <name> <stamp>
+  local dir; dir="$(setup "$1" progress)"
+  mkdir -p "$dir/.claude"
+  echo "$2" >"$dir/.claude/template-version"
+  echo "$dir"
+}
+TB="$(stamped_repo tvbehind "$TOLD")"
+TEMPLATE_REPO="$TBARE" run "$TB"; rc=$?
+check "behind the template: warns, naming both commits" "grep -qF '⚠ synced from template ${TOLD:0:7}; the template is now at ${TNEW:0:7}' '$TB/out'"
+check "behind the template: says how to update" "grep -q 'Update: /backlog-loop:update' '$TB/out'"
+check "behind the template: warns before the first session" "[ \"\$(grep -n 'the template is now at' '$TB/out' | cut -d: -f1)\" -lt \"\$(grep -n '▶ \\[1/' '$TB/out' | cut -d: -f1)\" ]"
+check "behind the template: still runs" "[ $rc -eq 0 ] && [ \$(wc -l <'$TB/calls') -eq 3 ]"
+TC="$(stamped_repo tvcurrent "$TNEW")"
+TEMPLATE_REPO="$TBARE" run "$TC"; rc=$?
+check "up to date with the template: no warning" "[ $rc -eq 0 ] && ! grep -q 'template' '$TC/out'"
+check "no stamp: no template line" "! grep -q 'template' '$P/out'"
+TU="$(stamped_repo tvunreachable "$TOLD")"
+TEMPLATE_REPO="$WORK/no-such-template" run "$TU"; rc=$?
+check "an unreachable template is a one-line warning" "[ \$(grep -c 'template' '$TU/out') -eq 1 ] && grep -q '⚠ could not reach' '$TU/out'"
+check "an unreachable template does not stop the run" "[ $rc -eq 0 ] && [ \$(wc -l <'$TU/calls') -eq 3 ]"
+# The check itself failing (a broken copy, say) still never stops the run.
+TF="$(stamped_repo tvbroken "$TOLD")"
+printf '#!/usr/bin/env bash\nexit 99\n' >"$TF/scripts/template-version.sh"
+TEMPLATE_REPO="$TBARE" run "$TF"; rc=$?
+check "a check that fails outright warns in one line and still runs" "[ $rc -eq 0 ] && [ \$(wc -l <'$TF/calls') -eq 3 ] && grep -qx '⚠ could not compare this repo with the template' '$TF/out'"
 
 # --- the single-instance lock ---
 # A lock a live process holds (this test script stands in for the other run).

@@ -38,7 +38,8 @@ if [ "${BACKLOG_LOOP_STAGED:+$BACKLOG_LOOP_STAGED/backlog-loop.sh}" != "$0" ]; t
   stage="$(mktemp -d "${TMPDIR:-/tmp}/backlog-loop.XXXXXX")" || { echo "✗ could not create a temp dir for the driver" >&2; exit 1; }
   if ! cp "$root/scripts/backlog-loop.sh" "$root/scripts/loop-lock.sh" \
           "$root/scripts/check-verify-section.sh" "$root/scripts/gh-auth-check.sh" \
-          "$root/scripts/gh-repo.sh" "$root/scripts/missing-allow-rules.sh" "$stage/"; then
+          "$root/scripts/gh-repo.sh" "$root/scripts/missing-allow-rules.sh" \
+          "$root/scripts/template-version.sh" "$stage/"; then
     rm -rf "$stage"
     echo "✗ could not copy the driver's scripts from $root/scripts" >&2
     exit 1
@@ -110,6 +111,20 @@ case "$allow_rc" in
     printf '%s\n' "$allow_out" | sed 's/^/    /' >&2
     ;;
   *) echo "⚠ ${allow_out:-could not compare .claude/settings.local.json with its example}" >&2 ;;
+esac
+
+# A repo that runs the loop unattended may never run setup.sh again, so it would
+# never hear that its managed files are behind the template (#73). Say so here,
+# but run: the update needs a human to review it. Same check as setup.sh's.
+tv_rc=0
+tv_out="$("$HERE/template-version.sh" 2>&1)" || tv_rc=$?
+case "$tv_rc" in
+  0|4) ;;
+  1)
+    echo "⚠ ${tv_out}" >&2
+    echo "    Update: /backlog-loop:update with the plugin, or scripts/sync-guardrails.sh $BACKLOG_LOOP_ROOT from a clone of the template." >&2
+    ;;
+  *) echo "⚠ ${tv_out:-could not compare this repo with the template}" >&2 ;;
 esac
 
 mkdir -p "$LOG_DIR"
