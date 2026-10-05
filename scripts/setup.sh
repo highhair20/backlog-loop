@@ -200,9 +200,12 @@ propose_verify() {
       echo "make test" ;;
     node)
       command -v jq >/dev/null || return 1
+      # npm init's test script always fails, so it is no test at all.
       jq -r --arg pm "$(node_pm)" '(.scripts // {}) as $sc
         | if ($sc | type) != "object" then empty
-          else ("lint", "typecheck", "build", "test") as $s | select($sc | has($s)) | "\($pm) run \($s)" end' \
+          else ("lint", "typecheck", "build", "test") as $s
+            | select($sc | has($s)) | select(($sc[$s] | tostring | test("no test specified")) | not)
+            | "\($pm) run \($s)" end' \
         package.json 2>/dev/null ;;
     go) printf '%s\n' "go vet ./..." "go test ./..." ;;
     rust) printf '%s\n' "cargo fmt --check" "cargo clippy --all-targets -- -D warnings" "cargo test" ;;
@@ -329,6 +332,7 @@ propose_verify_section() {
     fix_hint="several stacks found, so nothing was written: copy the commands you want from the proposals below into the Verify code block"
   fi
   bad "## Verify has no commands, so the loop will refuse to run" "$fix_hint"
+  [ "$n" -gt 0 ] || info "no stack file at the repo root (Makefile with a test target, package.json, go.mod, Cargo.toml, pyproject.toml), so nothing is proposed"
   while IFS= read -r stack; do
     [ -z "$stack" ] || print_proposal "$stack"
   done <<EOF

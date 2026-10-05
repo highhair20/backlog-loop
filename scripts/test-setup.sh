@@ -405,6 +405,16 @@ printf 'TEST := 1\ntest-e2e:\n\t./e2e.sh\nlint:\n\tshellcheck *.sh\n' >"$SN/Make
 echo 'module example.com/x' >"$SN/go.mod"
 run "$SN" --fix
 check "make: a Makefile without a test target is not the stack" "commands_are '$SN' 'go vet ./...' 'go test ./...'"
+SNP="$(stack_repo makephony)"
+printf '.PHONY: test\nall:\n\tcc x.c\n' >"$SNP/Makefile"
+echo 'module example.com/x' >"$SNP/go.mod"
+run "$SNP" --fix
+check "make: .PHONY: test alone is not a test target" "commands_are '$SNP' 'go vet ./...' 'go test ./...'"
+SMN="$(stack_repo makenode)"
+printf 'lint test:\n\t./check.sh\n' >"$SMN/Makefile"
+printf '%s\n' '{"scripts": {"test": "jest"}, "devDependencies": {"typescript": "^5"}}' >"$SMN/package.json"
+run "$SMN" --fix
+check "make: a multi-target line wins over package.json" "commands_are '$SMN' 'make lint' 'make test' && grep -q 'typescript-reviewer' '$SMN/.fake/out'"
 
 SG="$(stack_repo go)"
 echo 'module example.com/x' >"$SG/go.mod"
@@ -446,6 +456,9 @@ check "node (bun): CI hint names oven-sh/setup-bun" "grep -q 'oven-sh/setup-bun'
 node_case buntext bun.lock "$NP" 'bun run lint' 'bun run build' 'bun run test'
 node_case ts - '{"scripts": {"typecheck": "tsc --noEmit", "test": "jest"}, "devDependencies": {"typescript": "^5"}}' 'npm run typecheck' 'npm run test'
 check "node (ts): names typescript-reviewer" "grep -qF 'cp .claude/agent-context/optional/typescript-reviewer.md .claude/agent-context/' '$ND/.fake/out'"
+node_case all4 - '{"scripts": {"test": "jest", "build": "tsc", "typecheck": "tsc --noEmit", "lint": "eslint ."}, "dependencies": {"typescript": "^5"}}' 'npm run lint' 'npm run typecheck' 'npm run build' 'npm run test'
+check "node (all4): typescript in dependencies names typescript-reviewer" "grep -q 'typescript-reviewer' '$ND/.fake/out'"
+node_case npminit - '{"scripts": {"lint": "eslint .", "test": "echo \"Error: no test specified\" && exit 1"}}' 'npm run lint'
 SNS="$(stack_repo noscripts)"
 echo '{"name": "x"}' >"$SNS/package.json"
 run "$SNS" --fix; rc=$?
@@ -477,6 +490,7 @@ printf '%s\n' "$NP" >"$SGN/package.json"
 run "$SGN" --fix; rc=$?
 check "several stacks: nothing is written" "[ $rc -eq 1 ] && unchanged '$SGN'"
 check "several stacks: both proposals are printed" "grep -q 'go vet ./...' '$SGN/.fake/out' && grep -q 'npm run test' '$SGN/.fake/out' && grep -q 'several stacks' '$SGN/.fake/out'"
+check "several stacks: each proposal has its CI hint" "grep -q 'actions/setup-go' '$SGN/.fake/out' && grep -q 'actions/setup-node' '$SGN/.fake/out' && grep -qF -- '- run: go vet ./...' '$SGN/.fake/out' && grep -qF -- '- run: npm run test' '$SGN/.fake/out'"
 SGP="$(stack_repo goemptypy)"
 echo 'module example.com/x' >"$SGP/go.mod"
 printf '[project]\nname = "x"\n' >"$SGP/pyproject.toml"
@@ -484,6 +498,9 @@ run "$SGP" --fix
 check "a stack with nothing to propose still counts, so nothing is written" "unchanged '$SGP'"
 
 check "no stack: nothing proposed or written" "! grep -q 'proposed Verify' '$F/.fake/out' && unchanged '$F'"
+S0="$(stack_repo none)"
+run "$S0" --fix; rc=$?
+check "no stack: --fix writes nothing and says no stack file was found" "[ $rc -eq 1 ] && unchanged '$S0' && grep -q 'no stack file' '$S0/.fake/out'"
 
 SE="$(configured_repo stackfilled)"
 echo 'module example.com/x' >"$SE/go.mod"
