@@ -59,7 +59,7 @@ command -v jq >/dev/null || die "jq not found"
 # includes_parents=false: an org-level ruleset of the same name is listed by
 # default, and its id cannot be updated through this repo's endpoint.
 existing="$(gh api "repos/$repo/rulesets?includes_parents=false" --paginate --hostname "$host" | jq -r --arg name "$NAME" '.[] | select(.name == $name) | .id' | head -1)" \
-  || die "could not list rulesets on $target (does it exist, and are you an admin?)"
+  || die "could not list rulesets on $target (does it exist, are you an admin, and is gh logged in to $host?)"
 
 # With neither --strict nor --no-strict, keep what the existing ruleset has.
 if [ -z "$strict" ]; then
