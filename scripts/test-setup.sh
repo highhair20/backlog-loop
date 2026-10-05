@@ -22,7 +22,7 @@ fresh_repo() {
   mkdir -p "$dir/scripts" "$dir/.claude" "$dir/.github/workflows" "$dir/.github/ISSUE_TEMPLATE" "$dir/docs" "$dir/.fake/bin" "$dir/templates"
   git -C "$dir" init -q -b main
   git -C "$dir" remote add origin https://github.com/o/r.git
-  cp "$ROOT"/scripts/{setup,check-verify-section,seed-labels,protect-main,gh-auth-check,gh-repo}.sh "$dir/scripts/"
+  cp "$ROOT"/scripts/{setup,check-verify-section,seed-labels,protect-main,gh-auth-check,gh-repo,missing-allow-rules}.sh "$dir/scripts/"
   cp "$ROOT/templates/CLAUDE.md" "$dir/templates/"
   cp "$ROOT/templates/CLAUDE.md" "$dir/"
   cp "$ROOT/.github/workflows/ci.yml" "$dir/.github/workflows/"
@@ -241,6 +241,11 @@ jq '.permissions.allow -= ["Bash(gh issue list *)"]' "$M/.claude/settings.local.
 run "$M"; rc=$?
 check "warns about allow rules the example has and the local file lacks" "[ $rc -eq 0 ] && grep -q 'missing 1 allow rule' '$M/.fake/out' && grep -qF 'Bash(gh issue list *)' '$M/.fake/out'"
 check "a local file with every example rule gets no such warning" "! grep -q 'missing .* allow rule' '$C/.fake/out'"
+check "a local file with every example rule says so" "grep -q 'has every rule the example allows' '$C/.fake/out'"
+MJ="$(configured_repo invalid-allow)"
+echo '{"permissions": ' >"$MJ/.claude/settings.local.json"
+run "$MJ"; rc=$?
+check "invalid local JSON is a warning, not a failure" "[ $rc -eq 0 ] && grep -q 'could not compare .claude/settings.local.json' '$MJ/.fake/out'"
 
 # The issue chooser links to docs/ISSUE_GUIDE.md (#37). contact_links needs an
 # absolute URL, so the template cannot ship it; --fix adds it for the resolved repo.

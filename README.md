@@ -191,7 +191,7 @@ It treats files three ways, so re-running it later is safe:
 
 | Kind | Files | On every sync |
 |---|---|---|
-| **Managed** | review hooks, `work-next-item.md`, `backlog-loop.sh`, `check-verify-section.sh`, `gh-auth-check.sh`, `gh-repo.sh`, `loop-lock.sh`, `protect-main.sh`, `ready-to-merge.sh`, `report-drained.sh`, `seed-labels.sh`, `setup.sh`, `vendor-agents.sh`, `settings.local.json.example`, `docs/ROUTINE.md` | Overwritten. These hold no project-specific content; put customisation in `CLAUDE.md`. |
+| **Managed** | review hooks, `work-next-item.md`, `backlog-loop.sh`, `check-verify-section.sh`, `gh-auth-check.sh`, `gh-repo.sh`, `loop-lock.sh`, `missing-allow-rules.sh`, `protect-main.sh`, `ready-to-merge.sh`, `report-drained.sh`, `seed-labels.sh`, `setup.sh`, `vendor-agents.sh`, `settings.local.json.example`, `docs/ROUTINE.md` | Overwritten. These hold no project-specific content; put customisation in `CLAUDE.md`. |
 | **Seeded** | `CLAUDE.md` (the skeleton in `templates/`), CI workflow, the `ready-to-merge.yml` workflow, issue forms, PR template, `dependabot.yml`, `docs/ISSUE_GUIDE.md`, `docs/BACKLOG.md`, `docs/CI_HARDENING.md`, `docs/DEPLOYING.md`, the reviewer agents and their `.claude/agent-context/`, the optional stack reviewer contexts in `.claude/agent-context/optional/` | Copied only if missing. Yours to edit. Nothing is added beside an equivalent you already have: the placeholder CI only goes into a repo with no workflows, the issue forms only into one with no issue templates of its own, the PR template only if GitHub finds none anywhere, and `dependabot.yml` not beside a `dependabot.yaml`. `.editorconfig` is never synced; its indent defaults could change how editors treat existing code. |
 | **Merged** | `.claude/settings.json`, `.gitignore` | The template's deny rules, hooks, and ignore lines are added; yours are kept. |
 
@@ -233,7 +233,9 @@ keeps the two in step. The committed deny rules still win over any allow rule, s
 merges and pushes to `main` stay blocked. If a command every
 iteration runs, or a Verify command, is missing, the first item stops without giving up,
 and the driver reports "no progress"; that item's log in `.loop-logs/` names the
-refused command and the allow rule to add. A refusal only one issue meets, such
+refused command and the allow rule to add. Sync updates the example but never your
+copy, so `backlog-loop.sh` (and `setup.sh`) name each rule the example has and your
+copy lacks before the first item; the driver still runs. A refusal only one issue meets, such
 as an edit under `.claude/`, gives that issue up as `needs-attention` instead, and
 the loop moves on.
 
@@ -330,6 +332,7 @@ scripts/
   gh-auth-check.sh           is gh logged in to origin's host? (other hosts don't count)
   gh-repo.sh                 which repo gh acts on; stops if several remotes and no gh default
   loop-lock.sh               one loop run per clone; reclaims a crashed run's lock
+  missing-allow-rules.sh     names allow rules the example has and your local allowlist lacks
   ready-to-merge.sh          labels ready loop PRs and tells you (run by the workflow)
   report-drained.sh          tells backlog-loop.sh a session found nothing to do
   sync-guardrails.sh         update an existing repo from this template

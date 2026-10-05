@@ -32,7 +32,7 @@ setup() {
   mkdir -p "$dir/scripts" "$dir/bin"
   git -C "$dir" init -q -b main
   git -C "$dir" remote add origin https://github.com/o/r.git
-  cp "$HERE/backlog-loop.sh" "$HERE/check-verify-section.sh" "$HERE/loop-lock.sh" "$HERE/gh-auth-check.sh" "$HERE/gh-repo.sh" "$HERE/report-drained.sh" "$dir/scripts/"
+  cp "$HERE/backlog-loop.sh" "$HERE/check-verify-section.sh" "$HERE/loop-lock.sh" "$HERE/gh-auth-check.sh" "$HERE/gh-repo.sh" "$HERE/missing-allow-rules.sh" "$HERE/report-drained.sh" "$dir/scripts/"
   printf '## Verify\n```sh\nmake test\n```\n' >"$dir/CLAUDE.md"
   echo 3 >"$dir/count"
   : >"$dir/calls"
@@ -315,6 +315,35 @@ check "runs, naming the repo, once a gh default is set" "[ $rc -eq 0 ] && [ \$(w
 # Every session's gh is pinned to that repo, host included (GHE), so a change to
 # the remotes or the default mid-run cannot move the loop.
 check "pins every session's gh to the repo it named" "[ \"\$(sort -u '$R2/gh-repo-env')\" = github.com/o/r ]"
+
+# The local allowlist (#81): sync updates the example but never this machine's copy,
+# so a rule added later is missing until someone copies it. Warn before any session,
+# but run anyway: the operator may have dropped a rule on purpose.
+allow_repo() { # allow_repo <name> <local allow rules as JSON, or "none" for no file>
+  local dir; dir="$(setup "$1" progress)"
+  mkdir -p "$dir/.claude"
+  echo '{"permissions": {"allow": ["Bash(gh issue list *)", "Bash(scripts/report-drained.sh)"]}}' >"$dir/.claude/settings.local.json.example"
+  [ "$2" = none ] || printf '%s\n' "$2" >"$dir/.claude/settings.local.json"
+  echo "$dir"
+}
+AM="$(allow_repo allowmissing '{"permissions": {"allow": ["Bash(gh issue list *)", "Bash(make test)"]}}')"
+run "$AM"; rc=$?
+check "names each allow rule the local file lacks" "grep -q 'missing 1 allow rule' '$AM/out' && grep -qF 'Bash(scripts/report-drained.sh)' '$AM/out'"
+check "warns before the first session" "[ \"\$(grep -n 'missing 1 allow rule' '$AM/out' | cut -d: -f1)\" -lt \"\$(grep -n '▶ \\[1/' '$AM/out' | cut -d: -f1)\" ]"
+check "still runs with a rule missing" "[ $rc -eq 0 ] && [ \$(wc -l <'$AM/calls') -eq 3 ]"
+check "does not name rules the local file has" "! grep -qF 'Bash(gh issue list *)' '$AM/out'"
+AC="$(allow_repo allowcomplete '{"permissions": {"allow": ["Bash(make test)", "Bash(scripts/report-drained.sh)", "Bash(gh issue list *)"]}}')"
+run "$AC"; rc=$?
+check "a complete allowlist prints no warning" "[ $rc -eq 0 ] && ! grep -q 'allow rule\\|settings.local' '$AC/out'"
+check "no example to compare with prints no warning" "! grep -q 'allow rule\\|settings.local' '$P/out'"
+AI="$(allow_repo allowinvalid '{"permissions": ')"
+run "$AI"; rc=$?
+check "invalid local JSON gets a one-line warning" "[ \$(grep -c 'could not compare .claude/settings.local.json' '$AI/out') -eq 1 ] && [ \$(grep -c 'allow rule\\|settings.local' '$AI/out') -eq 1 ]"
+check "invalid local JSON does not stop the run" "[ $rc -eq 0 ] && [ \$(wc -l <'$AI/calls') -eq 3 ]"
+AN="$(allow_repo allownone none)"
+run "$AN"; rc=$?
+check "a missing local file gets a one-line warning" "[ \$(grep -c 'no .claude/settings.local.json' '$AN/out') -eq 1 ] && [ \$(grep -c 'allow rule\\|settings.local' '$AN/out') -eq 1 ]"
+check "a missing local file does not stop the run" "[ $rc -eq 0 ] && [ \$(wc -l <'$AN/calls') -eq 3 ]"
 
 # --- the single-instance lock ---
 # A lock a live process holds (this test script stands in for the other run).

@@ -31,6 +31,7 @@ MANAGED=(
   scripts/gh-auth-check.sh
   scripts/gh-repo.sh
   scripts/loop-lock.sh
+  scripts/missing-allow-rules.sh
   scripts/protect-main.sh
   scripts/ready-to-merge.sh
   scripts/report-drained.sh

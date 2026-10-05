@@ -38,7 +38,7 @@ if [ "${BACKLOG_LOOP_STAGED:+$BACKLOG_LOOP_STAGED/backlog-loop.sh}" != "$0" ]; t
   stage="$(mktemp -d "${TMPDIR:-/tmp}/backlog-loop.XXXXXX")" || { echo "✗ could not create a temp dir for the driver" >&2; exit 1; }
   if ! cp "$root/scripts/backlog-loop.sh" "$root/scripts/loop-lock.sh" \
           "$root/scripts/check-verify-section.sh" "$root/scripts/gh-auth-check.sh" \
-          "$root/scripts/gh-repo.sh" "$stage/"; then
+          "$root/scripts/gh-repo.sh" "$root/scripts/missing-allow-rules.sh" "$stage/"; then
     rm -rf "$stage"
     echo "✗ could not copy the driver's scripts from $root/scripts" >&2
     exit 1
@@ -96,6 +96,21 @@ echo "Working the backlog of ${gh_repo#*/}"
 # move the loop to another one. The host is gh's, not origin's, so a GitHub
 # Enterprise repo on another remote stays on its own host.
 export GH_REPO="$gh_repo"
+
+# Sync updates the allowlist example but never this machine's own copy, so a rule
+# added later (report-drained.sh, gh pr diff) is missing until someone copies it,
+# and every session stops at the command it needs (#81). Warn, but run: the operator
+# may have dropped a rule on purpose. Same comparison as setup.sh's.
+allow_rc=0
+allow_out="$("$HERE/missing-allow-rules.sh" 2>&1)" || allow_rc=$?
+case "$allow_rc" in
+  0) ;;
+  1)
+    echo "⚠ .claude/settings.local.json is missing $(printf '%s\n' "$allow_out" | grep -c .) allow rule(s) the example has; a session stops at a command it is not allowed:" >&2
+    printf '%s\n' "$allow_out" | sed 's/^/    /' >&2
+    ;;
+  *) echo "⚠ ${allow_out:-could not compare .claude/settings.local.json with its example}" >&2 ;;
+esac
 
 mkdir -p "$LOG_DIR"
 
