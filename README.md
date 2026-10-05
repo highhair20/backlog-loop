@@ -288,9 +288,11 @@ The guardrails are layered, from softest to hardest:
   sufficiently unusual spelling of a push to `main` can get past them. The branch
   ruleset in step 4 is the hard block, so it is required, not optional.
 - The deny rules also refuse git options that run a program or write a file
-  (`--upload-pack`, `--receive-pack`, `--exec`, `--output`, `git -c`, `git config`),
-  in every session, interactive ones included; run those in a plain terminal if you
-  need them. Claude Code itself refuses edits under `.git/` (a "sensitive file", even
+  (`--upload-pack`, `--receive-pack`, `--exec`, `--output`, `git -c`, `git config`)
+  in the spellings they cover, abbreviations and a leading global option included, in
+  interactive sessions too; run those in a plain terminal if you need them. A spelling
+  they miss is still not on the unattended allowlist, so a headless session cannot run
+  it, but an interactive session would ask you rather than refuse. Claude Code itself refuses edits under `.git/` (a "sensitive file", even
   with edits auto-approved), so a session cannot plant a git hook or config instead.
   A headless session still runs your Verify commands, which run this repo's code with
   your credentials: label only issues you have read, and see the proposal gate.
