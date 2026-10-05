@@ -174,6 +174,41 @@ check "git lists the template's files" "[ -n \"\$tracked\" ]"
 check "the template ships no task-runner file" "! printf '%s\n' \"\$tracked\" | grep -qiE '(^|/)(\\.?justfile|gnumakefile|makefile)$'"
 check "README's file list mentions the task-runner conventions" "grep -qE '^docs/BACKLOG\\.md[[:space:]].*task runner' '$ROOT/README.md'"
 
+# --- README quickstart (#66): the shortest path to a first loop PR, on the first screen ---
+# shellcheck disable=SC2034  # read inside check's eval strings
+quick="$(awk '/^## /{ on = ($0 == "## Quickstart") } on' "$ROOT/README.md" 2>/dev/null)"
+check "README has a Quickstart section" "[ -n \"\$quick\" ]"
+check "the Quickstart comes directly under the tagline" "awk 'NR > 1 && NF { print; exit }' '$ROOT/README.md' | grep -q '^\\*\\*' && awk 'NR > 1 && NF { n++ } n == 2 { print; exit }' '$ROOT/README.md' | grep -qx '## Quickstart'"
+# Each step is one numbered line: the list, from its first step to the next blank
+# line, is nothing but numbered lines, so a wrapped step (indented or not) fails.
+# shellcheck disable=SC2034  # read inside check's eval strings
+steps="$(printf '%s\n' "$quick" | grep -E '^[0-9]+\. ')"
+# shellcheck disable=SC2034  # read inside check's eval strings
+step_block="$(printf '%s\n' "$quick" | awk '/^[0-9]+\. /{ on = 1 } on && !NF { exit } on')"
+check "every Quickstart step is a single line" "[ -n \"\$step_block\" ] && ! printf '%s\n' \"\$step_block\" | grep -vqE '^[0-9]+\\. '"
+# The steps, in the order a new repo needs them: setup.sh --fix dirties the tree, and
+# the loop stops on a dirty tree, so the setup is committed and pushed before it runs.
+step_of() { printf '%s\n' "$steps" | grep -nE -- "$1" | head -1 | cut -d: -f1; }
+in_order() {
+  local prev=0 n pat
+  for pat in "$@"; do
+    n="$(step_of "$pat")"
+    [ -n "$n" ] && [ "$n" -gt "$prev" ] || return 1
+    prev="$n"
+  done
+}
+check "the Quickstart's steps are template, setup --fix, Verify, push, issue, loop" \
+  "in_order '--template highhair20/backlog-loop' 'scripts/setup\\.sh --fix' '## Verify' 'git push' 'P0' '/work-next-item'"
+check "the Quickstart has exactly those six steps" "[ \"\$(printf '%s\n' \"\$steps\" | grep -c .)\" = 6 ]"
+# shellcheck disable=SC2034  # read inside check's eval strings
+backup="$(grep -E '^OWN_BACKUP=' "$ROOT/scripts/setup.sh" | cut -d= -f2)"
+check "setup.sh names its CLAUDE.md backup" "[ -n \"\$backup\" ]"
+# Chained with &&, so a failed add or commit never pushes; rm -f, so a backup that
+# is already gone does not stop the chain.
+check "the Quickstart's push step removes that backup, then commits and pushes" "printf '%s\n' \"\$steps\" | grep -qE \"rm -f \$backup && git add -A && git commit .* && git push\""
+check "the Quickstart links the detailed setup" "printf '%s\n' \"\$quick\" | grep -qF '(#getting-started)'"
+check "the detailed setup is still in the README" "grep -qx '## Getting started' '$ROOT/README.md'"
+
 # --- dependabot: updates the pinned actions ---
 check "dependabot.yml parses and updates github-actions" \
   "yaml 'd = YAML.load_file(ARGV[0]); exit(d[\"version\"] == 2 && d[\"updates\"].any? { |u| u[\"package-ecosystem\"] == \"github-actions\" } ? 0 : 1)' '$ROOT/.github/dependabot.yml'"
