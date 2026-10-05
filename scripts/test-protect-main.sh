@@ -82,7 +82,7 @@ check "HOST/OWNER/REPO: the report names the host" "grep -q 'on ghe.example.com/
 run ghe.example.com/o/r test; rc=$?
 check "HOST/OWNER/REPO: a new ruleset is created on that host" "[ $rc -eq 0 ] && grep -q -- '-X POST repos/o/r/rulesets --input - --hostname ghe.example.com' '$WORK/calls'"
 EXISTING='[{"id": 42, "name": "protect-main"}]' EXISTING_RULESET="$STRICT_ON" run o/r test; rc=$?
-check "owner/repo: every gh api call targets github.com" "[ $rc -eq 0 ] && [ \"\$(wc -l <'$WORK/calls')\" -eq 3 ] && ! grep -v -- '--hostname github.com' '$WORK/calls'"
+check "owner/repo: no call names a host, so gh's default (GH_HOST) still applies" "[ $rc -eq 0 ] && [ \"\$(wc -l <'$WORK/calls')\" -eq 3 ] && ! grep -q -- '--hostname' '$WORK/calls'"
 run a/b/c/d test; rc=$?
 check "refuses a repo argument with too many parts" "[ $rc -ne 0 ] && [ ! -e '$WORK/calls' ]"
 run /o/r test; rc=$?

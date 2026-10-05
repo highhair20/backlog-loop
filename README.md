@@ -141,7 +141,8 @@ The steps it checks:
    that holds no matter how a command is phrased (see [Limits](#limits)). It is
    safe to re-run. On GitHub Enterprise, put the host in front:
    `scripts/protect-main.sh <host>/<owner>/<repo> …` (`setup.sh` prints it that way).
-   A bare `<owner>/<repo>` means github.com. Add `--strict` to also require a PR's branch to be up to date
+   A bare `<owner>/<repo>` goes to gh's default host (github.com unless `GH_HOST`
+   is set). Add `--strict` to also require a PR's branch to be up to date
    with `main` before it merges: each merge then re-runs CI against the latest `main`,
    so two PRs that pass alone cannot merge into a red `main`. The cost is an update
    and a CI run per merge. A re-run keeps the ruleset's current setting; `--no-strict` turns it
