@@ -29,6 +29,7 @@ beyond the tools you already use.
 | **Cold-context driver** | `scripts/backlog-loop.sh` runs one issue per fresh `claude -p` session, so a long backlog never exhausts a context window. All state lives in git and issue labels, so it is safe to stop and resume at any time. |
 | **Specialist reviewers** | Two reviewer agents, `pr-test-analyzer` and `silent-failure-hunter`, that the loop runs before opening each PR in any repo whose `CLAUDE.md` lists them under `## Specialist reviewers`. The skeleton `CLAUDE.md` does; a repo synced with an existing `CLAUDE.md` must add that table (copy it from the template). They are vendored from [ECC](https://github.com/affaan-m/ECC) (MIT) by `scripts/vendor-agents.sh`, which adds your repo's context, so they work in cloud sessions that load no plugins. Optional stack reviewers (`go-reviewer`, `database-reviewer`, `typescript-reviewer`, `python-reviewer`) ship off by default in `.claude/agent-context/optional/`; see [`docs/BACKLOG.md`](docs/BACKLOG.md#reviewers) to enable one. |
 | **PR review loop** | Hooks that start a `/code-review` when a PR is opened and keep the session from ending until the review's critical and high findings are resolved — with a round cap and timeouts so it cannot run forever. |
+| **Ready-to-merge notice** | A workflow, `ready-to-merge.yml`, labels a loop PR `ready-to-merge` and mentions you in a comment once the loop is done with it, its required checks pass, and it is up to date with `main`, so GitHub notifies you without any session watching. The loop keeps its PRs up to date itself: a PR that is only behind `main` (under a strict ruleset) gets "Update branch" on the next run. List the workflows a PR must pass in its `workflow_run` trigger. A ruleset that requires an approving review keeps the loop's PRs from ever reading as mergeable (you cannot approve your own PR), so none is announced. |
 | **Issue conventions** | Feature and bug issue forms (the key sections are required fields) and a guide (`docs/ISSUE_GUIDE.md`) that make each issue a self-contained work item an agent can pick up cold, plus a script that creates the priority, status, and proposal-gate labels the loop uses. |
 | **CI skeleton** | A workflow that runs on branches and PRs with read-only permissions, and fails until you configure it — so a new repo never shows a green check that tests nothing. Actions are pinned to commit SHAs, and Dependabot keeps the pins current. |
 | **Repo defaults** | A PR template for PRs opened by hand, and an `.editorconfig` with LF endings, final newlines, and tabs where a format requires them. |
@@ -164,8 +165,8 @@ It treats files three ways, so re-running it later is safe:
 
 | Kind | Files | On every sync |
 |---|---|---|
-| **Managed** | review hooks, `work-next-item.md`, `backlog-loop.sh`, `check-verify-section.sh`, `gh-auth-check.sh`, `gh-repo.sh`, `loop-lock.sh`, `protect-main.sh`, `report-drained.sh`, `seed-labels.sh`, `setup.sh`, `vendor-agents.sh`, `settings.local.json.example`, `docs/ROUTINE.md` | Overwritten. These hold no project-specific content; put customisation in `CLAUDE.md`. |
-| **Seeded** | `CLAUDE.md` (the skeleton in `templates/`), CI workflow, issue forms, PR template, `dependabot.yml`, `docs/ISSUE_GUIDE.md`, `docs/BACKLOG.md`, `docs/CI_HARDENING.md`, `docs/DEPLOYING.md`, the reviewer agents and their `.claude/agent-context/`, the optional stack reviewer contexts in `.claude/agent-context/optional/` | Copied only if missing. Yours to edit. Nothing is added beside an equivalent you already have: the placeholder CI only goes into a repo with no workflows, the issue forms only into one with no issue templates of its own, the PR template only if GitHub finds none anywhere, and `dependabot.yml` not beside a `dependabot.yaml`. `.editorconfig` is never synced; its indent defaults could change how editors treat existing code. |
+| **Managed** | review hooks, `work-next-item.md`, `backlog-loop.sh`, `check-verify-section.sh`, `gh-auth-check.sh`, `gh-repo.sh`, `loop-lock.sh`, `protect-main.sh`, `ready-to-merge.sh`, `report-drained.sh`, `seed-labels.sh`, `setup.sh`, `vendor-agents.sh`, `settings.local.json.example`, `docs/ROUTINE.md` | Overwritten. These hold no project-specific content; put customisation in `CLAUDE.md`. |
+| **Seeded** | `CLAUDE.md` (the skeleton in `templates/`), CI workflow, the `ready-to-merge.yml` workflow, issue forms, PR template, `dependabot.yml`, `docs/ISSUE_GUIDE.md`, `docs/BACKLOG.md`, `docs/CI_HARDENING.md`, `docs/DEPLOYING.md`, the reviewer agents and their `.claude/agent-context/`, the optional stack reviewer contexts in `.claude/agent-context/optional/` | Copied only if missing. Yours to edit. Nothing is added beside an equivalent you already have: the placeholder CI only goes into a repo with no workflows, the issue forms only into one with no issue templates of its own, the PR template only if GitHub finds none anywhere, and `dependabot.yml` not beside a `dependabot.yaml`. `.editorconfig` is never synced; its indent defaults could change how editors treat existing code. |
 | **Merged** | `.claude/settings.json`, `.gitignore` | The template's deny rules, hooks, and ignore lines are added; yours are kept. |
 
 Each sync also writes `.claude/template-version`: the template commit your repo now
@@ -291,6 +292,7 @@ The guardrails are layered, from softest to hardest:
   dependabot.yml             weekly updates for the pinned actions
   workflows/ci.yml           CI skeleton (fails until configured)
   workflows/template-self-test.yml   tests this template's scripts; inert in your repo
+  workflows/ready-to-merge.yml   labels and announces loop PRs that are ready to merge
 docs/ISSUE_GUIDE.md          how to write issues the loop can work
 docs/BACKLOG.md              operating the loop: drivers, one iteration, definition of done, task runner conventions, why each guardrail
 docs/CI_HARDENING.md         CI patterns that keep a green check honest, with snippets
@@ -302,6 +304,7 @@ scripts/
   gh-auth-check.sh           is gh logged in to origin's host? (other hosts don't count)
   gh-repo.sh                 which repo gh acts on; stops if several remotes and no gh default
   loop-lock.sh               one loop run per clone; reclaims a crashed run's lock
+  ready-to-merge.sh          labels ready loop PRs and tells you (run by the workflow)
   report-drained.sh          tells backlog-loop.sh a session found nothing to do
   sync-guardrails.sh         update an existing repo from this template
   setup.sh                   check the repo is ready for the loop; --fix the safe parts

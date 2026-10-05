@@ -73,6 +73,8 @@ check "copies the generic loop command and driver" "[ -f '$T/.claude/commands/wo
 # The driver and the command both call it; without it neither starts.
 check "copies loop-lock.sh, executable" "[ -x '$T/scripts/loop-lock.sh' ]"
 check "copies report-drained.sh, executable" "[ -x '$T/scripts/report-drained.sh' ]"
+check "copies ready-to-merge.sh, executable" "[ -x '$T/scripts/ready-to-merge.sh' ]"
+check "seeds the ready-to-merge workflow" "[ -f '$T/.github/workflows/ready-to-merge.yml' ]"
 # The driver and setup.sh call it to check gh auth.
 check "copies gh-auth-check.sh, executable" "[ -x '$T/scripts/gh-auth-check.sh' ]"
 # The driver and setup.sh call it to pick the repo they act on (#17).

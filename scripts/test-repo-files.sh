@@ -240,6 +240,15 @@ check "CHANGELOG.md links each version heading" "grep -qF '[0.1.0]: https://gith
 check "README says how to cut a release" "grep -qx '### Cutting a release' '$ROOT/README.md' && grep -qF 'git tag -a vX.Y.Z' '$ROOT/README.md'"
 check "README's file list includes the changelog" "grep -qE '^CHANGELOG\\.md[[:space:]]' '$ROOT/README.md'"
 
+# --- the ready-to-merge workflow (#88): least privilege, no schedule, trusted script ---
+RTM="$ROOT/.github/workflows/ready-to-merge.yml"
+check "ready-to-merge.yml exists" "[ -f '$RTM' ]"
+check "it can only read contents and issues and write pull requests" "yaml 'p = YAML.load_file(ARGV[0])[\"permissions\"]; exit(p == {\"contents\" => \"read\", \"issues\" => \"read\", \"pull-requests\" => \"write\"} ? 0 : 1)' '$RTM'"
+check "it runs on CI completing, issue label changes and pushes to main; no schedule, no pull_request" "yaml 'on = YAML.load_file(ARGV[0])[true] || YAML.load_file(ARGV[0])[\"on\"]; exit(on.key?(\"workflow_run\") && on.key?(\"issues\") && on.key?(\"push\") && !on.key?(\"schedule\") && !on.key?(\"pull_request\") ? 0 : 1)' '$RTM'"
+check "its runs queue rather than cancel each other" "yaml 'c = YAML.load_file(ARGV[0])[\"concurrency\"]; exit(c[\"cancel-in-progress\"] == false ? 0 : 1)' '$RTM'"
+check "it checks out the default branch, so a PR cannot change the script that judges it" "grep -q 'ref: \${{ github.event.repository.default_branch }}' '$RTM'"
+check "it runs scripts/ready-to-merge.sh" "grep -q 'run: scripts/ready-to-merge.sh' '$RTM'"
+
 # --- editor and PR defaults ---
 check ".editorconfig is a root config" "grep -qx 'root = true' '$ROOT/.editorconfig'"
 check "PR template links the issue it closes" "grep -q '^Closes #' '$ROOT/.github/pull_request_template.md'"

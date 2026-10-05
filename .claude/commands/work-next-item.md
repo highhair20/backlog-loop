@@ -165,6 +165,7 @@ works the same in both; take `owner`/`repo` from `git remote get-url origin`.
 | `gh run view <run-id> --log-failed` | `mcp__github__get_job_logs` with `run_id`, `failed_only: true`, and `return_content: true` |
 | `gh pr comment <pr> --body …` | `mcp__github__add_issue_comment` with the PR's number |
 | `gh pr edit <pr> --remove-label X` | `mcp__github__issue_write` (update) on the PR's number with the **complete** new label set, as for `gh issue edit N` |
+| `gh pr update-branch <pr>` | `mcp__github__update_pull_request_branch` with the PR's number |
 
 Never use the MCP tools that merge, enable auto-merge, or write files or branches
 through the API (`merge_pull_request`, `push_files`, `create_or_update_file`, …); the
@@ -184,7 +185,7 @@ watch what it would do before it can do it.
   working tree. The list below gives examples; it is not the whole rule. On GitHub:
   gh issue comment, gh issue edit, gh issue close, gh pr create, or their MCP
   equivalents (issue_write, add_issue_comment, create_pull_request), and Step 1.5's
-  gh pr comment and gh pr edit. In git:
+  gh pr comment, gh pr edit and gh pr update-branch. In git:
   git add, git push, git commit, git switch -c, checking out another branch,
   git merge (or merge --abort), git stash, or deleting a branch (branch -D). In
   files: no Edit or Write. Where a step would run one, note `would: <command>`
@@ -383,7 +384,7 @@ pair them by branch name (`<type>/<N>-…`), as Step 0 does:
 ```bash
 gh issue list --state open --label in-review --limit 1000 --json number,title,labels \
   --jq 'sort_by(.number)[] | {number, title, labels: [.labels[].name]}'
-gh pr list --state open --limit 1000 --json number,headRefName,url,mergeable,labels
+gh pr list --state open --limit 1000 --json number,headRefName,url,mergeable,mergeStateStatus,labels
 ```
 
 Skip an issue also labelled `needs-attention`, `blocked`, or `no-auto-heal`. Take
@@ -452,6 +453,15 @@ The PR **needs attention** if any of:
   name the PR in the report, and still judge it on the other two;
 - `mergeable` is `CONFLICTING`. `UNKNOWN` means GitHub has not worked it out yet:
   treat it as not conflicting this run.
+
+**Behind only.** A PR none of these applies to, whose `mergeStateStatus` is `BEHIND`
+(a strict ruleset makes it merge only once up to date with `main`) and whose checks
+all pass, is ready except for that. Bring it up to date with `gh pr update-branch <pr>`:
+GitHub merges `main` into the branch, never a rebase, and CI runs again; the
+ready-to-merge workflow tells the maintainer once it passes. This is not a follow-up:
+no claim, no comment, no round. If the update fails (a conflict appeared), leave it:
+the next run sees the conflict. In a dry run, note `would: gh pr update-branch <pr>`
+instead. Then judge the next PR.
 
 Take the first PR that needs attention. If none does, go on to Step 2.
 
@@ -927,8 +937,22 @@ PRBODY
 
 ## Step 8 — Update state & report
 
+Run this only once the review loop the hooks opened for this PR has closed (its
+last round recorded 0 blocking findings, or it hit its round cap). `in-review` tells
+the ready-to-merge workflow, and the maintainer, that the loop is done with the PR;
+set before the review's last fix is pushed, it could announce a PR as ready too soon.
+
 ```bash
 gh issue edit <number> --remove-label in-progress --add-label in-review
+```
+
+If the review loop hit its round cap with blocking findings still open, the PR is not
+ready, whatever its checks say. Mark it for a human, so the ready-to-merge workflow
+never announces it, and say why on the PR:
+
+```bash
+gh issue edit <number> --remove-label in-progress --add-label in-review --add-label needs-attention
+gh pr comment <pr> --body "The review loop hit its round cap with blocking findings still open: <each finding, one line>. Not ready to merge until they are resolved."
 ```
 
 Report concisely: issue number + title, branch, PR URL, and test results. If any
