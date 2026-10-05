@@ -14,6 +14,7 @@
 #   TEMPLATE_REPO     the template's git URL (default: the public backlog-loop)
 #   TEMPLATE_GH_REPO  its owner/repo on github.com, for the compare (default: read
 #                     from TEMPLATE_REPO when that is a github.com URL)
+#   TEMPLATE_CHECK_TIMEOUT  seconds each network call may take (default 20)
 # Exits 0 when not behind, 1 when behind, 2 when it cannot tell (the template is
 # unreachable, or does not have the stamp's commit), 3 when the stamp names no
 # commit, 4 when there is no stamp.
@@ -21,6 +22,22 @@ set -uo pipefail
 
 TEMPLATE_REPO="${TEMPLATE_REPO:-https://github.com/highhair20/backlog-loop.git}"
 stamp="${1:-.claude/template-version}"
+TIMEOUT="${TEMPLATE_CHECK_TIMEOUT:-20}"
+case "$TIMEOUT" in ''|*[!0-9]*) TIMEOUT=20 ;; esac
+
+# Runs a command, killing it after $TIMEOUT seconds, so a network that never
+# answers (a dropped connection, a black-holed route) cannot hold up the driver's
+# start. macOS has no `timeout`. The watcher writes nowhere, so a caller's $(...)
+# does not wait for it.
+bounded() {
+  "$@" &
+  local pid=$! watcher rc
+  ( sleep "$TIMEOUT"; kill "$pid" ) >/dev/null 2>&1 &
+  watcher=$!
+  wait "$pid"; rc=$?
+  kill "$watcher" 2>/dev/null
+  return "$rc"
+}
 
 # owner/repo of a github.com URL (https, ssh://, or scp-style), or nothing.
 github_slug() {
@@ -52,10 +69,8 @@ fi
 
 # The HEAD pattern also matches refs like refs/remotes/origin/HEAD; take the exact one.
 # GIT_TERMINAL_PROMPT=0: a private or mistyped URL must fail, not wait for a password.
-# The low-speed limit ends an HTTP transfer that stalls, so a bad network cannot
-# hold up the driver's start.
-latest="$(GIT_TERMINAL_PROMPT=0 git -c http.lowSpeedLimit=1 -c http.lowSpeedTime=20 \
-  ls-remote "$TEMPLATE_REPO" HEAD 2>/dev/null | awk '$2 == "HEAD" { print $1; exit }')"
+latest="$(bounded env GIT_TERMINAL_PROMPT=0 git ls-remote "$TEMPLATE_REPO" HEAD 2>/dev/null \
+  | awk '$2 == "HEAD" { print $1; exit }')"
 if [ -z "$latest" ]; then
   echo "could not reach $TEMPLATE_REPO to compare versions"
   exit 2
@@ -82,11 +97,11 @@ fi
 # ahead_by: commits the template has that the stamp lacks; behind_by: the reverse.
 # Always github.com, whatever host gh defaults to: the template lives there.
 range="${have:0:12}...${latest:0:12}"
-if ! counts="$(gh api --hostname github.com "repos/$slug/compare/$range" \
+if ! counts="$(bounded gh api --hostname github.com "repos/$slug/compare/$range" \
     --jq '"\(.ahead_by) \(.behind_by)"' 2>&1)"; then
   case "$counts" in
     *"HTTP 404"*|*"HTTP 422"*)
-      echo "the template ($slug) has no commit ${have:0:12}, the one this repo was synced from (a fork's?), so how far behind it is cannot be told; the template is now at ${latest:0:7}"
+      echo "the template ($slug) has no commit ${have:0:12} that gh can find, the one this repo was synced from (a fork's commit, or a template gh cannot read?), so how far behind it is cannot be told; the template is now at ${latest:0:7}"
       exit 2 ;;
   esac
   echo "$two_commits"

@@ -29,6 +29,7 @@ mkdir -p "$WORK/bin"
 cat >"$WORK/bin/gh" <<FAKE
 #!/usr/bin/env bash
 echo "\$*" >>"$WORK/gh-calls"
+[ -z "\${FAKE_GH_SLEEP:-}" ] || exec sleep "\$FAKE_GH_SLEEP"
 if [ -n "\${FAKE_GH_ERR:-}" ]; then echo "\$FAKE_GH_ERR" >&2; exit 1; fi
 echo "\${FAKE_COMPARE:-}"
 FAKE
@@ -81,7 +82,7 @@ check "an answer that is not two counts: the two-commit message" "[ \$(rc ghgarb
 run noslug "$C1" FAKE_COMPARE='2 0'
 check "a template not on github.com: the two-commit message, gh not called" "[ \$(rc noslug) -eq 1 ] && out noslug | grep -qxF '$TWO_SHAS' && [ ! -s '$WORK/gh-calls' ]"
 mkdir -p "$WORK/nogh"
-for t in git awk sed grep head; do ln -s "$(command -v "$t")" "$WORK/nogh/$t"; done
+for t in git awk sed grep head env sleep; do ln -s "$(command -v "$t")" "$WORK/nogh/$t"; done
 mkdir -p "$WORK/nogh-repo/.claude" && echo "$C1" >"$WORK/nogh-repo/.claude/template-version"
 # shellcheck disable=SC2034  # read inside check's eval string
 nogh_out="$(cd "$WORK/nogh-repo" && PATH="$WORK/nogh" TEMPLATE_REPO="$BARE" TEMPLATE_GH_REPO=o/template /bin/bash "$HERE/template-version.sh" 2>&1)"; nogh_rc=$?
@@ -102,6 +103,21 @@ check "another host's URL skips the compare" "out slughost | grep -qxF '$TWO_SHA
 # What cannot be compared is one clear line, never an error.
 run unreachable "$C1" TEMPLATE_REPO="$WORK/no-such-template"
 check "unreachable template: exit 2, one line saying so" "[ \$(rc unreachable) -eq 2 ] && one_line unreachable && out unreachable | grep -q '^could not reach .*no-such-template'"
+# A network that never answers must not hold up the driver's start (#73): each call
+# is cut off after TEMPLATE_CHECK_TIMEOUT seconds. The fakes exec sleep, so the
+# process the helper kills is the one holding its output.
+mkdir -p "$WORK/hang"
+printf '#!/usr/bin/env bash\n[ "$1" = ls-remote ] && exec sleep 30\nexec %s "$@"\n' "$(command -v git)" >"$WORK/hang/git"
+chmod +x "$WORK/hang/git"
+start=$SECONDS
+run hanggit "$C1" PATH="$WORK/hang:$WORK/bin:$PATH" TEMPLATE_CHECK_TIMEOUT=1
+hang_secs=$((SECONDS - start))
+check "a template that never answers: exit 2 within the timeout, one line" "[ \$(rc hanggit) -eq 2 ] && one_line hanggit && out hanggit | grep -q '^could not reach' && [ $hang_secs -lt 10 ]"
+start=$SECONDS
+run hanggh "$C1" TEMPLATE_GH_REPO=o/template TEMPLATE_CHECK_TIMEOUT=1 FAKE_GH_SLEEP=30
+hang_secs=$((SECONDS - start))
+check "a compare that never answers: the two-commit message within the timeout" "[ \$(rc hanggh) -eq 1 ] && out hanggh | grep -qxF '$TWO_SHAS' && [ $hang_secs -lt 10 ]"
+
 run dirtycurrent "$C3-dirty" TEMPLATE_GH_REPO=o/template
 check "a -dirty stamp of the latest commit is up to date, and says it had changes" "[ \$(rc dirtycurrent) -eq 0 ] && one_line dirtycurrent && out dirtycurrent | grep -q '^up to date with the template' && out dirtycurrent | grep -q 'uncommitted changes'"
 run dirtybehind "$C1-dirty" TEMPLATE_GH_REPO=o/template FAKE_COMPARE='2 0'
