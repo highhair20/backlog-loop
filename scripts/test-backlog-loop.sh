@@ -298,6 +298,9 @@ U4="$(committed_repo unsavedclean ':')"
 run "$U4"; rc=$?
 check "a clean stall says nothing about unsaved work" "[ $rc -eq 3 ] && grep -qF '$NO_PROGRESS_OUT' '$U4/out' && ! grep -q 'unsaved work' '$U4/out'"
 check "a clean stall prints what it printed before" "[ \"\$(sed -n '/no progress/,\$p' '$U4/out')\" = \"\$(printf '%s\n' \"$NO_PROGRESS_OUT: it changed no issue's labels and no PR,\" '  and did not record the backlog drained (scripts/report-drained.sh).' \"  Read its log in $WORK/logs-unsavedclean, fix the cause, and re-run.\")\" ]"
+U6="$(committed_repo unsavednewbranch 'git switch -qc feat/9-y')"
+run "$U6"; rc=$?
+check "a clean stall on a never-pushed branch with no new commits says nothing" "[ $rc -eq 3 ] && ! grep -q 'unsaved work' '$U6/out'"
 U5="$(committed_repo unsavedgitfails ':')"
 printf '#!/usr/bin/env bash\n[ "$1" = status ] && exit 128\nexec %s "$@"\n' "$(command -v git)" >"$U5/bin/git"
 chmod +x "$U5/bin/git"
