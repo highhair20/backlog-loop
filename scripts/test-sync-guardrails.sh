@@ -252,6 +252,14 @@ U="$(new_target unknownversion)"
 bash "$CACHE/plugins/cache/backlog-loop/backlog-loop/unknown/scripts/sync-guardrails.sh" "$U" >"$WORK/unknown.out" 2>&1
 check "a copy whose directory names no commit stamps unknown" "[ \$? -eq 0 ] && [ \"\$(cat '$U/.claude/template-version')\" = unknown ]"
 check "and warns that the version is unknown" "grep -q 'warning: .*template version as unknown' '$WORK/unknown.out'"
+# The enclosing repo's tags are not the template's (#65): a copy named after a
+# tagged commit there must still record the commit alone.
+git -C "$CACHE" tag v9.9.9
+ENCLOSING="$(git -C "$CACHE" rev-parse HEAD | cut -c1-12)"
+plugin_copy "$CACHE/plugins/cache/backlog-loop/backlog-loop/$ENCLOSING"
+PT="$(new_target plugintagged)"
+bash "$CACHE/plugins/cache/backlog-loop/backlog-loop/$ENCLOSING/scripts/sync-guardrails.sh" "$PT" >/dev/null 2>&1
+check "a plugin copy records no release tag" "[ \"\$(cat '$PT/.claude/template-version')\" = '$ENCLOSING' ]"
 
 echo
 if [ "$failures" -eq 0 ]; then echo "all tests passed"; else echo "$failures test(s) failed" >&2; exit 1; fi
