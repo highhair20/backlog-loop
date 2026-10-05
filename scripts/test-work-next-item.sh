@@ -327,7 +327,7 @@ check "a failed note still goes on and is printed" "printf '%s' \"\$case1\" | gr
 check "Step 0 always posts a note, and the note counts as a round" "printf '%s' \"\$case1\" | grep -q '<!-- backlog-loop:note -->' && printf '%s' \"\$case1\" | grep -q 'whether or not anything was saved' && printf '%s' \"\$case1\" | grep -q 'but it counts as a round' && ! printf '%s' \"\$case1\" | grep -q 'nor a round'"
 check "a follow-up records none unless it read every check finished" "printf '%s' \"\$follow\" | grep -q 'none. unless its checks were read and'"
 check "a dry run reports a follow-up it would make" "printf '%s' \"\$dry\" | grep -q 'follow up PR #N'"
-check "a dry run stops at a follow-up before any write" "printf '%s' \"\$dry\" | grep -q 'Step 1.5 follow-up' && printf '%s' \"\$dry\" | grep -q 'gh pr comment and gh pr edit'"
+check "a dry run stops at a follow-up before any write" "printf '%s' \"\$dry\" | grep -q 'Step 1.5 follow-up' && printf '%s' \"\$dry\" | grep -q 'gh pr comment, gh pr edit and gh pr update-branch'"
 for doc in README.md docs/BACKLOG.md docs/ROUTINE.md; do
   check "$doc describes follow-ups" "grep -q 'changes-requested' '$ROOT/$doc'"
 done
@@ -335,7 +335,16 @@ check "changes-requested is a seeded label" "grep -q '\"changes-requested|' '$RO
 # shellcheck disable=SC2034  # read inside check's eval strings
 follow_flat="$(flat "$follow")"
 check "Step 1.5's Verify step points at the same rule" "printf '%s' \"\$follow_flat\" | grep -q 'must pass, run in the foreground, as Step 5 says'"
-for row in 'gh pr checks|mcp__github__pull_request_read' 'gh pr view N --json|mcp__github__pull_request_read' 'gh run view|mcp__github__get_job_logs' 'gh pr comment|mcp__github__add_issue_comment' 'gh pr edit|mcp__github__issue_write' 'gh api repos/{owner}/{repo}/pulls|mcp__github__pull_request_read' 'gh api repos/{owner}/{repo}/pulls|get_review_comments'; do
+# --- Ready to merge (#88) ---
+# shellcheck disable=SC2034  # read inside check's eval strings
+step8_flat="$(flat "$(section 'Step 8')")"
+check "Step 8 swaps to in-review only once the review loop has closed" "printf '%s' \"\$step8_flat\" | grep -q 'only once the review loop the hooks opened for this PR has closed'"
+check "a review loop that hit its cap unresolved marks the issue needs-attention, not ready" "printf '%s' \"\$step8_flat\" | grep -q 'hit its round cap with blocking findings still open' && printf '%s' \"\$step8_flat\" | grep -q -- '--add-label needs-attention'"
+check "Step 1.5 lists each PR's merge state" "printf '%s' \"\$follow\" | grep -q 'gh pr list --state open --limit 1000 --json number,headRefName,url,mergeable,mergeStateStatus,labels'"
+check "Step 1.5 brings a PR that is only behind up to date, by merge, without a round" "printf '%s' \"\$follow_flat\" | grep -q 'gh pr update-branch <pr>' && printf '%s' \"\$follow_flat\" | grep -q 'never a rebase' && printf '%s' \"\$follow_flat\" | grep -q 'not a follow-up: no claim, no comment, no round'"
+check "a dry run never updates a branch, and reports it as a would-be write" "printf '%s' \"\$dry\" | grep -q 'gh pr update-branch' && printf '%s' \"\$follow_flat\" | grep -q 'In a dry run, note .would: gh pr update-branch <pr>. instead'"
+check "ready-to-merge is a seeded label" "grep -q '\"ready-to-merge|' '$ROOT/scripts/seed-labels.sh'"
+for row in 'gh pr checks|mcp__github__pull_request_read' 'gh pr view N --json|mcp__github__pull_request_read' 'gh run view|mcp__github__get_job_logs' 'gh pr comment|mcp__github__add_issue_comment' 'gh pr edit|mcp__github__issue_write' 'gh pr update-branch|mcp__github__update_pull_request_branch' 'gh api repos/{owner}/{repo}/pulls|mcp__github__pull_request_read' 'gh api repos/{owner}/{repo}/pulls|get_review_comments'; do
   check "the MCP table maps ${row%%|*} to ${row#*|}" "grep '^| .${row%%|*}' '$CMD' | grep -q -- '${row#*|}'"
 done
 

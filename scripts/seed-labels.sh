@@ -23,6 +23,7 @@ LABELS=(
   "enhancement|A2EEEF|New feature or request"
   "in-progress|0E8A16|Claimed and being worked"
   "in-review|1D76DB|PR open, awaiting maintainer merge"
+  "ready-to-merge|0E8A16|The loop is done, required checks pass, and the branch is up to date; set by a workflow"
   "changes-requested|E99695|Maintainer wants changes on the loop's PR; the loop follows up"
   "blocked|000000|Cannot proceed; skipped by the loop"
   "needs-infra|5319E7|Infra change written but must be applied by a human"
