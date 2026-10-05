@@ -37,6 +37,7 @@ MANAGED=(
   scripts/report-drained.sh
   scripts/seed-labels.sh
   scripts/setup.sh
+  scripts/template-version.sh
   scripts/vendor-agents.sh
   .claude/settings.local.json.example
   # Describes the managed command's --dry-run and gate, so it tracks the command.

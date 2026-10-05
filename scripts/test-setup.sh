@@ -22,7 +22,7 @@ fresh_repo() {
   mkdir -p "$dir/scripts" "$dir/.claude" "$dir/.github/workflows" "$dir/.github/ISSUE_TEMPLATE" "$dir/docs" "$dir/.fake/bin" "$dir/templates"
   git -C "$dir" init -q -b main
   git -C "$dir" remote add origin https://github.com/o/r.git
-  cp "$ROOT"/scripts/{setup,check-verify-section,seed-labels,protect-main,gh-auth-check,gh-repo,missing-allow-rules}.sh "$dir/scripts/"
+  cp "$ROOT"/scripts/{setup,check-verify-section,seed-labels,protect-main,gh-auth-check,gh-repo,missing-allow-rules,template-version}.sh "$dir/scripts/"
   cp "$ROOT/templates/CLAUDE.md" "$dir/templates/"
   cp "$ROOT/templates/CLAUDE.md" "$dir/"
   cp "$ROOT/.github/workflows/ci.yml" "$dir/.github/workflows/"
@@ -42,6 +42,7 @@ case "\$*" in
   "label list"*) echo "\$*" >>"$dir/.fake/label-calls"; cat "$dir/.fake/labels" ;;
   "label create"*) echo "\$3" >>"$dir/.fake/labels"; echo "\$*" >>"$dir/.fake/label-calls" ;;
   "api repos/o/r/rulesets?includes_parents=false"*) echo "\$*" >>"$dir/.fake/api-calls"; cat "$dir/.fake/rulesets" ;;
+  "api --hostname github.com repos/o/template/compare/"*) echo "\${FAKE_COMPARE:-}" ;;
   *) echo "fake gh: unexpected: \$*" >&2; exit 1 ;;
 esac
 FAKE
@@ -185,6 +186,11 @@ S="$(configured_repo stale)"
 echo 0000000000000000000000000000000000000000 >"$S/.claude/template-version"
 run "$S"; rc=$?
 check "a stale template stamp is a warning" "[ $rc -eq 0 ] && grep -q 'the template is now at' '$S/.fake/out'"
+# With the template on github.com and gh's compare answering, the warning counts the
+# commits and links the changes (#73).
+(cd "$S" && PATH="$S/.fake/bin:$PATH" TEMPLATE_REPO="$ROOT" TEMPLATE_GH_REPO=o/template FAKE_COMPARE='2 0' scripts/setup.sh) >"$S/.fake/out" 2>&1; rc=$?
+check "a stale stamp's warning counts the commits and links the changes" "[ $rc -eq 0 ] && grep -qF '⚠ 2 commits behind the template: synced from template 0000000' '$S/.fake/out' && grep -qF 'What changed: https://github.com/o/template/compare/000000000000...${TEMPLATE_HEAD:0:12}' '$S/.fake/out'"
+check "and says how to update" "grep -A1 '2 commits behind' '$S/.fake/out' | grep -q 'fix: /backlog-loop:update'"
 
 # A sync from a tagged template records the tag on line 2 (#65).
 TG="$(configured_repo tagged)"

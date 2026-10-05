@@ -15,10 +15,9 @@
 #
 # Usage: scripts/setup.sh [--fix]
 #   TEMPLATE_REPO  repo to compare .claude/template-version with
-#                  (default: the public backlog-loop)
+#                  (default: the public backlog-loop; see scripts/template-version.sh)
 set -uo pipefail
 
-TEMPLATE_REPO="${TEMPLATE_REPO:-https://github.com/highhair20/backlog-loop.git}"
 RULESET_NAME=protect-main
 CI_PLACEHOLDER='Verify (not configured)'
 LOCAL_SETTINGS=.claude/settings.local.json
@@ -454,32 +453,18 @@ check_template_version() {
   echo "Template"
   check_template_changelog
   check_plugin_manifests
-  if [ ! -f .claude/template-version ]; then
-    info "no .claude/template-version (written by sync-guardrails.sh); skipped"
-    return
-  fi
-  local have tag latest
-  have="$(head -1 .claude/template-version)"
-  have="${have%-dirty}"
-  # Line 2, when present, is the release tag that commit carried (#65).
-  tag="$(sed -n 2p .claude/template-version)"
-  # The HEAD pattern also matches refs like refs/remotes/origin/HEAD; take the exact one.
-  # GIT_TERMINAL_PROMPT=0: a private or mistyped URL must fail, not wait for a password.
-  latest="$(GIT_TERMINAL_PROMPT=0 git ls-remote "$TEMPLATE_REPO" HEAD 2>/dev/null | awk '$2 == "HEAD" { print $1; exit }')"
-  # A sync from the installed plugin stamps the commit shortened to 12 characters.
-  if ! printf '%s\n' "$have" | grep -qE '^[0-9a-f]{12,40}$'; then
-    warn "the template version this repo was synced from is unknown ($have)" \
-      "re-sync from a clone of the template, or from the plugin as installed from its marketplace: its copy is named after the template commit"
-  elif [ -z "$latest" ]; then
-    warn "could not reach $TEMPLATE_REPO to compare versions"
-  elif [ "${#have}" -ge 12 ] && [ "${latest#"$have"}" != "$latest" ]; then
-    ok "up to date with the template${tag:+ ($tag)}"
-  else
-    local from="${have:0:7}"
-    [ -z "$tag" ] || from="$tag ($from)"
-    warn "synced from template $from; the template is now at ${latest:0:7}" \
-      "/backlog-loop:update with the plugin, or from a fresh clone of the template: scripts/sync-guardrails.sh $root"
-  fi
+  # The comparison is the helper's, shared with backlog-loop.sh (#73).
+  local msg rc=0
+  msg="$(scripts/template-version.sh 2>&1)" || rc=$?
+  case "$rc" in
+    0) ok "$msg" ;;
+    1) warn "$msg" \
+         "/backlog-loop:update with the plugin, or from a fresh clone of the template: scripts/sync-guardrails.sh $root" ;;
+    3) warn "$msg" \
+         "re-sync from a clone of the template, or from the plugin as installed from its marketplace: its copy is named after the template commit" ;;
+    4) info "$msg; skipped" ;;
+    *) warn "${msg:-could not compare this repo with the template}" ;;
+  esac
 }
 
 # Sets $repo, $repo_host, and $repo_full. Returns non-zero when the GitHub checks
