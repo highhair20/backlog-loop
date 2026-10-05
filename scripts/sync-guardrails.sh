@@ -170,6 +170,16 @@ template_version() {
   fi
 }
 
+# The release tag (#65) the template is exactly on, or nothing. Only a clean clone
+# can carry one: template_version gives it as a bare 40-character commit. A dirty
+# tree is not the release, whatever tag its HEAD carries, and a plugin copy has no
+# tags of its own.
+template_tag() {
+  printf '%s\n' "$1" | grep -qxE '[0-9a-f]{40}' || return 0
+  # A non-zero exit here only means the commit carries no tag.
+  git -C "$TEMPLATE" describe --tags --exact-match "$1" 2>/dev/null || true
+}
+
 main() {
   [ $# -eq 1 ] || die "usage: $0 <target-repo-dir>"
   command -v jq >/dev/null || die "jq not found"
@@ -237,11 +247,18 @@ main() {
 
   # Record which template commit this repo now matches, so drift is visible later
   # (in git history, and to any tool comparing it with the template's HEAD).
-  local version
+  # Line 1 is always the commit, so that comparison keeps working. A second line
+  # names the release tag, only when there is one.
+  local version tag
   version="$(template_version)" || die "could not read the template's version"
-  printf '%s\n' "$version" >"$target/$VERSION_FILE"
+  tag="$(template_tag "$version")"
+  printf '%s\n' "$version" ${tag:+"$tag"} >"$target/$VERSION_FILE"
 
-  echo "Synced from backlog-loop @ $version."
+  if [ -n "$tag" ]; then
+    echo "Synced from backlog-loop @ $tag ($version)."
+  else
+    echo "Synced from backlog-loop @ $version."
+  fi
   git -C "$target" status --short
   echo "Review with: git diff  (in $target), then commit on a branch."
 }
