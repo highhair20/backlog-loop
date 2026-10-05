@@ -6,7 +6,8 @@
 # template repo's own CLAUDE.md with the project skeleton, moving the old file to
 # CLAUDE.md.template-own rather than discarding it, writes the Verify commands it
 # proposes into an empty Verify when exactly one stack is found, and removes the template's
-# plugin manifests (.claude-plugin/) when they hold only its files. The ruleset is
+# plugin manifests (.claude-plugin/) when they hold only its files, and its
+# CHANGELOG.md, which describes the template, not the project. The ruleset is
 # never created here, because it needs your CI job names and admin rights; the
 # check prints the exact command instead.
 #
@@ -31,6 +32,7 @@ OWN_BACKUP=CLAUDE.md.template-own
 # old marker, and a clone may still use the old URL, so both names count.
 TEMPLATE_MARKER_RE='(backlog-loop|claude-code-repo-template): own instructions'
 TEMPLATE_ORIGIN_RE='[/:](backlog-loop|claude-code-repo-template)(\.git)?/?$'
+CHANGELOG_MARKER_RE='^<!-- backlog-loop: own changelog -->$'
 # The template's installer plugin (#64). "Use this template" copies it into every
 # new repo, where it is the template's, like its CLAUDE.md. Every file it ships is
 # listed, so --fix removes the directory only when it holds nothing else;
@@ -403,6 +405,23 @@ check_local_settings() {
   fi
 }
 
+# The template's release notes (#65). "Use this template" copies them into every
+# new repo, where they describe the template, not the project. Recognised by the
+# marker on their first line, so a repo's own CHANGELOG.md is never touched.
+check_template_changelog() {
+  [ -f CHANGELOG.md ] || return 0
+  head -1 CHANGELOG.md | grep -qE "$CHANGELOG_MARKER_RE" || return 0
+  git remote get-url origin 2>/dev/null | grep -qE "$TEMPLATE_ORIGIN_RE" && return 0
+  if [ "$fix" -ne 1 ]; then
+    warn "CHANGELOG.md is the template's release notes, not this project's" \
+      "scripts/setup.sh --fix  (removes it; git keeps the committed copy)"
+  elif rm -f CHANGELOG.md; then
+    ok "removed CHANGELOG.md, the template's release notes"
+  else
+    warn "could not remove CHANGELOG.md, the template's release notes" "delete it by hand"
+  fi
+}
+
 is_plugin_file() { # is_plugin_file <path>: one of the files the template's plugin ships
   local f
   for f in "${PLUGIN_FILES[@]}"; do [ "$f" = "$1" ] && return 0; done
@@ -433,14 +452,17 @@ check_plugin_manifests() {
 
 check_template_version() {
   echo "Template"
+  check_template_changelog
   check_plugin_manifests
   if [ ! -f .claude/template-version ]; then
     info "no .claude/template-version (written by sync-guardrails.sh); skipped"
     return
   fi
-  local have latest
+  local have tag latest
   have="$(head -1 .claude/template-version)"
   have="${have%-dirty}"
+  # Line 2, when present, is the release tag that commit carried (#65).
+  tag="$(sed -n 2p .claude/template-version)"
   # The HEAD pattern also matches refs like refs/remotes/origin/HEAD; take the exact one.
   # GIT_TERMINAL_PROMPT=0: a private or mistyped URL must fail, not wait for a password.
   latest="$(GIT_TERMINAL_PROMPT=0 git ls-remote "$TEMPLATE_REPO" HEAD 2>/dev/null | awk '$2 == "HEAD" { print $1; exit }')"
@@ -451,9 +473,11 @@ check_template_version() {
   elif [ -z "$latest" ]; then
     warn "could not reach $TEMPLATE_REPO to compare versions"
   elif [ "${#have}" -ge 12 ] && [ "${latest#"$have"}" != "$latest" ]; then
-    ok "up to date with the template"
+    ok "up to date with the template${tag:+ ($tag)}"
   else
-    warn "synced from template ${have:0:7}; the template is now at ${latest:0:7}" \
+    local from="${have:0:7}"
+    [ -z "$tag" ] || from="$tag ($from)"
+    warn "synced from template $from; the template is now at ${latest:0:7}" \
       "/backlog-loop:update with the plugin, or from a fresh clone of the template: scripts/sync-guardrails.sh $root"
   fi
 }

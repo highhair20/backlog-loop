@@ -100,7 +100,7 @@ command that fixes each item:
 
 ```sh
 scripts/setup.sh          # check only
-scripts/setup.sh --fix    # also swap in the CLAUDE.md skeleton, fill in Verify for one detected stack, create the labels and the local allowlist, and link the issue guide
+scripts/setup.sh --fix    # also swap in the CLAUDE.md skeleton, fill in Verify for one detected stack, remove the template's CHANGELOG.md, create the labels and the local allowlist, and link the issue guide
 ```
 
 It exits 0 once nothing is failing, so re-run it until it does. It names the GitHub
@@ -197,9 +197,15 @@ It treats files three ways, so re-running it later is safe:
 
 Each sync also writes `.claude/template-version`: the template commit your repo now
 matches (suffixed `-dirty` if the template clone had uncommitted changes; shortened
-to 12 characters when synced from the plugin). Commit it with the rest, so you can
-tell later how far behind the template a repo is. The plugin's own manifests
-(`.claude-plugin/`) are never synced.
+to 12 characters when synced from the plugin), and on a second line the release
+tag, such as `v0.1.0`, when the clone is checked out on one. Commit it with the
+rest, so you can tell later how far behind the template a repo is; `setup.sh`
+reports it by tag when there is one. To sync a release rather than the latest
+`main`, check out its tag in the template clone first
+(`git -C backlog-loop checkout v0.1.0`). Each release's notes in
+[`CHANGELOG.md`](CHANGELOG.md) list what changed and, because seeded files are not
+updated, what to change by hand. The plugin's own manifests (`.claude-plugin/`) are
+never synced.
 
 ## Running the backlog loop
 
@@ -339,6 +345,7 @@ scripts/
 templates/CLAUDE.md          skeleton for your project's instructions
 .claude/agent-context/optional/     optional stack reviewer contexts (off until copied into .claude/agent-context/)
 CLAUDE.md                    this template repo's own instructions (replaced in new repos)
+CHANGELOG.md                 the template's release notes (removed from new repos by setup.sh --fix; never synced)
 .editorconfig                editor defaults
 ```
 
@@ -355,6 +362,29 @@ These are the Verify commands in this repo's `CLAUDE.md`, and CI runs the same t
 so the backlog loop can work this repo's own issues. The tests are plain bash and
 need only `git`, `jq`, and `ruby` (for YAML); a new `scripts/test-*.sh` is picked up
 automatically.
+
+A PR that changes what repos receive adds a line under `## [Unreleased]` in
+[`CHANGELOG.md`](CHANGELOG.md), and, if it changes a seeded file, says under
+**Manual steps for existing repos** how a synced repo applies the change.
+
+### Cutting a release
+
+Releases are tagged by the maintainer, by hand. The committed deny rules block the
+loop from pushing a `v*` tag, on purpose.
+
+1. In a PR, rename `## [Unreleased]` in `CHANGELOG.md` to `## [X.Y.Z] - YYYY-MM-DD`,
+   add a fresh empty `## [Unreleased]` section above it, and update the compare
+   links at the bottom. Pick the version by [Semantic Versioning](https://semver.org/);
+   before 1.0.0, a change to the deny rules or the `CLAUDE.md` contract is a minor bump.
+2. Merge the PR.
+3. Tag the merge commit on `main` and push the tag:
+   ```sh
+   git switch main && git pull --ff-only
+   git tag -a vX.Y.Z -m vX.Y.Z
+   git push origin vX.Y.Z
+   ```
+4. Publish a GitHub release from the tag, with that version's changelog section as
+   its notes: `gh release create vX.Y.Z --title vX.Y.Z --notes-file <section>`.
 
 ## License
 
