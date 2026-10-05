@@ -557,8 +557,11 @@ check_ruleset() {
     bad "ruleset $RULESET_NAME exists but is $enforcement, so it blocks nothing" \
       "set it to Active in Settings → Rules → Rulesets, or re-run scripts/protect-main.sh"
   else
+    # Off github.com the host goes in the argument, or the ruleset lands there (#56).
+    local target="$repo"
+    [ "$repo_host" = github.com ] || target="$repo_full"
     bad "no $RULESET_NAME ruleset, so nothing on GitHub's side stops a push to main" \
-      "scripts/protect-main.sh $repo <ci-job-name>...  (job names as they appear on a PR)"
+      "scripts/protect-main.sh $target <ci-job-name>...  (job names as they appear on a PR)"
   fi
 }
 
