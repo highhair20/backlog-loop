@@ -19,6 +19,7 @@
       "Bash(gh run view *)",
       "Bash(gh api repos/{owner}/{repo}/pulls/*/comments --paginate)",
       "Bash(git fetch origin)",
+      "Bash(git fetch origin *)",
       "Bash(git merge --no-edit origin/main)",
       "Bash(git merge --abort)",
       "Bash(git rev-parse -q --verify MERGE_HEAD)",
