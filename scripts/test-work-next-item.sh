@@ -235,6 +235,13 @@ check "a command only this issue needs is not a setup problem" "printf '%s' \"\$
 check "Give up's opening keeps setup problems out" "printf '%s' \"\$give_up\" | grep -q 'a setup problem never comes here'"
 check "a setup problem covers every command an iteration runs, helpers included" "printf '%s' \"\$guard\" | grep -q '.claude/hooks/. helper'"
 check "a setup problem with no branch releases the claim" "printf '%s' \"\$guard\" | grep -q 'release the claim instead'"
+# A headless session that ends its turn to wait for a background command ends the
+# session, leaving the work unsaved (#84: run-tests.sh took 121s, past the Bash
+# tool's 120s default, so it was moved to the background).
+check "the guardrails say to run long commands in the foreground with a raised timeout" "printf '%s' \"\$guard\" | grep -q 'in the foreground' && printf '%s' \"\$guard\" | grep -q '600000'"
+check "the guardrails forbid ending the turn while a started command still runs" "printf '%s' \"\$guard\" | grep -q 'Never end your turn while a$' && printf '%s' \"\$guard\" | grep -q 'command you started is still running:'"
+check "a Verify command over 10 minutes is waited for in the same turn, never by ending it" "printf '%s' \"\$guard\" | grep -q 'within the same turn'"
+check "Step 5's gate repeats the timeout where Verify runs" "printf '%s' \"\$step5\" | grep -q 'raise the Bash tool.s timeout'"
 check "a refusal specific to the issue still follows Give up" "printf '%s' \"\$guard\" | grep -qi 'specific to this issue'"
 
 # --- The loop follows up on its own open PRs before new work (#70) ---
@@ -318,6 +325,7 @@ for doc in README.md docs/BACKLOG.md docs/ROUTINE.md; do
   check "$doc describes follow-ups" "grep -q 'changes-requested' '$ROOT/$doc'"
 done
 check "changes-requested is a seeded label" "grep -q '\"changes-requested|' '$ROOT/scripts/seed-labels.sh'"
+check "Step 1.5's Verify step points at the same rule" "printf '%s' \"\$follow\" | grep -q 'in the foreground, as Step 5 says'"
 for row in 'gh pr checks|mcp__github__pull_request_read' 'gh pr view N --json|mcp__github__pull_request_read' 'gh run view|mcp__github__get_job_logs' 'gh pr comment|mcp__github__add_issue_comment' 'gh pr edit|mcp__github__issue_write' 'gh api repos/{owner}/{repo}/pulls|mcp__github__pull_request_read' 'gh api repos/{owner}/{repo}/pulls|get_review_comments'; do
   check "the MCP table maps ${row%%|*} to ${row#*|}" "grep '^| .${row%%|*}' '$CMD' | grep -q -- '${row#*|}'"
 done
