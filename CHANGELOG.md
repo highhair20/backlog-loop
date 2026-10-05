@@ -41,6 +41,10 @@ The first tagged release. It records what the template does today.
   from ECC by `scripts/vendor-agents.sh`, plus optional stack reviewer contexts.
 - **PR review loop:** hooks that open a `/code-review` when a PR is created and hold
   the session until its critical and high findings are resolved.
+- **Ready-to-merge notice:** the seeded `ready-to-merge.yml` workflow runs
+  `scripts/ready-to-merge.sh`, which labels a loop PR `ready-to-merge` and mentions
+  the maintainer once the loop is done with it, its checks pass, and it is up to date
+  with `main`. The loop updates a PR that is only behind `main`.
 - **Issue conventions:** issue forms, `docs/ISSUE_GUIDE.md`, and
   `scripts/seed-labels.sh` for the priority, status, and proposal-gate labels.
 - **CI skeleton** that fails until configured, with SHA-pinned actions and
@@ -49,12 +53,18 @@ The first tagged release. It records what the template does today.
   `--fix`es the safe parts; `scripts/sync-guardrails.sh` brings an existing repo up
   to date, recording the template version in `.claude/template-version`: the
   commit, and on a second line the release tag when the template is on one.
+- **Installer plugin:** this repo is a Claude Code plugin marketplace whose plugin
+  adds `/backlog-loop:install` and `/backlog-loop:update`, so a repo can take the
+  template without cloning it.
 - This changelog, and release steps in the README.
 
 ### Manual steps for existing repos
 
-- None. A repo synced before this release has no tag in `.claude/template-version`;
+- A repo synced before this release has no tag in `.claude/template-version`;
   re-sync from a checkout of `v0.1.0` to record it.
+- The re-sync adds `.github/workflows/ready-to-merge.yml` if the repo lacks it. List
+  the workflows a PR must pass in its `workflow_run` trigger, and run
+  `scripts/seed-labels.sh` to create the `ready-to-merge` label.
 
 [Unreleased]: https://github.com/highhair20/backlog-loop/compare/v0.1.0...HEAD
 [0.1.0]: https://github.com/highhair20/backlog-loop/releases/tag/v0.1.0
