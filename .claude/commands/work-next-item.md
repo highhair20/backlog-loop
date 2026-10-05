@@ -41,6 +41,17 @@ or killed (closed terminal) at any moment — possibly mid-issue. Therefore:
 - Prefer the Read/Grep/Glob/Edit/Write tools over shell `cat`/`grep`/`sed`/`find`.
   This loop runs headless under a tight bash allowlist; dedicated tools never need
   bash permission, so the iteration won't stall on a denied shell command.
+- **Run Verify and other long commands in the foreground, with the Bash tool's
+  timeout raised** (up to 600000 ms, ten minutes). At the default two minutes the
+  tool moves a slower command to the background. **Never end your turn while a
+  command you started is still running:** in a headless run (`claude -p`, the driver,
+  a routine) ending the turn ends the session, and the work is left unsaved on a
+  local branch. Never run one with `run_in_background`. If a command can take longer
+  than ten minutes, split it into parts that each finish within one call. If it
+  cannot be split: a `## Verify` command would stop every issue, so stop and report
+  that Verify needs a faster or split command (an allow rule cannot fix it); a
+  command only this issue needs is the issue's blocker, so follow **Give up**,
+  naming it, and the loop moves on.
 - **A tool call refused by the permission settings is a blocker only when no
   permitted way round it exists.** First try one: a dedicated tool instead of a shell
   command, or the command spelled as this file writes it (`git push -u origin
@@ -492,7 +503,8 @@ a fix the PR does not have: hand back, quoting the error.
    test, a missing secret), is reported in the follow-up comment, not "fixed".
 4. For requested changes, do what the maintainer asked, within the issue's scope.
    A request outside it goes in the comment as a suggested new issue.
-5. Test first, then run Step 5's gate: every `## Verify` command must pass. After
+5. Test first, then run Step 5's gate: every `## Verify` command must pass, run
+   in the foreground, as Step 5 says. After
    about three failed cycles, hand back.
 6. Commit as `fix: <what> (#<N>)`, push with
    `git push origin <type>/<N>-<slug>`, and run Step 6.5's specialist reviewers on
@@ -821,6 +833,9 @@ git switch -c <type>/<number>-<slug>
    Run the commands exactly as written; do not substitute or skip one because it is
    slow. If Verify marks a command as needing something this runner lacks (e.g.
    Docker), follow its stated fallback and say so in the PR body.
+   Run each in the foreground: raise the Bash tool's timeout (up to 600000 ms)
+   rather than let a slow one move to the background, and never end the turn to
+   wait for one (see the guardrails).
 5. Do a quick self-review of your diff against the repo's code-quality checklist
    (small functions, error handling, no secrets, no debug prints) before shipping.
 
