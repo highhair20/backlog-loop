@@ -69,7 +69,9 @@ fi
 
 # The HEAD pattern also matches refs like refs/remotes/origin/HEAD; take the exact one.
 # GIT_TERMINAL_PROMPT=0: a private or mistyped URL must fail, not wait for a password.
-latest="$(bounded env GIT_TERMINAL_PROMPT=0 git ls-remote "$TEMPLATE_REPO" HEAD 2>/dev/null \
+# BatchMode: ssh's own passphrase and host-key prompts ignore GIT_TERMINAL_PROMPT, and
+# the timeout kills git, not the ssh it started. A command the user set is kept.
+latest="$(bounded env GIT_TERMINAL_PROMPT=0 GIT_SSH_COMMAND="${GIT_SSH_COMMAND:-ssh -o BatchMode=yes}" git ls-remote "$TEMPLATE_REPO" HEAD 2>/dev/null \
   | awk '$2 == "HEAD" { print $1; exit }')"
 if [ -z "$latest" ]; then
   echo "could not reach $TEMPLATE_REPO to compare versions"
