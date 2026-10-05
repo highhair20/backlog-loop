@@ -38,7 +38,7 @@ case "${1:-}" in
 esac
 [ $# -ge 1 ] || die "usage: $0 [--strict|--no-strict] [host/]<owner/repo> [required-check-name ...]"
 target="$1"; shift
-[[ "$target" =~ ^([A-Za-z0-9.-]+/)?[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]] || die "expected [host/]<owner/repo>, got: $target"
+[[ "$target" =~ ^([A-Za-z0-9.-]+(:[0-9]+)?/)?[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]] || die "expected [host/]<owner/repo>, got: $target"
 # A third, leading part is the host; gh api takes it as --hostname. Without one,
 # pass no --hostname, so gh's own choice (GH_HOST) still applies as before (#56).
 host_args=()
