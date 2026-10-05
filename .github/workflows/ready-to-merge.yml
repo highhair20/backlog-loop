@@ -1,0 +1,41 @@
+name: Ready to merge
+
+# Labels the backlog loop's PRs that are ready to merge and tells the maintainer,
+# by running scripts/ready-to-merge.sh (#88). It never updates a branch: a push made
+# with this workflow's token starts no other workflow, so CI would never run on it.
+# The loop session updates a PR that is only behind main (Step 1.5).
+on:
+  # When a PR's checks finish. workflow_run needs each workflow's name (no wildcards):
+  # list every workflow whose checks a PR must pass to merge.
+  workflow_run:
+    workflows: [CI, Template self-test]
+    types: [completed]
+  # When a PR changes, so a new push or a label clears a stale ready-to-merge.
+  pull_request:
+    types: [synchronize, reopened, labeled, unlabeled]
+  # When main moves, so PRs that fell behind lose the label.
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+  issues: read
+  pull-requests: write
+
+concurrency:
+  group: ready-to-merge
+  cancel-in-progress: true
+
+jobs:
+  label:
+    runs-on: ubuntu-latest
+    steps:
+      # The default branch, never the PR's: a PR must not change the script that judges it.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+      - name: Label ready PRs
+        run: scripts/ready-to-merge.sh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
