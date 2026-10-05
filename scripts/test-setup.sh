@@ -310,6 +310,57 @@ git -C "$KT" remote set-url origin https://ghe.example.com/x/claude-code-repo-te
 run "$KT" --fix
 check "the template repo itself gets no link" "cmp -s '$ROOT/$CFG' '$KT/$CFG' && ! grep -q 'issue chooser has no link' '$KT/.fake/out'"
 
+# A repo made with "Use this template" also gets the template's plugin manifests
+# (#64). They are the template's, like its CLAUDE.md, so --fix removes them; a
+# repo's own plugin, or one holding files the template never shipped, stays.
+PL="$(configured_repo pluginleft)"
+cp -R "$ROOT/.claude-plugin" "$PL/"
+run "$PL"; rc=$?
+check "the template's .claude-plugin/ is a warning, not a failure" "[ $rc -eq 0 ] && grep -q \"template's plugin manifests\" '$PL/.fake/out'"
+check "does not remove it without --fix" "[ -f '$PL/.claude-plugin/plugin.json' ]"
+run "$PL" --fix; rc=$?
+check "--fix removes the template's .claude-plugin/" "[ $rc -eq 0 ] && [ ! -e '$PL/.claude-plugin' ] && grep -q 'removed .claude-plugin/' '$PL/.fake/out'"
+run "$PL"
+check "with it gone, nothing is said about it" "! grep -q 'claude-plugin' '$PL/.fake/out'"
+
+PO="$(configured_repo ownplugin)"
+mkdir -p "$PO/.claude-plugin" && echo '{ "name": "my-tool" }' >"$PO/.claude-plugin/plugin.json"
+run "$PO" --fix; rc=$?
+check "--fix keeps a repo's own plugin, and says nothing" "[ $rc -eq 0 ] && [ -f '$PO/.claude-plugin/plugin.json' ] && ! grep -q 'claude-plugin' '$PO/.fake/out'"
+
+PX="$(configured_repo pluginextra)"
+cp -R "$ROOT/.claude-plugin" "$PX/"
+echo '# mine' >"$PX/.claude-plugin/commands/mine.md"
+run "$PX" --fix; rc=$?
+check "--fix keeps a .claude-plugin/ holding files the template never shipped, naming them" "[ $rc -eq 0 ] && [ -f '$PX/.claude-plugin/plugin.json' ] && [ -f '$PX/.claude-plugin/commands/mine.md' ] && grep -q '.claude-plugin/commands/mine.md' '$PX/.fake/out'"
+
+PT="$(configured_repo pluginhome)"
+cp -R "$ROOT/.claude-plugin" "$PT/"
+git -C "$PT" remote set-url origin https://github.com/highhair20/backlog-loop.git
+run "$PT" --fix
+check "--fix keeps the template repo's own .claude-plugin/" "[ -f '$PT/.claude-plugin/plugin.json' ] && ! grep -q 'removed .claude-plugin/' '$PT/.fake/out'"
+
+# A sync run from the installed plugin stamps the 12-character commit its cache
+# directory is named after (#64).
+SS="$(configured_repo shortstamp)"
+echo "${TEMPLATE_HEAD:0:12}" >"$SS/.claude/template-version"
+run "$SS"; rc=$?
+check "a short stamp that prefixes the template's HEAD is up to date" "[ $rc -eq 0 ] && grep -q 'up to date with the template' '$SS/.fake/out'"
+SU="$(configured_repo unknownstamp)"
+echo unknown >"$SU/.claude/template-version"
+run "$SU"; rc=$?
+# Re-running the update would stamp unknown again, so the warning says why instead.
+check "an unknown stamp is a warning that says so, not up to date" "[ $rc -eq 0 ] && grep -q 'synced from is unknown (unknown)' '$SU/.fake/out' && ! grep -q 'up to date with the template' '$SU/.fake/out'"
+SM="$(configured_repo shortstale)"
+echo 000000000000 >"$SM/.claude/template-version"
+run "$SM"; rc=$?
+check "a short stamp that is not a prefix of HEAD is behind" "[ $rc -eq 0 ] && grep -q 'the template is now at' '$SM/.fake/out' && ! grep -q 'up to date with the template' '$SM/.fake/out'"
+check "the update hint names the plugin command" "grep -q '/backlog-loop:update' '$SM/.fake/out'"
+SP="$(configured_repo shortprefix)"
+echo "${TEMPLATE_HEAD:0:7}" >"$SP/.claude/template-version"
+run "$SP"
+check "a prefix shorter than 12 characters does not count as current" "! grep -q 'up to date with the template' '$SP/.fake/out'"
+
 run "$C" --bogus; rc=$?
 check "rejects an unknown argument" "[ $rc -eq 2 ]"
 
