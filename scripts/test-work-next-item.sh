@@ -235,6 +235,20 @@ check "a command only this issue needs is not a setup problem" "printf '%s' \"\$
 check "Give up's opening keeps setup problems out" "printf '%s' \"\$give_up\" | grep -q 'a setup problem never comes here'"
 check "a setup problem covers every command an iteration runs, helpers included" "printf '%s' \"\$guard\" | grep -q '.claude/hooks/. helper'"
 check "a setup problem with no branch releases the claim" "printf '%s' \"\$guard\" | grep -q 'release the claim instead'"
+# A headless session that ends its turn to wait for a background command ends the
+# session, leaving the work unsaved (#84: run-tests.sh took 121s, past the Bash
+# tool's 120s default, so it was moved to the background).
+# Matched on the section with its lines joined, so the checks pin whole sentences
+# rather than where a line happens to wrap.
+flat() { printf '%s' "$1" | tr '\n' ' ' | tr -s ' '; }
+# shellcheck disable=SC2034  # read inside check's eval strings
+guard_flat="$(flat "$guard")"
+# shellcheck disable=SC2034  # read inside check's eval strings
+step5_flat="$(flat "$step5")"
+check "the guardrails say to run long commands in the foreground with a raised timeout" "printf '%s' \"\$guard_flat\" | grep -q 'Run Verify and other long commands in the foreground, with the Bash tool.s timeout raised.. (up to 600000 ms, ten minutes)'"
+check "the guardrails forbid ending the turn while a started command still runs, and say why" "printf '%s' \"\$guard_flat\" | grep -q 'Never end your turn while a command you started is still running:.. in a headless run' && printf '%s' \"\$guard_flat\" | grep -q 'ending the turn ends the session'"
+check "a command over ten minutes is split, never backgrounded; unsplittable Verify stops, one issue's gives up" "printf '%s' \"\$guard_flat\" | grep -q 'Never run one with .run_in_background.' && printf '%s' \"\$guard_flat\" | grep -q 'longer than ten minutes, split it into parts that each finish within one call. If it cannot be split: a .## Verify. command would stop every issue, so stop and report' && printf '%s' \"\$guard_flat\" | grep -q 'a command only this issue needs is the issue.s blocker, so follow .*Give up'"
+check "Step 5's gate repeats the timeout and the no-ending rule where Verify runs" "printf '%s' \"\$step5_flat\" | grep -q 'raise the Bash tool.s timeout (up to 600000 ms)' && printf '%s' \"\$step5_flat\" | grep -q 'never end the turn to wait for one'"
 check "a refusal specific to the issue still follows Give up" "printf '%s' \"\$guard\" | grep -qi 'specific to this issue'"
 
 # --- The loop follows up on its own open PRs before new work (#70) ---
@@ -318,6 +332,9 @@ for doc in README.md docs/BACKLOG.md docs/ROUTINE.md; do
   check "$doc describes follow-ups" "grep -q 'changes-requested' '$ROOT/$doc'"
 done
 check "changes-requested is a seeded label" "grep -q '\"changes-requested|' '$ROOT/scripts/seed-labels.sh'"
+# shellcheck disable=SC2034  # read inside check's eval strings
+follow_flat="$(flat "$follow")"
+check "Step 1.5's Verify step points at the same rule" "printf '%s' \"\$follow_flat\" | grep -q 'must pass, run in the foreground, as Step 5 says'"
 for row in 'gh pr checks|mcp__github__pull_request_read' 'gh pr view N --json|mcp__github__pull_request_read' 'gh run view|mcp__github__get_job_logs' 'gh pr comment|mcp__github__add_issue_comment' 'gh pr edit|mcp__github__issue_write' 'gh api repos/{owner}/{repo}/pulls|mcp__github__pull_request_read' 'gh api repos/{owner}/{repo}/pulls|get_review_comments'; do
   check "the MCP table maps ${row%%|*} to ${row#*|}" "grep '^| .${row%%|*}' '$CMD' | grep -q -- '${row#*|}'"
 done
