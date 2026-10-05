@@ -946,6 +946,15 @@ set before the review's last fix is pushed, it could announce a PR as ready too 
 gh issue edit <number> --remove-label in-progress --add-label in-review
 ```
 
+If the review loop hit its round cap with blocking findings still open, the PR is not
+ready, whatever its checks say. Mark it for a human, so the ready-to-merge workflow
+never announces it, and say why on the PR:
+
+```bash
+gh issue edit <number> --remove-label in-progress --add-label in-review --add-label needs-attention
+gh pr comment <pr> --body "The review loop hit its round cap with blocking findings still open: <each finding, one line>. Not ready to merge until they are resolved."
+```
+
 Report concisely: issue number + title, branch, PR URL, and test results. If any
 actionable issues remain, the loop will continue to the next one.
 

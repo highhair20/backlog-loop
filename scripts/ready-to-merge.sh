@@ -60,7 +60,9 @@ while IFS= read -r pr; do
   if [ "$state" = CLEAN ] || [ "$state" = HAS_HOOKS ]; then
     case ",$labels," in
       *,changes-requested,*) ;;
-      *) jq -e --argjson i "$issue" 'any(.[]; .number == $i and ([.labels[].name] | index("in-progress") | not))' <<<"$issues" >/dev/null && ready=1 ;;
+      # The issue must be in-review and free of every label Step 1.5 skips:
+      # needs-attention also marks a review loop that hit its cap unresolved.
+      *) jq -e --argjson i "$issue" 'any(.[]; .number == $i and ([.labels[].name] | any(. == "in-progress" or . == "needs-attention" or . == "blocked" or . == "no-auto-heal") | not))' <<<"$issues" >/dev/null && ready=1 ;;
     esac
   fi
 

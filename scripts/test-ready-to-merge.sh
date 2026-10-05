@@ -87,6 +87,16 @@ for n in 40 41 42; do
   check "a labelled PR that stopped being ready loses the label (#$n)" "grep -q 'api -X DELETE repos/o/r/issues/$n/labels/ready-to-merge' '$G/writes'"
 done
 
+# An in-review issue Step 1.5 also skips (needs-attention, blocked, no-auto-heal) is
+# not announced: needs-attention is how Step 8 marks a review loop that hit its cap.
+for skip in needs-attention blocked no-auto-heal; do
+  S="$(setup "skip-$skip")"
+  echo "[$(pr 20 feat/7-x CLEAN)]" >"$S/prs.json"
+  echo "[{\"number\": 7, \"labels\": [{\"name\": \"in-review\"}, {\"name\": \"$skip\"}]}]" >"$S/issues.json"
+  run "$S"
+  check "a PR whose issue is also $skip is not announced" "[ ! -s '$S/writes' ]"
+done
+
 # A PR with no assignee is announced without a stray @.
 H="$(setup noassignee)"
 echo "[$(ASSIGNEES='[]' pr 20 feat/7-x CLEAN)]" >"$H/prs.json"; echo "$in_review" >"$H/issues.json"

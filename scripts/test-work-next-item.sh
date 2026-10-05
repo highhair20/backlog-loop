@@ -339,6 +339,7 @@ check "Step 1.5's Verify step points at the same rule" "printf '%s' \"\$follow_f
 # shellcheck disable=SC2034  # read inside check's eval strings
 step8_flat="$(flat "$(section 'Step 8')")"
 check "Step 8 swaps to in-review only once the review loop has closed" "printf '%s' \"\$step8_flat\" | grep -q 'only once the review loop the hooks opened for this PR has closed'"
+check "a review loop that hit its cap unresolved marks the issue needs-attention, not ready" "printf '%s' \"\$step8_flat\" | grep -q 'hit its round cap with blocking findings still open' && printf '%s' \"\$step8_flat\" | grep -q -- '--add-label needs-attention'"
 check "Step 1.5 lists each PR's merge state" "printf '%s' \"\$follow\" | grep -q 'gh pr list --state open --limit 1000 --json number,headRefName,url,mergeable,mergeStateStatus,labels'"
 check "Step 1.5 brings a PR that is only behind up to date, by merge, without a round" "printf '%s' \"\$follow_flat\" | grep -q 'gh pr update-branch <pr>' && printf '%s' \"\$follow_flat\" | grep -q 'never a rebase' && printf '%s' \"\$follow_flat\" | grep -q 'not a follow-up: no claim, no comment, no round'"
 check "a dry run never updates a branch, and reports it as a would-be write" "printf '%s' \"\$dry\" | grep -q 'gh pr update-branch' && printf '%s' \"\$follow_flat\" | grep -q 'In a dry run, note .would: gh pr update-branch <pr>. instead'"
