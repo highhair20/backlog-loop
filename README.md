@@ -242,6 +242,11 @@ copy lacks before the first item; the driver still runs. A refusal only one issu
 as an edit under `.claude/`, gives that issue up as `needs-attention` instead, and
 the loop moves on.
 
+If a session made no progress and also left uncommitted edits, or commits no remote
+has, the driver names the branch and that session's log. Usually the session ended
+its turn while a command it started was still running, so the work never reached a
+commit or a push.
+
 **One driver at a time.** `backlog-loop.sh` holds a lock in the git directory
 (`.git/backlog-loop.lock`) while it runs, so a second driver in the same clone
 refuses to start, whatever its `LOG_DIR`. A lock left by a crashed or killed run is

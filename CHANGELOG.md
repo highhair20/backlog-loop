@@ -16,6 +16,12 @@ removes it from a repo made with "Use this template", and sync never copies it.
 
 ## [Unreleased]
 
+### Added
+
+- `scripts/backlog-loop.sh`: when a session makes no progress and leaves
+  uncommitted edits or unpushed commits, the driver names the branch and the
+  session's log, instead of only "no progress" (#85).
+
 ### Manual steps for existing repos
 
 - None.
