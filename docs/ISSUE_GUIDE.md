@@ -64,6 +64,7 @@ too, and in `scripts/seed-labels.sh`, which creates them.
 |---|---|
 | `in-progress` | Claimed and being worked |
 | `in-review` | PR open, awaiting maintainer merge |
+| `ready-to-merge` | Set **on the PR** by the `ready-to-merge` workflow: the loop is done with it, required checks pass, and it is up to date with the base branch. Removed when that stops being true. Comes with a comment that notifies the assignee. |
 | `changes-requested` | Set by the maintainer **on the PR**: the loop reads the changes from the PR's comments and reviews (by its author or assignees only), makes them, and removes the label. A label, because GitHub does not let a PR's author request changes on their own PR. |
 | `blocked` | Cannot proceed; skipped by the loop |
 | `needs-infra` | Infra change written but must be applied by a human |

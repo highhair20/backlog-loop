@@ -13,6 +13,7 @@
       "Bash(gh pr diff *)",
       "Bash(gh pr create *)",
       "Bash(gh pr checks *)",
+      "Bash(gh pr update-branch *)",
       "Bash(gh pr comment *)",
       "Bash(gh pr edit * --remove-label *)",
       "Bash(gh run view *)",
