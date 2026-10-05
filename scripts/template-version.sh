@@ -98,10 +98,10 @@ case "$ahead" in ''|*[!0-9]*) echo "$two_commits"; exit 1 ;; esac
 case "$behind" in ''|*[!0-9]*) echo "$two_commits"; exit 1 ;; esac
 
 if [ "$ahead" -eq 0 ]; then
-  echo "not behind the template: synced from $from$changes, $(commits "$behind") past its default branch (${latest:0:7})"
+  echo "not behind the template: synced from template $from$changes, $(commits "$behind") past its default branch (${latest:0:7})"
   exit 0
 fi
 extra=""
 [ "$behind" -eq 0 ] || extra="; the synced commit also has $(commits "$behind") the template's default branch lacks"
-echo "$(commits "$ahead") behind the template: synced from $from$changes, the template is now at ${latest:0:7}$extra. What changed: https://github.com/$slug/compare/$range"
+echo "$(commits "$ahead") behind the template: $two_commits$extra. What changed: https://github.com/$slug/compare/$range"
 exit 1

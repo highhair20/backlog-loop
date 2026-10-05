@@ -191,7 +191,7 @@ It treats files three ways, so re-running it later is safe:
 
 | Kind | Files | On every sync |
 |---|---|---|
-| **Managed** | review hooks, `work-next-item.md`, `backlog-loop.sh`, `check-verify-section.sh`, `gh-auth-check.sh`, `gh-repo.sh`, `loop-lock.sh`, `missing-allow-rules.sh`, `protect-main.sh`, `ready-to-merge.sh`, `report-drained.sh`, `seed-labels.sh`, `setup.sh`, `vendor-agents.sh`, `settings.local.json.example`, `docs/ROUTINE.md` | Overwritten. These hold no project-specific content; put customisation in `CLAUDE.md`. |
+| **Managed** | review hooks, `work-next-item.md`, `backlog-loop.sh`, `check-verify-section.sh`, `gh-auth-check.sh`, `gh-repo.sh`, `loop-lock.sh`, `missing-allow-rules.sh`, `protect-main.sh`, `ready-to-merge.sh`, `report-drained.sh`, `seed-labels.sh`, `setup.sh`, `template-version.sh`, `vendor-agents.sh`, `settings.local.json.example`, `docs/ROUTINE.md` | Overwritten. These hold no project-specific content; put customisation in `CLAUDE.md`. |
 | **Seeded** | `CLAUDE.md` (the skeleton in `templates/`), CI workflow, the `ready-to-merge.yml` workflow, issue forms, PR template, `dependabot.yml`, `docs/ISSUE_GUIDE.md`, `docs/BACKLOG.md`, `docs/CI_HARDENING.md`, `docs/DEPLOYING.md`, the reviewer agents and their `.claude/agent-context/`, the optional stack reviewer contexts in `.claude/agent-context/optional/` | Copied only if missing. Yours to edit. Nothing is added beside an equivalent you already have: the placeholder CI only goes into a repo with no workflows, the issue forms only into one with no issue templates of its own, the PR template only if GitHub finds none anywhere, and `dependabot.yml` not beside a `dependabot.yaml`. `.editorconfig` is never synced; its indent defaults could change how editors treat existing code. |
 | **Merged** | `.claude/settings.json`, `.gitignore` | The template's deny rules, hooks, and ignore lines are added; yours are kept. |
 
@@ -199,8 +199,13 @@ Each sync also writes `.claude/template-version`: the template commit your repo 
 matches (suffixed `-dirty` if the template clone had uncommitted changes; shortened
 to 12 characters when synced from the plugin), and on a second line the release
 tag, such as `v0.1.0`, when the clone is checked out on one. Commit it with the
-rest, so you can tell later how far behind the template a repo is; `setup.sh`
-reports it by tag when there is one. To sync a release rather than the latest
+rest, so you can tell later how far behind the template a repo is. Both
+`setup.sh` and `backlog-loop.sh` (once, at start-up, before the first item) compare
+it with the template's latest commit, so an unattended loop's output says when its
+managed files are out of date. A repo that is behind is told by how many commits, by
+tag when there is one, with a link to the changes on GitHub (needs `gh`; otherwise
+the two commits). The check never stops the driver, and an unreachable template is a
+one-line warning. To sync a release rather than the latest
 `main`, check out its tag in the template clone first
 (`git -C backlog-loop checkout v0.1.0`). Each release's notes in
 [`CHANGELOG.md`](CHANGELOG.md) list what changed and, because seeded files are not
@@ -337,6 +342,7 @@ scripts/
   report-drained.sh          tells backlog-loop.sh a session found nothing to do
   sync-guardrails.sh         update an existing repo from this template
   setup.sh                   check the repo is ready for the loop; --fix the safe parts
+  template-version.sh        how far behind the template this repo is (setup.sh and the driver)
   vendor-agents.sh           rebuild .claude/agents/ from ECC plus .claude/agent-context/
   seed-labels.sh             create the standard labels
   protect-main.sh            create the branch ruleset on main

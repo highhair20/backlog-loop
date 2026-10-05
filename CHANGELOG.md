@@ -16,6 +16,12 @@ removes it from a repo made with "Use this template", and sync never copies it.
 
 ## [Unreleased]
 
+### Added
+
+- `scripts/backlog-loop.sh` warns at start-up when the repo is behind the template,
+  as `scripts/setup.sh` does, and both now say by how many commits, with a link to
+  the changes on GitHub. The check is the new managed `scripts/template-version.sh`.
+
 ### Manual steps for existing repos
 
 - None.

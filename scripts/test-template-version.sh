@@ -83,6 +83,7 @@ check "a template not on github.com: the two-commit message, gh not called" "[ \
 mkdir -p "$WORK/nogh"
 for t in git awk sed grep head; do ln -s "$(command -v "$t")" "$WORK/nogh/$t"; done
 mkdir -p "$WORK/nogh-repo/.claude" && echo "$C1" >"$WORK/nogh-repo/.claude/template-version"
+# shellcheck disable=SC2034  # read inside check's eval string
 nogh_out="$(cd "$WORK/nogh-repo" && PATH="$WORK/nogh" TEMPLATE_REPO="$BARE" TEMPLATE_GH_REPO=o/template /bin/bash "$HERE/template-version.sh" 2>&1)"; nogh_rc=$?
 check "no gh installed: the two-commit message" "[ $nogh_rc -eq 1 ] && [ \"\$nogh_out\" = '$TWO_SHAS' ]"
 
