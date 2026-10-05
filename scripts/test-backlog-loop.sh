@@ -267,6 +267,48 @@ echo "echo '[{\"number\": 7, \"labels\": [{\"name\": \"P1\"}], \"updatedAt\": \"
 run "$R5"; rc=$?
 check "an issue touched but left with the same labels is no progress" "[ $rc -eq 3 ] && [ \$(wc -l <'$R5/calls') -eq 1 ]"
 
+# A stall that leaves unsaved work (#85): a session that ended its turn while its
+# Verify still ran (#84) leaves edits or unpushed commits, which the driver names.
+# These fixtures are committed, with the fake's own files excluded, so the tree is
+# clean unless the session dirties it; origin/main stands in for a fetched remote.
+NO_PROGRESS_OUT='✗ The last item made no progress'
+committed_repo() { # committed_repo <name> <step-1 script>
+  local dir; dir="$(setup "$1" steps)"
+  echo 0 >"$dir/count"; echo "$IN_REVIEW" >"$dir/extra.json"
+  printf '%s\n' "$2" >"$dir/step-1"
+  printf '%s\n' calls bgwait staging-env gh-repo-env check-out check-rc finished started out >>"$dir/.git/info/exclude"
+  git -C "$dir" add -A
+  git -C "$dir" -c user.name=t -c user.email=t@t commit -qm fixture
+  git -C "$dir" update-ref refs/remotes/origin/main HEAD
+  git -C "$dir" branch -q --set-upstream-to=origin/main main
+  echo "$dir"
+}
+GIT_COMMIT='git -c user.name=t -c user.email=t@t commit -qm wip'
+UNSAVED='unsaved work on'
+U1="$(committed_repo unsaveddirty 'echo half-done >edit.txt')"
+run "$U1"; rc=$?
+check "a stall that leaves a dirty tree names its branch" "[ $rc -eq 3 ] && grep -qF 'the session ended with unsaved work on main: it may have ended its turn while a command still ran (#84)' '$U1/out'"
+check "and names the session's log" "grep -q '^  Its log: $WORK/logs-unsaveddirty/item-.*\\.log' '$U1/out'"
+check "and still explains the no-progress stop" "grep -qF '$NO_PROGRESS_OUT' '$U1/out'"
+U2="$(committed_repo unsavedahead "echo more >edit.txt; git add edit.txt; $GIT_COMMIT")"
+run "$U2"; rc=$?
+check "a stall that leaves commits its upstream lacks names its branch" "[ $rc -eq 3 ] && grep -qF '$UNSAVED main:' '$U2/out'"
+U3="$(committed_repo unsavedlocal "git switch -qc feat/9-x; echo more >edit.txt; git add edit.txt; $GIT_COMMIT")"
+run "$U3"; rc=$?
+check "a stall that leaves commits on a never-pushed branch names it" "[ $rc -eq 3 ] && grep -qF '$UNSAVED feat/9-x:' '$U3/out'"
+U4="$(committed_repo unsavedclean ':')"
+run "$U4"; rc=$?
+check "a clean stall says nothing about unsaved work" "[ $rc -eq 3 ] && grep -qF '$NO_PROGRESS_OUT' '$U4/out' && ! grep -q 'unsaved work' '$U4/out'"
+check "a clean stall prints what it printed before" "[ \"\$(sed -n '/no progress/,\$p' '$U4/out')\" = \"\$(printf '%s\n' \"$NO_PROGRESS_OUT: it changed no issue's labels and no PR,\" '  and did not record the backlog drained (scripts/report-drained.sh).' \"  Read its log in $WORK/logs-unsavedclean, fix the cause, and re-run.\")\" ]"
+U6="$(committed_repo unsavednewbranch 'git switch -qc feat/9-y')"
+run "$U6"; rc=$?
+check "a clean stall on a never-pushed branch with no new commits says nothing" "[ $rc -eq 3 ] && ! grep -q 'unsaved work' '$U6/out'"
+U5="$(committed_repo unsavedgitfails ':')"
+printf '#!/usr/bin/env bash\n[ "$1" = status ] && exit 128\nexec %s "$@"\n' "$(command -v git)" >"$U5/bin/git"
+chmod +x "$U5/bin/git"
+run "$U5"; rc=$?
+check "a check that cannot run says so, and still exits 3" "[ $rc -eq 3 ] && grep -q 'could not check for unsaved work' '$U5/out'"
+
 R6="$(setup prsfail steps)"
 printf '#!/usr/bin/env bash\n[ "$1 $2" = "pr list" ] && exit 1\nexec "%s/bin/gh-base" "$@"\n' "$R6" >"$R6/bin/gh"
 run "$R6"; rc=$?

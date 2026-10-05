@@ -21,6 +21,9 @@ removes it from a repo made with "Use this template", and sync never copies it.
 - `scripts/backlog-loop.sh` warns at start-up when the repo is behind the template,
   as `scripts/setup.sh` does, and both now say by how many commits, with a link to
   the changes on GitHub. The check is the new managed `scripts/template-version.sh`.
+- `scripts/backlog-loop.sh`: when a session makes no progress and leaves
+  uncommitted edits or unpushed commits, the driver names the branch and the
+  session's log, instead of only "no progress" (#85).
 
 ### Manual steps for existing repos
 

@@ -217,6 +217,30 @@ run_item() {
   fi
 }
 
+# A session that ends its turn while a command still runs (#84) leaves its work
+# uncommitted or unpushed, and only its log said so. After a stall, name the branch
+# it left that on (#85). A branch with no upstream was never pushed (Step 6 pushes
+# it), so its unsaved commits are those no remote has. $1 is the session's log.
+report_unsaved_work() {
+  local branch changes ahead=""
+  branch="$(git rev-parse --abbrev-ref HEAD 2>/dev/null)" || branch="the current branch"
+  if ! changes="$(git status --porcelain)"; then
+    echo "  (could not check for unsaved work: git status failed)" >&2
+    return
+  fi
+  # No commits yet (an unborn branch): nothing committed to lose.
+  if [ -z "$changes" ] && git rev-parse -q --verify HEAD >/dev/null; then
+    if git rev-parse -q --verify '@{u}' >/dev/null 2>&1; then
+      ahead="$(git log --oneline '@{u}..')"
+    else
+      ahead="$(git log --oneline HEAD --not --remotes)"
+    fi || { echo "  (could not check for unsaved work: git log failed)" >&2; return; }
+  fi
+  [ -n "$changes$ahead" ] || return 0
+  echo "⚠ the session ended with unsaved work on $branch: it may have ended its turn while a command still ran (#84)" >&2
+  echo "  Its log: $1" >&2
+}
+
 count=0
 while [ "$count" -lt "$MAX_ITEMS" ]; do
   if ! remaining="$(work_remaining)"; then
@@ -280,6 +304,7 @@ while [ "$count" -lt "$MAX_ITEMS" ]; do
     echo "✗ The last item made no progress: it changed no issue's labels and no PR," >&2
     echo "  and did not record the backlog drained (scripts/report-drained.sh)." >&2
     echo "  Read its log in $LOG_DIR, fix the cause, and re-run." >&2
+    report_unsaved_work "$log"
     exit 3
   fi
   sleep "$PACE_SECONDS"
