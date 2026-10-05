@@ -50,7 +50,9 @@ The first tagged release. It records what the template does today.
 - **CI skeleton** that fails until configured, with SHA-pinned actions and
   Dependabot; `docs/CI_HARDENING.md` and `docs/DEPLOYING.md`.
 - **Setup and sync:** `scripts/setup.sh` checks a repo is ready for the loop and
-  `--fix`es the safe parts; `scripts/sync-guardrails.sh` brings an existing repo up
+  `--fix`es the safe parts, including proposing `## Verify` commands from the
+  detected stack and filling them in when exactly one is found;
+  `scripts/sync-guardrails.sh` brings an existing repo up
   to date, recording the template version in `.claude/template-version`: the
   commit, and on a second line the release tag when the template is on one.
 - **Installer plugin:** this repo is a Claude Code plugin marketplace whose plugin

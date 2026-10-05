@@ -4,7 +4,8 @@
 # creates missing labels, copies the local allowlist example, adds a link to
 # docs/ISSUE_GUIDE.md to the issue chooser, and replaces the
 # template repo's own CLAUDE.md with the project skeleton, moving the old file to
-# CLAUDE.md.template-own rather than discarding it, and removes the template's
+# CLAUDE.md.template-own rather than discarding it, writes the Verify commands it
+# proposes into an empty Verify when exactly one stack is found, and removes the template's
 # plugin manifests (.claude-plugin/) when they hold only its files, and its
 # CHANGELOG.md, which describes the template, not the project. The ruleset is
 # never created here, because it needs your CI job names and admin rights; the
@@ -153,8 +154,197 @@ check_claude_md() {
   if scripts/check-verify-section.sh CLAUDE.md >/dev/null 2>&1; then
     ok "Verify has commands"
   else
-    bad "## Verify has no commands, so the loop will refuse to run" "add your build, lint, and test commands to the Verify code block"
+    propose_verify_section
   fi
+}
+
+# Verify proposals from the stack files at the repo root (#71). Deterministic on
+# purpose: setup runs before Claude is set up, and the same repo must always get
+# the same proposal. Monorepo subdirectories are not looked at.
+
+# Whether the Makefile defines target $1, alone or in a list before the colon.
+# Skips variable assignments (TEST := 1) and longer names (test-e2e:).
+has_make_target() {
+  grep -qE "^([^:=#[:space:]]+[[:space:]]+)*$1([[:space:]]+[^:=#[:space:]]+)*[[:space:]]*:([^=]|\$)" Makefile
+}
+
+# One line per stack found. A Makefile with a test target is the project's own
+# entry point (docs/BACKLOG.md, "Task runners"), so it hides every other stack.
+detect_stacks() {
+  if [ -f Makefile ] && has_make_target test; then echo make; return 0; fi
+  [ ! -f package.json ] || echo node
+  [ ! -f go.mod ] || echo go
+  [ ! -f Cargo.toml ] || echo rust
+  [ ! -f pyproject.toml ] || echo python
+}
+
+stack_file() {
+  case "$1" in
+    make) echo Makefile ;; node) echo package.json ;; go) echo go.mod ;;
+    rust) echo Cargo.toml ;; python) echo pyproject.toml ;;
+  esac
+}
+
+node_pm() {
+  if [ -f pnpm-lock.yaml ]; then echo pnpm
+  elif [ -f yarn.lock ]; then echo yarn
+  elif [ -f bun.lockb ] || [ -f bun.lock ]; then echo bun
+  else echo npm
+  fi
+}
+
+# The Verify commands for stack $1, one per line; none when its file configures
+# nothing this knows. Fails when the file cannot be read.
+propose_verify() {
+  case "$1" in
+    make)
+      if has_make_target lint; then echo "make lint"; fi
+      echo "make test" ;;
+    node)
+      command -v jq >/dev/null || return 1
+      # npm init's test script always fails, so it is no test at all.
+      jq -r --arg pm "$(node_pm)" '(.scripts // {}) as $sc
+        | if ($sc | type) != "object" then empty
+          else ("lint", "typecheck", "build", "test") as $s
+            | select($sc | has($s)) | select(($sc[$s] | tostring | test("no test specified")) | not)
+            | "\($pm) run \($s)" end' \
+        package.json 2>/dev/null ;;
+    go) printf '%s\n' "go vet ./..." "go test ./..." ;;
+    rust) printf '%s\n' "cargo fmt --check" "cargo clippy --all-targets -- -D warnings" "cargo test" ;;
+    python)
+      if grep -qE '^\[tool\.ruff[].]' pyproject.toml; then echo "ruff check ."; fi
+      if grep -qE '^\[tool\.mypy[].]' pyproject.toml; then echo "mypy ."; fi
+      if grep -qE '^\[tool\.pytest[].]' pyproject.toml; then echo "pytest"; fi ;;
+  esac
+}
+
+# Why stack $1 proposed nothing.
+nothing_proposed() {
+  case "$1" in
+    node) echo "package.json has none of the scripts lint, typecheck, build, test" ;;
+    python) echo "pyproject.toml configures none of ruff, mypy, pytest" ;;
+  esac
+}
+
+# The toolchain steps a CI job needs before stack $1's commands, as YAML list items.
+ci_setup() {
+  local pm
+  case "$1" in
+    make) echo "# plus the setup action for whatever toolchain make needs" ;;
+    node)
+      pm="$(node_pm)"
+      case "$pm" in
+        bun) echo "- uses: oven-sh/setup-bun" ;;
+        pnpm) printf '%s\n' "- uses: pnpm/action-setup  # needs with: version:, unless package.json sets packageManager" "- uses: actions/setup-node" ;;
+        *) echo "- uses: actions/setup-node" ;;
+      esac
+      case "$pm" in
+        npm) echo "- run: npm ci" ;;
+        yarn) echo "- run: yarn install --frozen-lockfile" ;;
+        *) echo "- run: $pm install --frozen-lockfile" ;;
+      esac ;;
+    go) printf '%s\n' "- uses: actions/setup-go" "  with:" "    go-version-file: go.mod" ;;
+    rust) printf '%s\n' "- uses: dtolnay/rust-toolchain@stable" "  with:" "    components: rustfmt, clippy" ;;
+    python) printf '%s\n' "- uses: actions/setup-python" "- run: pip install -e .  # and the dev tools Verify runs" ;;
+  esac
+}
+
+# The ci.yml step for stack $1 running commands $2, as a fix: hint. Workflows are
+# never edited: setup steps, caching, and version matrices vary too much.
+print_ci_hint() {
+  echo "      fix: in .github/workflows/ci.yml, replace the placeholder step with these (pin each action to a commit SHA, as the checkout step is):"
+  { ci_setup "$1"; printf '%s\n' "$2" | sed 's/^/- run: /'; } | sed 's/^/            /'
+}
+
+# Prints stack $1's proposal and its CI hint, or why there is none.
+print_proposal() {
+  local file cmds
+  file="$(stack_file "$1")"
+  if ! cmds="$(propose_verify "$1")"; then
+    info "could not read $file (invalid JSON, or jq missing), so nothing is proposed from it"
+  elif [ -z "$cmds" ]; then
+    info "$(nothing_proposed "$1"); nothing proposed from it"
+  else
+    info "proposed Verify for $file:"
+    printf '%s\n' "$cmds" | sed 's/^/        /'
+    print_ci_hint "$1" "$cmds"
+  fi
+}
+
+# Puts commands $1 (one per line) at the top of the Verify code block, where the
+# skeleton's "# build:" placeholders are, dropping those and keeping any other
+# comment below the commands: a comment above a command scopes it to paths, so
+# one left above these would scope them too. Fails, and changes nothing, when the
+# result would still have no Verify commands.
+write_verify() {
+  local tmp rc=0
+  tmp="$(mktemp CLAUDE.md.XXXXXX)" || return 1
+  VERIFY_CMDS="$1" awk '
+    BEGIN { n = split(ENVIRON["VERIFY_CMDS"], cmds, "\n") }
+    /^```/ {
+      print
+      in_code = !in_code
+      if (in_verify && in_code && !blocks++) for (i = 1; i <= n; i++) print cmds[i]
+      next
+    }
+    !in_code && /^## / { in_verify = ($0 ~ /^## Verify[[:space:]]*$/) }
+    in_verify && in_code && blocks == 1 && /^#[[:space:]]*(build|lint|test):[[:space:]]*$/ { next }
+    { print }
+    END { exit !blocks }
+  ' CLAUDE.md >"$tmp" && scripts/check-verify-section.sh "$tmp" >/dev/null 2>&1 && cat "$tmp" >CLAUDE.md || rc=1
+  rm -f "$tmp"
+  return "$rc"
+}
+
+# The optional reviewer for each language found, and how to turn it on. Keyed on
+# the language files, not the Verify stack: a Go repo whose Makefile won still
+# has Go to review.
+print_reviewers() {
+  local r
+  for r in \
+      "$([ -f go.mod ] && echo go-reviewer)" \
+      "$([ -f package.json ] && command -v jq >/dev/null \
+          && jq -e '(.dependencies // {}) + (.devDependencies // {}) | has("typescript")' package.json >/dev/null 2>&1 \
+          && echo typescript-reviewer)" \
+      "$([ -f pyproject.toml ] && echo python-reviewer)"; do
+    [ -n "$r" ] || continue
+    if [ -f ".claude/agent-context/$r.md" ]; then
+      ok "$r is on"
+    else
+      info "optional reviewer for this stack: $r"
+      echo "      fix: cp .claude/agent-context/optional/$r.md .claude/agent-context/ && scripts/vendor-agents.sh, then add a row for $r to CLAUDE.md's ## Specialist reviewers"
+    fi
+  done
+}
+
+# Verify has no commands: write the proposal when --fix and exactly one stack
+# gives one, otherwise print each so the user can choose.
+propose_verify_section() {
+  local stacks n cmds="" stack fix_hint="add your build, lint, and test commands to the Verify code block"
+  stacks="$(detect_stacks)"
+  n="$(printf '%s' "$stacks" | grep -c .)"
+  [ "$n" -ne 1 ] || cmds="$(propose_verify "$stacks")" || cmds=""
+  if [ -n "$cmds" ] && [ "$fix" -eq 1 ]; then
+    if write_verify "$cmds"; then
+      ok "wrote $(printf '%s\n' "$cmds" | grep -c .) Verify command(s) from $(stack_file "$stacks") into CLAUDE.md: $(printf '%s\n' "$cmds" | paste -sd ';' - | sed 's/;/; /g')"
+      print_ci_hint "$stacks" "$cmds"
+      print_reviewers
+      return
+    fi
+    fix_hint="add the proposal below to the Verify code block by hand (--fix found no code block under ## Verify to write it into)"
+  elif [ -n "$cmds" ]; then
+    fix_hint="scripts/setup.sh --fix  (writes the proposal below into the Verify code block)"
+  elif [ "$n" -gt 1 ]; then
+    fix_hint="several stacks found, so nothing was written: copy the commands you want from the proposals below into the Verify code block"
+  fi
+  bad "## Verify has no commands, so the loop will refuse to run" "$fix_hint"
+  [ "$n" -gt 0 ] || info "no stack file at the repo root (Makefile with a test target, package.json, go.mod, Cargo.toml, pyproject.toml), so nothing is proposed"
+  while IFS= read -r stack; do
+    [ -z "$stack" ] || print_proposal "$stack"
+  done <<EOF
+$stacks
+EOF
+  print_reviewers
 }
 
 check_ci() {
