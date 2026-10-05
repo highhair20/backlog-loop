@@ -55,7 +55,21 @@
       "Bash(git push * v*)",
       "Bash(git push *--fol*)",
       "Bash(git push *+v*)",
-      "Bash(git -* push*)"
+      "Bash(git -* push*)",
+      "Bash(git push *refs/heads/main*)",
+      "Bash(git push * :refs/*)",
+      "Bash(git push * :main)",
+      "Bash(git push * :main *)",
+      "Bash(git fetch *--upload-pack*)",
+      "Bash(git pull *--upload-pack*)",
+      "Bash(git ls-remote *--upload-pack*)",
+      "Bash(git push *--receive-pack*)",
+      "Bash(git push *--exec*)",
+      "Bash(git diff *--output*)",
+      "Bash(git log *--output*)",
+      "Bash(git -c*)",
+      "Bash(git --config-env*)",
+      "Bash(git config *)"
     ]
   }
 }

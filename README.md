@@ -286,7 +286,14 @@ The guardrails are layered, from softest to hardest:
 
 - **Permission rules match command text; they are a filter, not a wall.** A
   sufficiently unusual spelling of a push to `main` can get past them. The branch
-  ruleset in step 4 is the hard block.
+  ruleset in step 4 is the hard block, so it is required, not optional.
+- The deny rules also refuse git options that run a program or write a file
+  (`--upload-pack`, `--receive-pack`, `--exec`, `--output`, `git -c`, `git config`),
+  in every session, interactive ones included; run those in a plain terminal if you
+  need them. Claude Code itself refuses edits under `.git/` (a "sensitive file", even
+  with edits auto-approved), so a session cannot plant a git hook or config instead.
+  A headless session still runs your Verify commands, which run this repo's code with
+  your credentials: label only issues you have read, and see the proposal gate.
 - The deny rules block merging through `gh api`, but not other raw API writes: a
   `gh api -X PUT repos/<owner>/<repo>/contents/<path>` can still write to `main`.
   The branch ruleset blocks that too.
