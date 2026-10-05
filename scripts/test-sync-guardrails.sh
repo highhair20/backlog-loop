@@ -77,6 +77,8 @@ check "seeds the ready-to-merge workflow" "[ -f '$T/.github/workflows/ready-to-m
 check "copies gh-auth-check.sh, executable" "[ -x '$T/scripts/gh-auth-check.sh' ]"
 # The driver and setup.sh call it to pick the repo they act on (#17).
 check "copies gh-repo.sh, executable" "[ -x '$T/scripts/gh-repo.sh' ]"
+# The driver and setup.sh call it to compare the local allowlist with the example (#81).
+check "copies missing-allow-rules.sh, executable" "[ -x '$T/scripts/missing-allow-rules.sh' ]"
 check "copies vendor-agents.sh, executable" "[ -x '$T/scripts/vendor-agents.sh' ]"
 check "seeds the reviewer agents, their context, and the ECC license" "[ -f '$T/.claude/agents/pr-test-analyzer.md' ] && [ -f '$T/.claude/agents/silent-failure-hunter.md' ] && [ -f '$T/.claude/agent-context/_common.md' ] && [ -f '$T/.claude/agents/LICENSE.ECC' ]"
 # Inert until a repo copies one into .claude/agent-context/.
