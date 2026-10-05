@@ -73,5 +73,20 @@ check "a re-run without a flag keeps strict mode on" "[ $rc -eq 0 ] && jq -e '.r
 EXISTING='[{"id": 42, "name": "protect-main"}]' EXISTING_RULESET="$STRICT_ON" run --no-strict o/r test; rc=$?
 check "--no-strict turns strict mode off" "[ $rc -eq 0 ] && jq -e '.rules[] | select(.type == \"required_status_checks\") | .parameters.strict_required_status_checks_policy == false' '$WORK/body.json' >/dev/null"
 
+# GitHub Enterprise (#56): a bare owner/repo means github.com to gh, so the host
+# must reach every gh api call, or the ruleset lands on the wrong server.
+EXISTING='[{"id": 42, "name": "protect-main"}]' EXISTING_RULESET="$STRICT_ON" run ghe.example.com/o/r test; rc=$?
+check "HOST/OWNER/REPO: every gh api call targets that host" "[ $rc -eq 0 ] && [ \"\$(wc -l <'$WORK/calls')\" -eq 3 ] && ! grep -v -- '--hostname ghe.example.com' '$WORK/calls'"
+check "HOST/OWNER/REPO: the paths name owner/repo only" "grep -q -- '-X PUT repos/o/r/rulesets/42' '$WORK/calls' && ! grep -q 'ghe.example.com/o/r' '$WORK/calls'"
+check "HOST/OWNER/REPO: the report names the host" "grep -q 'on ghe.example.com/o/r' '$WORK/out'"
+run ghe.example.com/o/r test; rc=$?
+check "HOST/OWNER/REPO: a new ruleset is created on that host" "[ $rc -eq 0 ] && grep -q -- '-X POST repos/o/r/rulesets --input - --hostname ghe.example.com' '$WORK/calls'"
+EXISTING='[{"id": 42, "name": "protect-main"}]' EXISTING_RULESET="$STRICT_ON" run o/r test; rc=$?
+check "owner/repo: every gh api call targets github.com" "[ $rc -eq 0 ] && [ \"\$(wc -l <'$WORK/calls')\" -eq 3 ] && ! grep -v -- '--hostname github.com' '$WORK/calls'"
+run a/b/c/d test; rc=$?
+check "refuses a repo argument with too many parts" "[ $rc -ne 0 ] && [ ! -e '$WORK/calls' ]"
+run /o/r test; rc=$?
+check "refuses an empty host" "[ $rc -ne 0 ] && [ ! -e '$WORK/calls' ]"
+
 echo
 if [ "$failures" -eq 0 ]; then echo "all tests passed"; else echo "$failures test(s) failed" >&2; exit 1; fi

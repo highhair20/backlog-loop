@@ -178,6 +178,8 @@ FAKE_HOST=ghe.example.com run "$E" --fix
 check "GHE: names the repo with its host" "grep -q 'repository o/r (ghe.example.com)' '$E/.fake/out'"
 check "GHE: every label call targets the GHE repo" "grep -q '^label create' '$E/.fake/label-calls' && ! grep -v -- '--repo ghe.example.com/o/r' '$E/.fake/label-calls'"
 check "GHE: the ruleset is read from the GHE host" "grep -q -- '--hostname ghe.example.com' '$E/.fake/api-calls'"
+check "GHE: the missing-ruleset hint names the host (#56)" "grep -q 'scripts/protect-main.sh ghe.example.com/o/r ' '$E/.fake/out'"
+check "github.com: the hint stays a bare owner/repo" "grep -q 'scripts/protect-main.sh o/r ' '$F/.fake/out'"
 
 S="$(configured_repo stale)"
 echo 0000000000000000000000000000000000000000 >"$S/.claude/template-version"

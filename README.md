@@ -139,7 +139,9 @@ The steps it checks:
    It creates a branch ruleset that requires a pull request and the named CI
    checks, and lets admins bypass only by merging a PR. This is the only guardrail
    that holds no matter how a command is phrased (see [Limits](#limits)). It is
-   safe to re-run. Add `--strict` to also require a PR's branch to be up to date
+   safe to re-run. On GitHub Enterprise, put the host in front:
+   `scripts/protect-main.sh <host>/<owner>/<repo> …` (`setup.sh` prints it that way).
+   A bare `<owner>/<repo>` means github.com. Add `--strict` to also require a PR's branch to be up to date
    with `main` before it merges: each merge then re-runs CI against the latest `main`,
    so two PRs that pass alone cannot merge into a red `main`. The cost is an update
    and a CI run per merge. A re-run keeps the ruleset's current setting; `--no-strict` turns it
