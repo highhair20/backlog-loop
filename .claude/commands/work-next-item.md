@@ -47,8 +47,11 @@ or killed (closed terminal) at any moment — possibly mid-issue. Therefore:
   command you started is still running:** in a headless run (`claude -p`, the driver,
   a routine) ending the turn ends the session, and the work is left unsaved on a
   local branch. Never run one with `run_in_background`. If a command can take longer
-  than ten minutes, split it into parts that each finish within one call; if it
-  cannot be split, that is a setup problem (below): stop and report it.
+  than ten minutes, split it into parts that each finish within one call. If it
+  cannot be split: a `## Verify` command would stop every issue, so stop and report
+  that Verify needs a faster or split command (an allow rule cannot fix it); a
+  command only this issue needs is the issue's blocker, so follow **Give up**,
+  naming it, and the loop moves on.
 - **A tool call refused by the permission settings is a blocker only when no
   permitted way round it exists.** First try one: a dedicated tool instead of a shell
   command, or the command spelled as this file writes it (`git push -u origin
