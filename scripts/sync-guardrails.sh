@@ -32,6 +32,7 @@ MANAGED=(
   scripts/gh-repo.sh
   scripts/loop-lock.sh
   scripts/protect-main.sh
+  scripts/ready-to-merge.sh
   scripts/report-drained.sh
   scripts/seed-labels.sh
   scripts/setup.sh
@@ -44,6 +45,7 @@ SEEDED=(
   CLAUDE.md
   docs/ISSUE_GUIDE.md
   .github/workflows/ci.yml
+  .github/workflows/ready-to-merge.yml
   .github/ISSUE_TEMPLATE/bug.yml
   .github/ISSUE_TEMPLATE/feature.yml
   .github/ISSUE_TEMPLATE/config.yml
