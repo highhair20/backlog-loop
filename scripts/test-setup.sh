@@ -558,6 +558,14 @@ cp "$ROOT/CLAUDE.md" "$SO/CLAUDE.md"
 run "$SO" --fix
 check "--fix swaps in the skeleton, then fills its Verify" "[ -f '$SO/CLAUDE.md.template-own' ] && commands_are '$SO' 'go vet ./...' 'go test ./...'"
 
+# A new repo has both the template's CHANGELOG.md (#65) and an unfilled Verify
+# (#71): one --fix does both.
+SL="$(stack_repo changelog)"
+echo 'module example.com/x' >"$SL/go.mod"
+cp "$ROOT/CHANGELOG.md" "$SL/CHANGELOG.md"
+run "$SL" --fix
+check "--fix fills Verify and removes the template's CHANGELOG.md in one run" "commands_are '$SL' 'go vet ./...' 'go test ./...' && [ ! -e '$SL/CHANGELOG.md' ] && grep -q 'wrote 2 Verify command' '$SL/.fake/out' && grep -q 'removed CHANGELOG.md' '$SL/.fake/out'"
+
 run "$C" --bogus; rc=$?
 check "rejects an unknown argument" "[ $rc -eq 2 ]"
 
