@@ -450,6 +450,7 @@ check "node (npm): CI hint names actions/setup-node and npm ci" "grep -q 'action
 check "node (npm): no typescript, no typescript-reviewer" "! grep -q 'typescript-reviewer' '$ND/.fake/out'"
 node_case pnpm pnpm-lock.yaml "$NP" 'pnpm run lint' 'pnpm run build' 'pnpm run test'
 check "node (pnpm): CI hint names pnpm/action-setup" "grep -q 'pnpm/action-setup' '$ND/.fake/out'"
+check "node (pnpm): the hint says pnpm/action-setup needs a version" "grep -q 'pnpm/action-setup.*packageManager' '$ND/.fake/out'"
 node_case yarn yarn.lock "$NP" 'yarn run lint' 'yarn run build' 'yarn run test'
 node_case bun bun.lockb "$NP" 'bun run lint' 'bun run build' 'bun run test'
 check "node (bun): CI hint names oven-sh/setup-bun" "grep -q 'oven-sh/setup-bun' '$ND/.fake/out'"
@@ -513,6 +514,8 @@ echo 'module example.com/x' >"$SC/go.mod"
 awk '{ print } /^# test:$/ { print "# when api/ changes, also run the e2e suite" }' "$ROOT/templates/CLAUDE.md" >"$SC/CLAUDE.md"
 run "$SC" --fix
 check "--fix keeps the user's own comments in the block" "verify_block '$SC' | grep -q '^# when api/ changes' && commands_are '$SC' 'go vet ./...' 'go test ./...'"
+# A comment above a command scopes it to paths, so the kept one must not end up above ours.
+check "--fix writes the commands above a kept comment, so it scopes none of them" "[ \"\$(verify_block '$SC' | head -2)\" = \"\$(printf '%s\n' 'go vet ./...' 'go test ./...')\" ]"
 SV="$(stack_repo noblock)"
 echo 'module example.com/x' >"$SV/go.mod"
 printf '# acme\n\n## Verify\n\nTo do.\n' >"$SV/CLAUDE.md"

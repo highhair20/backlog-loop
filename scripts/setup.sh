@@ -233,7 +233,7 @@ ci_setup() {
       pm="$(node_pm)"
       case "$pm" in
         bun) echo "- uses: oven-sh/setup-bun" ;;
-        pnpm) printf '%s\n' "- uses: pnpm/action-setup" "- uses: actions/setup-node" ;;
+        pnpm) printf '%s\n' "- uses: pnpm/action-setup  # needs with: version:, unless package.json sets packageManager" "- uses: actions/setup-node" ;;
         *) echo "- uses: actions/setup-node" ;;
       esac
       case "$pm" in
@@ -269,22 +269,26 @@ print_proposal() {
   fi
 }
 
-# Puts commands $1 (one per line) at the end of the Verify code block, dropping
-# the skeleton's "# build:" placeholders and keeping any other comment. Fails, and
-# changes nothing, when the result would still have no Verify commands.
+# Puts commands $1 (one per line) at the top of the Verify code block, where the
+# skeleton's "# build:" placeholders are, dropping those and keeping any other
+# comment below the commands: a comment above a command scopes it to paths, so
+# one left above these would scope them too. Fails, and changes nothing, when the
+# result would still have no Verify commands.
 write_verify() {
   local tmp rc=0
   tmp="$(mktemp CLAUDE.md.XXXXXX)" || return 1
   VERIFY_CMDS="$1" awk '
     BEGIN { n = split(ENVIRON["VERIFY_CMDS"], cmds, "\n") }
     /^```/ {
-      if (in_verify && in_code && !done) { for (i = 1; i <= n; i++) print cmds[i]; done = 1 }
-      in_code = !in_code; print; next
+      print
+      in_code = !in_code
+      if (in_verify && in_code && !blocks++) for (i = 1; i <= n; i++) print cmds[i]
+      next
     }
     !in_code && /^## / { in_verify = ($0 ~ /^## Verify[[:space:]]*$/) }
-    in_verify && in_code && !done && /^#[[:space:]]*(build|lint|test):[[:space:]]*$/ { next }
+    in_verify && in_code && blocks == 1 && /^#[[:space:]]*(build|lint|test):[[:space:]]*$/ { next }
     { print }
-    END { exit !done }
+    END { exit !blocks }
   ' CLAUDE.md >"$tmp" && scripts/check-verify-section.sh "$tmp" >/dev/null 2>&1 && cat "$tmp" >CLAUDE.md || rc=1
   rm -f "$tmp"
   return "$rc"
