@@ -371,17 +371,17 @@ check_ci() {
 
 # Sync updates the example but never this machine's own allowlist, so a rule the
 # loop gained later (a new helper, a new git command) is missing here, and an
-# unattended run stops at the command it needs. Name each missing rule.
+# unattended run stops at the command it needs. Name each missing rule. The
+# comparison is the helper's, shared with backlog-loop.sh (#81).
 check_local_allow_rules() {
   [ -f "$LOCAL_SETTINGS.example" ] || return 0
-  local missing count
-  if ! missing="$(jq -r --slurpfile mine "$LOCAL_SETTINGS" \
-      '(.permissions.allow // []) - ($mine[0].permissions.allow // []) | .[]' \
-      "$LOCAL_SETTINGS.example" 2>/dev/null)"; then
-    warn "could not compare $LOCAL_SETTINGS with its example (invalid JSON?)"
-    return 0
-  fi
-  [ -n "$missing" ] || { ok "$LOCAL_SETTINGS has every rule the example allows"; return 0; }
+  local missing count rc=0
+  missing="$(scripts/missing-allow-rules.sh "$LOCAL_SETTINGS" 2>&1)" || rc=$?
+  case "$rc" in
+    0) ok "$LOCAL_SETTINGS has every rule the example allows"; return 0 ;;
+    1) ;;
+    *) warn "${missing:-could not compare $LOCAL_SETTINGS with its example}"; return 0 ;;
+  esac
   count="$(printf '%s\n' "$missing" | grep -c .)"
   warn "$LOCAL_SETTINGS is missing $count allow rule(s) the example has: $(printf '%s\n' "$missing" | paste -sd ' ' -)" \
     "add them to its allow list; an unattended run stops at the first command it is not allowed"
