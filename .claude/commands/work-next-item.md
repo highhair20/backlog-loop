@@ -46,9 +46,9 @@ or killed (closed terminal) at any moment — possibly mid-issue. Therefore:
   tool moves a slower command to the background. **Never end your turn while a
   command you started is still running:** in a headless run (`claude -p`, the driver,
   a routine) ending the turn ends the session, and the work is left unsaved on a
-  local branch. If one command can take longer than ten minutes, split it, or start
-  it in the background and wait for it within the same turn, checking its output,
-  until it finishes.
+  local branch. Never run one with `run_in_background`. If a command can take longer
+  than ten minutes, split it into parts that each finish within one call; if it
+  cannot be split, that is a setup problem (below): stop and report it.
 - **A tool call refused by the permission settings is a blocker only when no
   permitted way round it exists.** First try one: a dedicated tool instead of a shell
   command, or the command spelled as this file writes it (`git push -u origin
@@ -828,10 +828,11 @@ git switch -c <type>/<number>-<slug>
    applies to the changed paths passes locally, **and** every check in
    `## Definition of done` (if present) is satisfied and recorded in the PR body.
    Run the commands exactly as written; do not substitute or skip one because it is
-   slow. Run each in the foreground: raise the Bash tool's timeout (up to 600000 ms)
-   rather than let a slow one move to the background, and never end the turn to
-   wait for one (see the guardrails). If Verify marks a command as needing something this runner lacks (e.g.
+   slow. If Verify marks a command as needing something this runner lacks (e.g.
    Docker), follow its stated fallback and say so in the PR body.
+   Run each in the foreground: raise the Bash tool's timeout (up to 600000 ms)
+   rather than let a slow one move to the background, and never end the turn to
+   wait for one (see the guardrails).
 5. Do a quick self-review of your diff against the repo's code-quality checklist
    (small functions, error handling, no secrets, no debug prints) before shipping.
 
