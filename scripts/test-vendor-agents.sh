@@ -22,17 +22,26 @@ printf 'MIT License\n\nCopyright (c) test\n' >"$ECC/LICENSE"
 git -C "$ECC" init -q -b main && git -C "$ECC" add -A && git_q -C "$ECC" commit -qm ecc
 ECC_SHA="$(git -C "$ECC" rev-parse HEAD)"
 
-# A target repo with context for the given agents.
+# A target repo with context for the given agents, pinned to the fake ECC's
+# current commit.
 target() { # target <name> <agent>...
   local dir="$WORK/$1" a; shift
   mkdir -p "$dir/scripts" "$dir/.claude/agents" "$dir/.claude/agent-context"
   git -C "$dir" init -q -b main
   cp "$ROOT/scripts/vendor-agents.sh" "$dir/scripts/"
+  git -C "$ECC" rev-parse HEAD >"$dir/scripts/ECC_PIN"
   echo "COMMON: review only the given files." >"$dir/.claude/agent-context/_common.md"
   for a in "$@"; do echo "CONTEXT for $a." >"$dir/.claude/agent-context/$a.md"; done
   echo "$dir"
 }
-run() { (cd "$1" && ECC_ROOT="${2:-$ECC}" scripts/vendor-agents.sh) >"$1/out" 2>&1; }
+# run <dir> [ecc-root] [arg]...
+run() {
+  local dir="$1" ecc="${2:-$ECC}"
+  shift; [ $# -gt 0 ] && shift
+  (cd "$dir" && ECC_ROOT="$ecc" scripts/vendor-agents.sh "$@") >"$dir/out" 2>&1
+}
+# Commit everything in the fake ECC checkout, so it is clean at a new commit.
+ecc_commit() { git -C "$ECC" add -A && git_q -C "$ECC" commit -qm "$1"; }
 
 T="$(target ok alpha)"
 run "$T"; rc=$?
@@ -76,14 +85,120 @@ check "leaves agents it did not generate alone" "[ -f '$R/.claude/agents/mine.md
 
 # Upstream frontmatter that never closes would silently drop the context block.
 printf -- '---\nname: broken\n\n# no closing marker\n' >"$ECC/agents/broken.md"
+ecc_commit "add broken"
 B="$(target broken broken)"
 run "$B"; rc=$?
-check "refuses upstream frontmatter with no closing ---" "[ $rc -ne 0 ] && [ ! -e '$B/.claude/agents/broken.md' ]"
-rm "$ECC/agents/broken.md"
+check "refuses upstream frontmatter with no closing ---" "[ $rc -ne 0 ] && [ ! -e '$B/.claude/agents/broken.md' ] && grep -q 'frontmatter' '$B/out'"
+# A failed --adopt must not move the pin: it would claim agents never vendored.
+echo 0123456789abcdef0123456789abcdef01234567 >"$B/scripts/ECC_PIN"
+run "$B" "$ECC" --adopt; rc=$?
+check "a failed --adopt keeps the old pin" "[ $rc -ne 0 ] && grep -qx 0123456789abcdef0123456789abcdef01234567 '$B/scripts/ECC_PIN'"
+git -C "$ECC" rm -q agents/broken.md && ecc_commit "remove broken"
 
 M="$(target missing alpha)"
 run "$M" "$WORK/no-such-ecc"; rc=$?
 check "refuses without an ECC checkout" "[ $rc -ne 0 ] && grep -q 'ECC_ROOT' '$M/out'"
+
+# A plain copy of ECC inside another repo: git would report that repo's commit.
+OUTER="$WORK/outer"
+mkdir -p "$OUTER" && git -C "$OUTER" init -q -b main
+mkdir -p "$OUTER/ecc-copy" && cp -R "$ECC/agents" "$ECC/LICENSE" "$OUTER/ecc-copy/"
+git -C "$OUTER" add -A && git_q -C "$OUTER" commit -qm outer
+git -C "$OUTER" rev-parse HEAD >"$M/scripts/ECC_PIN"
+run "$M" "$OUTER/ecc-copy"; rc=$?
+check "refuses an ECC copy that is not the top of its own checkout" "[ $rc -ne 0 ] && grep -q 'top of a git checkout' '$M/out' && [ -z \"\$(ls -A '$M/.claude/agents')\" ]"
+
+# --- the pin: vendor only from the ECC commit named in scripts/ECC_PIN ---
+head_sha() { git -C "$ECC" rev-parse HEAD; }
+# shellcheck disable=SC2034  # read inside check's eval strings
+OTHER=0123456789abcdef0123456789abcdef01234567
+
+P="$(target pinned alpha)"
+run "$P"; rc=$?
+check "vendors when the checkout is at the pinned commit" "[ $rc -eq 0 ] && grep -q \"\$(head_sha)\" '$P/.claude/agents/alpha.md'"
+check "leaves a matching pin as it is" "[ \"\$(cat '$P/scripts/ECC_PIN')\" = \"\$(head_sha)\" ]"
+
+X="$(target mismatch alpha)"
+echo "$OTHER" >"$X/scripts/ECC_PIN"
+run "$X"; rc=$?
+check "refuses a checkout at another commit, naming both and --adopt" \
+  "[ $rc -ne 0 ] && grep -q '$OTHER' '$X/out' && grep -q \"\$(head_sha)\" '$X/out' && grep -q -- '--adopt' '$X/out'"
+check "writes nothing on a pin mismatch" "[ -z \"\$(ls -A '$X/.claude/agents')\" ] && [ \"\$(cat '$X/scripts/ECC_PIN')\" = '$OTHER' ]"
+run "$X" "$ECC" --adopt; rc=$?
+check "--adopt vendors from the checkout's commit" "[ $rc -eq 0 ] && grep -q \"\$(head_sha)\" '$X/.claude/agents/alpha.md'"
+check "--adopt updates the pin to that commit" "[ \"\$(cat '$X/scripts/ECC_PIN')\" = \"\$(head_sha)\" ]"
+run "$X"; rc=$?
+check "after --adopt, a plain run vendors" "[ $rc -eq 0 ]"
+
+Z="$(target nopin alpha)"
+rm "$Z/scripts/ECC_PIN"
+run "$Z"; rc=$?
+check "refuses with no pin file, naming --adopt" "[ $rc -ne 0 ] && grep -q -- '--adopt' '$Z/out' && [ -z \"\$(ls -A '$Z/.claude/agents')\" ]"
+run "$Z" "$ECC" --adopt; rc=$?
+check "--adopt writes a missing pin" "[ $rc -eq 0 ] && [ \"\$(cat '$Z/scripts/ECC_PIN')\" = \"\$(head_sha)\" ]"
+
+for bad in main "" "$OTHER extra" "${OTHER:0:7}" "$(printf '%s' "$OTHER" | tr a-f A-F)"; do
+  W="$(target "badpin-${#bad}" alpha)"
+  printf '%s\n' "$bad" >"$W/scripts/ECC_PIN"
+  run "$W"; rc=$?
+  check "refuses a malformed pin ('$bad')" "[ $rc -ne 0 ] && grep -q 'ECC_PIN' '$W/out' && [ -z \"\$(ls -A '$W/.claude/agents')\" ]"
+done
+
+C="$(target crlf alpha)"
+printf '%s\r\n' "$(head_sha)" >"$C/scripts/ECC_PIN"
+run "$C"; rc=$?
+check "accepts a pin saved with a CRLF line ending" "[ $rc -eq 0 ]"
+
+# What is vendored is the pinned commit's content, whatever the working tree
+# holds: an edit, an assume-unchanged edit that git status hides, or a file
+# ignored there that the commit never had.
+D="$(target dirty alpha extra)"
+echo "TAMPERED" >>"$ECC/agents/alpha.md"
+echo "TAMPERED" >>"$ECC/LICENSE"
+printf -- '---\nname: extra\n---\nTAMPERED\n' >"$ECC/agents/extra.md"
+echo "agents/extra.md" >>"$ECC/.git/info/exclude"
+run "$D"; rc=$?
+check "refuses an agent that exists only in the working tree, even if ignored" "[ $rc -ne 0 ] && grep -q \"no agent named 'extra'\" '$D/out' && [ -z \"\$(ls -A '$D/.claude/agents')\" ]"
+rm "$D/.claude/agent-context/extra.md"
+run "$D"; rc=$?
+check "vendors the committed agent, not a working-tree edit" "[ $rc -eq 0 ] && ! grep -q TAMPERED '$D/.claude/agents/alpha.md' && grep -q 'Upstream body line' '$D/.claude/agents/alpha.md'"
+check "vendors the committed LICENSE, not a working-tree edit" "! grep -q TAMPERED '$D/.claude/agents/LICENSE.ECC' && grep -q 'MIT License' '$D/.claude/agents/LICENSE.ECC'"
+git -C "$ECC" checkout -q -- agents/alpha.md LICENSE
+git -C "$ECC" update-index --assume-unchanged agents/alpha.md
+echo "TAMPERED" >>"$ECC/agents/alpha.md"
+run "$D"; rc=$?
+check "vendors the committed agent under an assume-unchanged edit" "[ $rc -eq 0 ] && ! grep -q TAMPERED '$D/.claude/agents/alpha.md'"
+git -C "$ECC" update-index --no-assume-unchanged agents/alpha.md
+git -C "$ECC" checkout -q -- agents/alpha.md
+rm "$ECC/agents/extra.md"
+
+# The pin is written last: a run that fails while writing agents keeps the old one.
+# A read-only directory stops nothing for root, so the case needs another user.
+if [ "$(id -u)" -ne 0 ]; then
+  F="$(target writefail alpha)"
+  echo "$OTHER" >"$F/scripts/ECC_PIN"
+  chmod a-w "$F/.claude/agents"
+  run "$F" "$ECC" --adopt; rc=$?
+  chmod u+w "$F/.claude/agents"
+  check "a --adopt that fails writing agents keeps the old pin" "[ $rc -ne 0 ] && [ \"\$(cat '$F/scripts/ECC_PIN')\" = '$OTHER' ]"
+else
+  echo "skip a --adopt that fails writing agents keeps the old pin (running as root)"
+fi
+
+# --adopt must not write a pin that every later run would refuse.
+E256="$WORK/ecc256"
+if git init -q --object-format=sha256 -b main "$E256" 2>/dev/null; then
+  cp -R "$ECC/agents" "$ECC/LICENSE" "$E256/"
+  git -C "$E256" add -A && git_q -C "$E256" commit -qm ecc
+  Q="$(target sha256 alpha)"
+  run "$Q" "$E256" --adopt; rc=$?
+  check "--adopt refuses a SHA-256 ECC and keeps the pin" "[ $rc -ne 0 ] && grep -q 'SHA-1' '$Q/out' && [ \"\$(cat '$Q/scripts/ECC_PIN')\" = \"\$(head_sha)\" ] && [ -z \"\$(ls -A '$Q/.claude/agents')\" ]"
+else
+  echo "skip --adopt refuses a SHA-256 ECC (this git cannot make one)"
+fi
+
+run "$P" "$ECC" --bogus; rc=$?
+check "refuses an unknown argument, with usage" "[ $rc -ne 0 ] && grep -qi 'usage' '$P/out'"
 
 # --- the optional stack reviewers in .claude/agent-context/optional/ ---
 # A repo enables one by copying it into .claude/agent-context/ and re-running, so
@@ -111,6 +226,8 @@ for tpl in ${templates[@]+"${templates[@]}"}; do
   printf -- '---\nname: %s\ndescription: Upstream %s.\n---\n\n# %s upstream body\n' "$a" "$a" "$a" >"$ECC/agents/$a.md"
   cp "$tpl" "$S/.claude/agent-context/"
 done
+ecc_commit "add stack agents"
+git -C "$ECC" rev-parse HEAD >"$S/scripts/ECC_PIN"
 run "$S"; rc=$?
 check "builds every template context" "[ $rc -eq 0 ] && [ ${#templates[@]} -gt 0 ]"
 [ "$rc" -eq 0 ] || cat "$S/out" >&2
@@ -132,6 +249,11 @@ for ctx in ${contexts[@]+"${contexts[@]}"}; do
     "[ -f '$agent' ] && contains '$agent' '$ctx' && contains '$agent' '$ROOT/.claude/agent-context/_common.md'"
 done
 check "the ECC license ships with the vendored agents" "grep -q 'MIT License' '$ROOT/.claude/agents/LICENSE.ECC'"
+pin="$(cat "$ROOT/scripts/ECC_PIN" 2>/dev/null)"
+check "this repo pins a full ECC commit" "printf '%s' '$pin' | grep -qxE '[0-9a-f]{40}'"
+for agent in "$ROOT"/.claude/agents/*.md; do
+  check "$(basename "$agent") was vendored at the pinned commit" "grep -qF 'at commit $pin,' '$agent'"
+done
 
 echo
 if [ "$failures" -eq 0 ]; then echo "all tests passed"; else echo "$failures test(s) failed" >&2; exit 1; fi

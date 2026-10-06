@@ -24,6 +24,10 @@ removes it from a repo made with "Use this template", and sync never copies it.
 - `scripts/backlog-loop.sh`: when a session makes no progress and leaves
   uncommitted edits or unpushed commits, the driver names the branch and the
   session's log, instead of only "no progress" (#85).
+- `scripts/vendor-agents.sh` vendors only from the ECC commit pinned in the new
+  seeded `scripts/ECC_PIN`. It refuses a checkout at any other commit and reads
+  the agents and `LICENSE` from the commit, never the working tree; `--adopt`
+  vendors from the checkout's commit and pins it (#97).
 
 ### Fixed
 
@@ -34,7 +38,13 @@ removes it from a repo made with "Use this template", and sync never copies it.
 
 ### Manual steps for existing repos
 
-- None.
+- **`scripts/ECC_PIN`:** a sync seeds the template's pin. If your reviewer agents
+  were vendored from another ECC commit (the commit is in each agent's
+  "Vendored from ECC" line), `vendor-agents.sh` now refuses until you either check
+  out the pinned commit or run `scripts/vendor-agents.sh --adopt` from a checkout you
+  have reviewed. Commit the pin with the agents.
+- **`docs/BACKLOG.md`** (seeded) gained a paragraph on the pin under "Reviewers";
+  copy it from the template if you want it.
 
 ## [0.1.0] - 2026-10-04
 
