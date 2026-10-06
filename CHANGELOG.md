@@ -44,6 +44,10 @@ removes it from a repo made with "Use this template", and sync never copies it.
   If a file it would write, or a directory above one, is a symlink, it names it and
   writes nothing, so a committed link cannot send the sync's writes outside the
   repo (#96).
+- `scripts/sync-guardrails.sh` treats a hook as the template's only when its
+  command runs a managed hook script by its path. A repo's own hook whose command
+  merely contains a managed script's name (`my-setup.sh-wrapper`, `scripts/setup.sh`)
+  was dropped on sync; it is now kept (#98).
 
 ### Manual steps for existing repos
 
@@ -58,6 +62,8 @@ removes it from a repo made with "Use this template", and sync never copies it.
   which also hides the logs earlier runs wrote there. If you set `LOG_DIR` to a
   directory of your own, the driver leaves it as it is: run
   `chmod 700 "$LOG_DIR" && chmod 600 "$LOG_DIR"/item-*.log` to hide earlier logs.
+- If an earlier sync dropped one of your own hooks from `.claude/settings.json`
+  (#98), restore it from that file's git history. Otherwise a re-sync is enough.
 
 ## [0.1.0] - 2026-10-04
 

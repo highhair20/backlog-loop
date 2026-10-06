@@ -85,19 +85,30 @@ die() { echo "sync-guardrails: $*" >&2; exit 1; }
 # stays in synced repos — the script cannot tell it from one the repo added.
 #
 # Hooks: registrations of the managed hook scripts are managed too. Any target
-# command naming one is dropped, then the template's entries are added, so a
-# changed invocation replaces the old one instead of running twice. Other hooks
-# are kept, and a template entry is added only if one of its commands is new.
+# command that runs one is dropped, then the template's entries are added, so a
+# changed invocation replaces the old one instead of running twice. A command
+# runs one when the script it runs (its first shell word with quotes removed, or
+# the second after a leading sh or bash) is the script's path or ends in
+# /<path>; a command that only mentions the name (my-setup.sh-wrapper) is the
+# repo's own (#98). Other hooks, including those with no command, are kept, and
+# a template entry is added only if one of its commands is new.
 merge_settings() {
-  local managed
-  managed="$(printf '%s\n' "${MANAGED[@]##*/}" | jq -R . | jq -s .)"
-  jq -s --argjson managed "$managed" '
-    def is_managed: . as $c | [$managed[] as $m | $c | contains($m)] | any;
+  local managed f hook_paths=()
+  for f in "${MANAGED[@]}"; do
+    case "$f" in .claude/hooks/*) hook_paths+=("$f") ;; esac
+  done
+  managed="$(printf '%s\n' ${hook_paths[@]+"${hook_paths[@]}"} | jq -R 'select(length > 0)' | jq -s .)"
+  jq -s --argjson managed "$managed" \
+    --arg word "(?:\"[^\"]*\"|'[^']*'|[^\\s\"'])+" --arg quote "[\"']" '
+    def script_path: [scan($word) | gsub($quote; "")]
+      | if ((.[0] // "") | test("^(.*/)?(ba)?sh$")) then .[1:] else . end
+      | .[0] // "";
+    def is_managed: script_path as $p | any($managed[]; . as $m | $p == $m or ($p | endswith("/" + $m)));
     .[0] as $t | .[1] as $s
     | $t
     | .permissions.deny = (($t.permissions.deny // []) + (($s.permissions.deny // []) - ($t.permissions.deny // [])))
     | .hooks = (($t.hooks // {})
-        | map_values(map(.hooks |= map(select(.command | is_managed | not))) | map(select(.hooks | length > 0))))
+        | map_values(map(.hooks |= map(select((.command // "") | is_managed | not))) | map(select(.hooks | length > 0))))
     | .hooks = reduce (($s.hooks // {}) | to_entries[]) as $e (.hooks;
         .[$e.key] = ((.[$e.key] // []) as $cur
           | $cur + [ $e.value[] | select(([.hooks[].command] - [$cur[].hooks[]?.command]) | length > 0) ]))
