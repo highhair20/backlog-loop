@@ -37,6 +37,7 @@ case "\$*" in
   "auth status") exit \${FAKE_BARE_AUTH_RC:-\${FAKE_AUTH_RC:-0}} ;;
   "auth status --hostname github.com"|"auth status --hostname ghe.example.com") exit \${FAKE_AUTH_RC:-0} ;;
   "repo view "*"/o/r --json url,defaultBranchRef"*) echo "\${FAKE_REPO_URL-https://github.com/o/r} \${FAKE_BRANCH-main}" ;;
+  "repo view "*"/o/r --json visibility"*) [ -z "\${FAKE_VISIBILITY_RC:-}" ] || exit "\$FAKE_VISIBILITY_RC"; echo "\${FAKE_VISIBILITY-PRIVATE}" ;;
   "repo set-default --view") echo "\${FAKE_DEFAULT:-}" ;;
   "repo view --json url --jq .url") echo "https://\${FAKE_HOST:-github.com}/o/r" ;;
   "label list"*) echo "\$*" >>"$dir/.fake/label-calls"; cat "$dir/.fake/labels" ;;
@@ -205,6 +206,37 @@ R="$(configured_repo disabled)"
 echo '[{"id": 1, "name": "protect-main", "enforcement": "disabled"}]' >"$R/.fake/rulesets"
 run "$R"; rc=$?
 check "a ruleset that is not enforced fails" "[ $rc -eq 1 ] && grep -q 'protect-main exists but is disabled' '$R/.fake/out'"
+
+# On a public repo anyone can write an issue the loop then follows, so the proposal
+# gate off is a warning that points to the README's Security section (#100).
+gate_case() { # gate_case <warns|quiet> <description> <visibility> [Gate: line]
+  local expect="$1" desc="$2" vis="$3" dir
+  dir="$(configured_repo gate)"
+  [ -z "${4:-}" ] || printf '\n## Proposal gate\n\n%s\n- Machine-filed label: none\n' "$4" >>"$dir/CLAUDE.md"
+  FAKE_VISIBILITY="$vis" run "$dir"; rc=$?
+  if [ "$expect" = warns ]; then
+    check "gate warning: $desc" "[ $rc -eq 0 ] && grep -q 'public, and the proposal gate is off.*README.md#security' '$dir/.fake/out' && grep -qF 'Gate: on' '$dir/.fake/out'"
+  else
+    check "no gate warning: $desc" "[ $rc -eq 0 ] && ! grep -q 'proposal gate is off' '$dir/.fake/out' && grep -q 'proposal gate' '$dir/.fake/out'"
+  fi
+  rm -rf "$dir"
+}
+gate_case warns "public, gate off" PUBLIC "- Gate: off"
+gate_case warns "public, no Proposal gate section" PUBLIC
+gate_case warns "public, an unreadable gate setting" PUBLIC "- Gate: maybe"
+gate_case quiet "public, gate on" PUBLIC "- Gate: on"
+gate_case quiet "public, gate on in another case and spacing" PUBLIC "-   gate :ON "
+gate_case quiet "private, gate off" PRIVATE "- Gate: off"
+gate_case quiet "internal, gate off" INTERNAL "- Gate: off"
+check "a fresh repo from the skeleton, private, gets no gate warning" "! grep -q 'proposal gate is off' '$F/.fake/out'"
+GV="$(configured_repo novisibility)"
+FAKE_VISIBILITY_RC=1 run "$GV"; rc=$?
+check "an unreadable visibility is a warning, not a failure" "[ $rc -eq 0 ] && grep -q 'could not read the visibility of o/r' '$GV/.fake/out'"
+# A Gate: line in another section is not the gate.
+GO="$(configured_repo gateelsewhere)"
+printf '\n## Notes\n\n- Gate: on\n' >>"$GO/CLAUDE.md"
+FAKE_VISIBILITY=PUBLIC run "$GO"
+check "a Gate: line outside ## Proposal gate does not count" "grep -q 'proposal gate is off' '$GO/.fake/out'"
 
 # A repo made with "Use this template" starts with the template's own CLAUDE.md.
 O="$(fresh_repo owncopy)"

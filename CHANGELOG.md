@@ -24,6 +24,9 @@ removes it from a repo made with "Use this template", and sync never copies it.
 - `scripts/backlog-loop.sh`: when a session makes no progress and leaves
   uncommitted edits or unpushed commits, the driver names the branch and the
   session's log, instead of only "no progress" (#85).
+- A README "Security" section: what the loop can do with your credentials, what to
+  set on a public repo, and why the `protect-main` ruleset is required.
+  `scripts/setup.sh` warns when a public repo has the proposal gate off (#100).
 
 ### Manual steps for existing repos
 

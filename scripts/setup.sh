@@ -550,6 +550,40 @@ check_ruleset() {
   fi
 }
 
+# The value of the Gate: line under ## Proposal gate, lowercased with spaces
+# dropped, as /work-next-item reads it ("gate:ON" is on). Empty when there is none.
+proposal_gate() {
+  [ -f CLAUDE.md ] || return 0
+  awk '
+    /^```/ { in_code = !in_code; next }
+    !in_code && /^## / { in_gate = ($0 ~ /^## Proposal gate[[:space:]]*$/); next }
+    in_gate {
+      line = tolower($0)
+      gsub(/[[:space:]]/, "", line)
+      if (sub(/^-?gate:/, "", line)) { print line; exit }
+    }
+  ' CLAUDE.md
+}
+
+# On a public repo anyone can write an issue, and once it is labelled the loop
+# follows it with your credentials, so the proposal gate should be on (#100).
+check_security() {
+  echo "Security"
+  local visibility
+  if ! visibility="$(gh repo view "$repo_full" --json visibility --jq .visibility 2>/dev/null)" || [ -z "$visibility" ]; then
+    warn "could not read the visibility of $repo, so the proposal gate was not checked (see README.md#security)"
+    return
+  fi
+  if [ "$visibility" != PUBLIC ]; then
+    ok "$repo is not public ($(printf '%s' "$visibility" | tr '[:upper:]' '[:lower:]')), so the proposal gate is your choice"
+  elif [ "$(proposal_gate)" = on ]; then
+    ok "$repo is public, and the proposal gate is on"
+  else
+    warn "$repo is public, and the proposal gate is off: a labelled issue from anyone steers the loop (see README.md#security)" \
+      "set '- Gate: on' under ## Proposal gate in CLAUDE.md"
+  fi
+}
+
 # Whether config file $1 links to the issue guide of the repo at URL $2, on any
 # branch. Case-insensitive, like GitHub's owner and repo names. Comments never count.
 guide_linked() { # guide_linked <config> <repo-url>
@@ -675,6 +709,7 @@ main() {
   if check_github; then
     echo; check_labels
     echo; check_ruleset
+    echo; check_security
     echo; check_issue_chooser
   fi
   echo
