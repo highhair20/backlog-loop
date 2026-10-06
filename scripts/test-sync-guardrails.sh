@@ -85,6 +85,8 @@ check "copies missing-allow-rules.sh, executable" "[ -x '$T/scripts/missing-allo
 check "copies template-version.sh, executable" "[ -x '$T/scripts/template-version.sh' ]"
 check "copies vendor-agents.sh, executable" "[ -x '$T/scripts/vendor-agents.sh' ]"
 check "seeds the reviewer agents, their context, and the ECC license" "[ -f '$T/.claude/agents/pr-test-analyzer.md' ] && [ -f '$T/.claude/agents/silent-failure-hunter.md' ] && [ -f '$T/.claude/agent-context/_common.md' ] && [ -f '$T/.claude/agents/LICENSE.ECC' ]"
+# vendor-agents.sh refuses to run without it (#97); it matches the seeded agents.
+check "seeds the ECC pin" "cmp -s '$HERE/ECC_PIN' '$T/scripts/ECC_PIN'"
 # Inert until a repo copies one into .claude/agent-context/.
 seeds_stack_contexts() {
   local a
@@ -116,6 +118,65 @@ check "refuses a non-git directory" "[ \$? -ne 0 ]"
 
 "$SYNC" >/dev/null 2>&1
 check "refuses a missing argument" "[ \$? -ne 0 ]"
+
+# --- a committed symlink is never written through (#96) ---
+# A new target whose path $2 is a committed symlink to $3.
+link_target() {
+  local dir
+  dir="$(new_target "$1")"
+  mkdir -p "$dir/$(dirname "$2")"
+  rm -rf "${dir:?}/$2"
+  ln -s "$3" "$dir/$2"
+  git -C "$dir" add -A && git -C "$dir" -c user.name=t -c user.email=t@t commit -qm link
+  echo "$dir"
+}
+
+# One of each kind of write: managed copy, settings merge, .gitignore merge, version stamp.
+for rel in .claude/commands/work-next-item.md .claude/settings.json .gitignore .claude/template-version; do
+  # Valid JSON, so a settings merge through the link would succeed and change it.
+  out="$WORK/outside-${rel//\//_}"
+  echo '{"outside": true}' >"$out"
+  L="$(link_target "link${rel//\//_}" "$rel" "$out")"
+  "$SYNC" "$L" >"$WORK/link.out" 2>&1
+  rc=$?
+  check "refuses a symlinked $rel, naming it" "[ $rc -ne 0 ] && grep -q 'symlink' '$WORK/link.out' && grep -qF '$rel' '$WORK/link.out'"
+  check "leaves the file behind a symlinked $rel unchanged" "[ \"\$(cat '$out')\" = '{\"outside\": true}' ]"
+  check "writes nothing into a target with a symlinked $rel" "[ -z \"\$(git -C '$L' status --porcelain)\" ] && [ ! -e '$L/scripts' ]"
+done
+
+# A symlinked parent directory sends every write under it outside the repo.
+OUTDIR="$WORK/outside-dir"
+mkdir -p "$OUTDIR" && echo '{}' >"$OUTDIR/settings.json"
+L="$(link_target linkdir .claude "$OUTDIR")"
+"$SYNC" "$L" >"$WORK/linkdir.out" 2>&1
+rc=$?
+check "refuses a symlinked .claude directory, naming it" "[ $rc -ne 0 ] && grep -q 'symlink' '$WORK/linkdir.out' && grep -qF '.claude' '$WORK/linkdir.out'"
+check "leaves the directory behind a symlinked .claude unchanged" "[ \"\$(ls -A '$OUTDIR')\" = settings.json ] && [ \"\$(cat '$OUTDIR/settings.json')\" = '{}' ]"
+check "writes nothing into a target with a symlinked .claude" "[ -z \"\$(git -C '$L' status --porcelain)\" ] && [ ! -e '$L/scripts' ]"
+
+# The walk checks every directory, not only the first: here the link is two deep.
+OUTWF="$WORK/outside-workflows"
+mkdir -p "$OUTWF"
+L="$(link_target linknested .github/workflows "$OUTWF")"
+"$SYNC" "$L" >"$WORK/linknested.out" 2>&1
+rc=$?
+check "refuses a symlinked directory below the top level, naming it" "[ $rc -ne 0 ] && grep -qF '.github/workflows' '$WORK/linknested.out'"
+check "writes nothing behind a nested symlinked directory" "[ -z \"\$(ls -A '$OUTWF')\" ] && [ ! -e '$L/scripts' ]"
+
+# [ -e ] calls a dangling link missing, so the seeding would cp through it.
+mkdir -p "$WORK/dangling"
+L="$(link_target linkdangling docs/BACKLOG.md "$WORK/dangling/BACKLOG.md")"
+"$SYNC" "$L" >"$WORK/dangling.out" 2>&1
+rc=$?
+check "refuses a dangling symlink at a seeded path" "[ $rc -ne 0 ] && grep -qF 'docs/BACKLOG.md' '$WORK/dangling.out'"
+check "creates nothing behind a dangling seeded symlink" "[ ! -e '$WORK/dangling/BACKLOG.md' ]"
+
+# A seeded file the sync skips is never written, so its link is no risk.
+L="$(link_target linkskipped CLAUDE.md AGENTS.md)"
+echo "# Agents" >"$L/AGENTS.md"
+git -C "$L" add -A && git -C "$L" -c user.name=t -c user.email=t@t commit -qm agents
+"$SYNC" "$L" >/dev/null 2>&1
+check "syncs a target whose skipped seeded file is a symlink" "[ \$? -eq 0 ] && [ -x '$L/scripts/setup.sh' ] && grep -qx '# Agents' '$L/AGENTS.md'"
 
 # --- a target with no settings.json gets the template's ---
 B="$WORK/bare"
@@ -169,10 +230,13 @@ check "keeps a repo hook with no command" "jq -e '[.hooks.Stop[].hooks[].prompt 
 
 # --- a repo's own reviewer agent is kept ---
 V="$(new_target ownagent)"
-mkdir -p "$V/.claude/agents" && echo "# my own reviewer" >"$V/.claude/agents/pr-test-analyzer.md"
+mkdir -p "$V/.claude/agents" "$V/scripts" && echo "# my own reviewer" >"$V/.claude/agents/pr-test-analyzer.md"
+# A repo that adopted another ECC commit keeps its pin, which matches its agents.
+echo 0123456789abcdef0123456789abcdef01234567 >"$V/scripts/ECC_PIN"
 git -C "$V" add -A && git -C "$V" -c user.name=t -c user.email=t@t commit -qm agent
 "$SYNC" "$V" >/dev/null 2>&1
 check "keeps a repo's own version of a seeded agent" "grep -qx '# my own reviewer' '$V/.claude/agents/pr-test-analyzer.md'"
+check "keeps a repo's own ECC pin" "grep -qx 0123456789abcdef0123456789abcdef01234567 '$V/scripts/ECC_PIN'"
 # Its context file would make the next vendor-agents.sh run target that agent.
 check "seeds no context for an agent the repo already has" "[ ! -e '$V/.claude/agent-context/pr-test-analyzer.md' ] && [ -f '$V/.claude/agent-context/silent-failure-hunter.md' ]"
 

@@ -62,6 +62,9 @@ SEEDED=(
   .claude/agents/pr-test-analyzer.md
   .claude/agents/silent-failure-hunter.md
   .claude/agents/LICENSE.ECC
+  # The ECC commit the agents above were vendored from. Seeded, not managed: a
+  # repo that adopts a newer commit with vendor-agents.sh --adopt keeps it.
+  scripts/ECC_PIN
   # Optional stack reviewers. They stay off only because vendor-agents.sh reads
   # the top level of .claude/agent-context/, never optional/; a repo turns one on
   # by copying it up a level. If vendor-agents.sh ever searches subfolders, this
@@ -151,6 +154,61 @@ has_pr_template() {
   return 1
 }
 
+# True if seeded file $2 is to be copied into target $1, where $3 is 1 if the
+# target had issue templates of its own before seeding.
+should_seed() {
+  local target="$1" f="$2" had_issue_templates="$3"
+  case "$f" in
+    .github/ISSUE_TEMPLATE/config.yml) has_equivalent "$target" "$f" && return 1 ;;
+    .github/ISSUE_TEMPLATE/*) [ "$had_issue_templates" -eq 0 ] || return 1 ;;
+    .github/pull_request_template.md) has_pr_template "$target" && return 1 ;;
+    # A context file makes vendor-agents.sh build that agent, so none for an
+    # agent the repo already has (its own, or one it built another way). The
+    # optional/ files match here too, on purpose: a repo with its own go-reviewer
+    # does not need a second, inactive context for it.
+    .claude/agent-context/_common.md) has_equivalent "$target" "$f" && return 1 ;;
+    .claude/agent-context/*)
+      [ -e "$target/.claude/agents/${f##*/}" ] && return 1
+      has_equivalent "$target" "$f" && return 1 ;;
+    *) has_equivalent "$target" "$f" && return 1 ;;
+  esac
+  # The placeholder CI fails on purpose. Next to a repo's existing workflows it
+  # would only add a red check, so seed it only into a repo with no CI at all.
+  if [ "$f" = .github/workflows/ci.yml ] && compgen -G "$target/.github/workflows/*.y*ml" >/dev/null; then
+    echo "skipped $f: the repo already has workflows"
+    return 1
+  fi
+  return 0
+}
+
+# The first symlink on the way from target $1 down to its path $2, relative to $1.
+# cp, >, >>, touch, chmod and mkdir -p all follow one, so a committed link would
+# send the write outside the repo.
+symlink_on_path() {
+  local p="" rest="$2"
+  while [ -n "$rest" ]; do
+    p="${p:+$p/}${rest%%/*}"
+    case "$rest" in */*) rest="${rest#*/}" ;; *) rest="" ;; esac
+    if [ -L "$1/$p" ]; then
+      echo "$p"
+      return 0
+    fi
+  done
+  return 1
+}
+
+# Dies, naming each symlink, if any path in $2... under target $1 runs through one.
+# Called before the first write, so a refusal leaves the target untouched (#96).
+refuse_symlinks() {
+  local target="$1" rel link found=""
+  shift
+  for rel in "$@"; do
+    link="$(symlink_on_path "$target" "$rel")" || continue
+    case " $found " in *" $link "*) ;; *) found="$found $link" ;; esac
+  done
+  [ -z "$found" ] || die "refusing to write through a symlink in $target:$found. Replace each with a real file or directory, commit, and sync again."
+}
+
 # Where the template keeps a seeded file. The root CLAUDE.md is the template
 # repo's own instructions; repos get the project skeleton instead.
 seed_source() {
@@ -201,38 +259,25 @@ main() {
   [ "$target" != "$TEMPLATE" ] || die "target is the template itself"
   [ -z "$(git -C "$target" status --porcelain)" ] || die "target has uncommitted changes; commit or stash first so the sync diff is reviewable"
 
-  local f
+  # Every write is decided before the first one, so the symlink check covers them
+  # all. Only seeded files that will be copied count: one the repo already has is
+  # never written, whatever it is.
+  local had_issue_templates=0 f seeds=()
+  has_issue_templates "$target" && had_issue_templates=1
+  for f in "${SEEDED[@]}"; do
+    if should_seed "$target" "$f" "$had_issue_templates"; then
+      seeds+=("$f")
+    fi
+  done
+  refuse_symlinks "$target" "${MANAGED[@]}" ${seeds[@]+"${seeds[@]}"} "$SETTINGS" .gitignore "$VERSION_FILE"
+
   for f in "${MANAGED[@]}"; do
     mkdir -p "$target/$(dirname "$f")"
     cp "$TEMPLATE/$f" "$target/$f"
     case "$f" in *.sh) chmod +x "$target/$f" ;; esac
   done
 
-  # Decided before seeding: the first form seeded must not hide the second.
-  local had_issue_templates=0
-  has_issue_templates "$target" && had_issue_templates=1
-
-  for f in "${SEEDED[@]}"; do
-    case "$f" in
-      .github/ISSUE_TEMPLATE/config.yml) has_equivalent "$target" "$f" && continue ;;
-      .github/ISSUE_TEMPLATE/*) [ "$had_issue_templates" -eq 0 ] || continue ;;
-      .github/pull_request_template.md) has_pr_template "$target" && continue ;;
-      # A context file makes vendor-agents.sh build that agent, so none for an
-      # agent the repo already has (its own, or one it built another way). The
-      # optional/ files match here too, on purpose: a repo with its own go-reviewer
-      # does not need a second, inactive context for it.
-      .claude/agent-context/_common.md) has_equivalent "$target" "$f" && continue ;;
-      .claude/agent-context/*)
-        [ -e "$target/.claude/agents/${f##*/}" ] && continue
-        has_equivalent "$target" "$f" && continue ;;
-      *) has_equivalent "$target" "$f" && continue ;;
-    esac
-    # The placeholder CI fails on purpose. Next to a repo's existing workflows it
-    # would only add a red check, so seed it only into a repo with no CI at all.
-    if [ "$f" = .github/workflows/ci.yml ] && compgen -G "$target/.github/workflows/*.y*ml" >/dev/null; then
-      echo "skipped $f: the repo already has workflows"
-      continue
-    fi
+  for f in ${seeds[@]+"${seeds[@]}"}; do
     mkdir -p "$target/$(dirname "$f")"
     cp "$TEMPLATE/$(seed_source "$f")" "$target/$f"
   done

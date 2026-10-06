@@ -24,9 +24,17 @@ removes it from a repo made with "Use this template", and sync never copies it.
 - `scripts/backlog-loop.sh`: when a session makes no progress and leaves
   uncommitted edits or unpushed commits, the driver names the branch and the
   session's log, instead of only "no progress" (#85).
+- `scripts/vendor-agents.sh` vendors only from the ECC commit pinned in the new
+  seeded `scripts/ECC_PIN`. It refuses a checkout at any other commit and reads
+  the agents and `LICENSE` from the commit, never the working tree; `--adopt`
+  vendors from the checkout's commit and pins it (#97).
 
 ### Fixed
 
+- `scripts/sync-guardrails.sh` never writes through a symlink in the target repo.
+  If a file it would write, or a directory above one, is a symlink, it names it and
+  writes nothing, so a committed link cannot send the sync's writes outside the
+  repo (#96).
 - `scripts/sync-guardrails.sh` treats a hook as the template's only when its
   command runs a managed hook script by its path. A repo's own hook whose command
   merely contains a managed script's name (`my-setup.sh-wrapper`, `scripts/setup.sh`)
@@ -34,6 +42,13 @@ removes it from a repo made with "Use this template", and sync never copies it.
 
 ### Manual steps for existing repos
 
+- **`scripts/ECC_PIN`:** a sync seeds the template's pin. If your reviewer agents
+  were vendored from another ECC commit (the commit is in each agent's
+  "Vendored from ECC" line), `vendor-agents.sh` now refuses until you either check
+  out the pinned commit or run `scripts/vendor-agents.sh --adopt` from a checkout you
+  have reviewed. Commit the pin with the agents.
+- **`docs/BACKLOG.md`** (seeded) gained a paragraph on the pin under "Reviewers";
+  copy it from the template if you want it.
 - If an earlier sync dropped one of your own hooks from `.claude/settings.json`
   (#98), restore it from that file's git history. Otherwise a re-sync is enough.
 
