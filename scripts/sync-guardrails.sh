@@ -62,6 +62,9 @@ SEEDED=(
   .claude/agents/pr-test-analyzer.md
   .claude/agents/silent-failure-hunter.md
   .claude/agents/LICENSE.ECC
+  # The ECC commit the agents above were vendored from. Seeded, not managed: a
+  # repo that adopts a newer commit with vendor-agents.sh --adopt keeps it.
+  scripts/ECC_PIN
   # Optional stack reviewers. They stay off only because vendor-agents.sh reads
   # the top level of .claude/agent-context/, never optional/; a repo turns one on
   # by copying it up a level. If vendor-agents.sh ever searches subfolders, this
