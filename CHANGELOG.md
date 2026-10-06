@@ -28,6 +28,9 @@ removes it from a repo made with "Use this template", and sync never copies it.
   seeded `scripts/ECC_PIN`. It refuses a checkout at any other commit and reads
   the agents and `LICENSE` from the commit, never the working tree; `--adopt`
   vendors from the checkout's commit and pins it (#97).
+- A README "Security" section: what the loop can do with your credentials, what to
+  set on a public repo, and why the `protect-main` ruleset is required.
+  `scripts/setup.sh` warns when a public repo has the proposal gate off (#100).
 
 ### Fixed
 
