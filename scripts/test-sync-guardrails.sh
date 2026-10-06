@@ -85,6 +85,8 @@ check "copies missing-allow-rules.sh, executable" "[ -x '$T/scripts/missing-allo
 check "copies template-version.sh, executable" "[ -x '$T/scripts/template-version.sh' ]"
 check "copies vendor-agents.sh, executable" "[ -x '$T/scripts/vendor-agents.sh' ]"
 check "seeds the reviewer agents, their context, and the ECC license" "[ -f '$T/.claude/agents/pr-test-analyzer.md' ] && [ -f '$T/.claude/agents/silent-failure-hunter.md' ] && [ -f '$T/.claude/agent-context/_common.md' ] && [ -f '$T/.claude/agents/LICENSE.ECC' ]"
+# vendor-agents.sh refuses to run without it (#97); it matches the seeded agents.
+check "seeds the ECC pin" "cmp -s '$HERE/ECC_PIN' '$T/scripts/ECC_PIN'"
 # Inert until a repo copies one into .claude/agent-context/.
 seeds_stack_contexts() {
   local a
@@ -142,10 +144,13 @@ check "keeps unrelated hooks when replacing" "jq -e '[.hooks.Stop[].hooks[].comm
 
 # --- a repo's own reviewer agent is kept ---
 V="$(new_target ownagent)"
-mkdir -p "$V/.claude/agents" && echo "# my own reviewer" >"$V/.claude/agents/pr-test-analyzer.md"
+mkdir -p "$V/.claude/agents" "$V/scripts" && echo "# my own reviewer" >"$V/.claude/agents/pr-test-analyzer.md"
+# A repo that adopted another ECC commit keeps its pin, which matches its agents.
+echo 0123456789abcdef0123456789abcdef01234567 >"$V/scripts/ECC_PIN"
 git -C "$V" add -A && git -C "$V" -c user.name=t -c user.email=t@t commit -qm agent
 "$SYNC" "$V" >/dev/null 2>&1
 check "keeps a repo's own version of a seeded agent" "grep -qx '# my own reviewer' '$V/.claude/agents/pr-test-analyzer.md'"
+check "keeps a repo's own ECC pin" "grep -qx 0123456789abcdef0123456789abcdef01234567 '$V/scripts/ECC_PIN'"
 # Its context file would make the next vendor-agents.sh run target that agent.
 check "seeds no context for an agent the repo already has" "[ ! -e '$V/.claude/agent-context/pr-test-analyzer.md' ] && [ -f '$V/.claude/agent-context/silent-failure-hunter.md' ]"
 
