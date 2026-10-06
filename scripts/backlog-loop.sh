@@ -141,6 +141,11 @@ elif [ "$LOG_DIR" = "$DEFAULT_LOG_DIR" ] && [ -d "$LOG_DIR" ] && [ ! -L "$LOG_DI
   chmod 700 "$LOG_DIR" || { echo "✗ cannot make $LOG_DIR private (mode 700). Stopping." >&2; exit 1; }
 fi
 [ -d "$LOG_DIR" ] || { echo "✗ the log directory $LOG_DIR is not a directory. Stopping." >&2; exit 1; }
+# A directory left as it was may still let others in: say so, but run.
+log_dir_mode="$(ls -ldL "$LOG_DIR" | cut -c5-10)"
+if [ "$log_dir_mode" != ------ ]; then
+  echo "⚠ the log directory $LOG_DIR is not private to you (group/other bits: ${log_dir_mode:-unknown}); the driver left its mode as it was. New logs are still mode 600." >&2
+fi
 
 # Single-instance lock, so two drivers can't double-claim, and so a /work-next-item
 # started by hand while this runs stops at its own lock check. It reclaims a lock a
@@ -223,24 +228,36 @@ run_item() {
   local ceiling_ms=$(( BG_WAIT_SECONDS * 1000 ))
   if [ -n "${MODEL:-}" ]; then
     env -u BACKLOG_LOOP_STAGED -u BACKLOG_LOOP_ROOT CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS="$ceiling_ms" \
-      claude -p "/work-next-item" --permission-mode acceptEdits --model "$MODEL" >"$1" 2>&1
+      claude -p "/work-next-item" --permission-mode acceptEdits --model "$MODEL" >&3 2>&3 3>&-
   else
     env -u BACKLOG_LOOP_STAGED -u BACKLOG_LOOP_ROOT CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS="$ceiling_ms" \
-      claude -p "/work-next-item" --permission-mode acceptEdits >"$1" 2>&1
+      claude -p "/work-next-item" --permission-mode acceptEdits >&3 2>&3 3>&-
   fi
 }
 
-# Creates log $1 as a new mode-600 file before the session writes to it (#99). The
-# umask is set only in this subshell: the session must create the repo's files as
-# before. Nothing may already be at $1: in a LOG_DIR others can write to, a file or
-# symlink planted at the predictable name would otherwise be written through. The
-# -e/-L checks refuse anything there, and noclobber (O_EXCL) closes the gap between
-# the check and the create.
-# A log that cannot be created stops the run, rather than read as a failed session
-# and be retried with backoff.
+# Opens log $1 on fd 3 as a new mode-600 file, for run_item to write to (#99). The
+# session writes to that fd and never reopens the path, so a file or symlink put at
+# the predictable name afterwards gets nothing. Nothing may be at $1 beforehand
+# either: the -e/-L checks refuse it, and noclobber (O_CREAT|O_EXCL) refuses a
+# regular file or link that appears between the check and the open. (A FIFO or
+# device raced in there is not refused; that needs a LOG_DIR other users can write
+# to, which the operator chose.) The umask and noclobber are restored at once: the
+# session must create the repo's files as before. A log that cannot be created
+# stops the run, rather than read as a failed session and be retried with backoff.
 new_log() {
-  { [ ! -e "$1" ] && [ ! -L "$1" ] && ( umask 077 && set -C && : >"$1" ); } \
-    || { echo "✗ cannot create the log $1 (it must not exist yet). Stopping." >&2; exit 1; }
+  local old_umask rc
+  if [ -e "$1" ] || [ -L "$1" ]; then
+    echo "✗ cannot create the log $1: something is already there. Stopping." >&2
+    exit 1
+  fi
+  old_umask="$(umask)"
+  umask 077
+  set -C
+  exec 3>"$1"
+  rc=$?
+  set +C
+  umask "$old_umask"
+  [ "$rc" -eq 0 ] || { echo "✗ cannot create the log $1. Stopping." >&2; exit 1; }
 }
 
 # A session that ends its turn while a command still runs (#84) leaves its work
@@ -295,7 +312,10 @@ while [ "$count" -lt "$MAX_ITEMS" ]; do
     [ "$attempt" -eq 1 ] || log="$base.attempt$attempt.log"
     clear_drained_mark
     new_log "$log"
-    if run_item "$log"; then
+    item_rc=0
+    run_item || item_rc=$?
+    exec 3>&-
+    if [ "$item_rc" -eq 0 ]; then
       break
     fi
     if [ "$attempt" -ge "$MAX_RETRIES" ]; then

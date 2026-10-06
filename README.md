@@ -263,7 +263,8 @@ commit or a push.
 **Logs are private.** Each session's log holds its whole transcript: issue text,
 code, and command output. So the driver writes each log as mode 600, creates its
 log directory as mode 700, and tightens an existing `.loop-logs/` you own to 700. A
-`LOG_DIR` you point elsewhere that already exists keeps its permissions.
+`LOG_DIR` you point elsewhere that already exists keeps its permissions; the driver
+warns if other users can get into it.
 
 **One driver at a time.** `backlog-loop.sh` holds a lock in the git directory
 (`.git/backlog-loop.lock`) while it runs, so a second driver in the same clone

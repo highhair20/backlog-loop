@@ -150,6 +150,21 @@ mkdir -m 755 "$WORK/logs-ownlogdir"
 (umask 022; run "$O"); rc=$?
 check "leaves an existing LOG_DIR the operator chose as it was" "[ $rc -eq 0 ] && [ \"\$(mode '$WORK/logs-ownlogdir')\" = drwxr-xr-x ]"
 check "but still writes its logs there as mode 600" "[ \"\$(mode \"\$(ls '$WORK/logs-ownlogdir'/item-*.log | head -1)\")\" = -rw------- ]"
+check "and warns that the directory is not private" "grep -q 'logs-ownlogdir is not private to you' '$O/out'"
+check "a private LOG_DIR gets no such warning" "! grep -q 'not private to you' '$L/out'"
+NE="$(setup nestedlogdir progress)"
+(umask 022; PATH="$NE/bin:$PATH" PACE_SECONDS=0 LOG_DIR="$WORK/nested/a/logs" "$NE/scripts/backlog-loop.sh" >"$NE/out" 2>&1); rc=$?
+check "creates a nested LOG_DIR, its leaf mode 700" "[ $rc -eq 0 ] && [ \"\$(mode '$WORK/nested/a/logs')\" = drwx------ ]"
+# A file or symlink already at a log's name is never written through: the run stops
+# and the target is untouched. A fake date makes the name predictable.
+PL="$(setup plantedlog progress)"
+printf '#!/usr/bin/env bash\nif [ "$1" = +%%Y%%m%%d-%%H%%M%%S ]; then echo 20260101-000000; else exec /bin/date "$@"; fi\n' >"$PL/bin/date"
+chmod +x "$PL/bin/date"
+mkdir -m 700 "$WORK/logs-planted"
+echo keep >"$WORK/victim"; chmod 644 "$WORK/victim"
+ln -s "$WORK/victim" "$WORK/logs-planted/item-20260101-000000-1.log"
+PATH="$PL/bin:$PATH" PACE_SECONDS=0 BACKOFF_SECONDS=0 LOG_DIR="$WORK/logs-planted" "$PL/scripts/backlog-loop.sh" >"$PL/out" 2>&1; rc=$?
+check "refuses a symlink planted at the log's name, leaving its target alone" "[ $rc -eq 1 ] && [ ! -s '$PL/calls' ] && [ \"\$(cat '$WORK/victim')\" = keep ] && [ \"\$(mode '$WORK/victim')\" = -rw-r--r-- ] && grep -q 'already there' '$PL/out'"
 Y="$(setup linkedlogdir progress)"
 mkdir -m 755 "$WORK/linked-target"
 ln -s "$WORK/linked-target" "$Y/.loop-logs"
