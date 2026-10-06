@@ -34,6 +34,12 @@ removes it from a repo made with "Use this template", and sync never copies it.
 
 ### Fixed
 
+- `scripts/backlog-loop.sh` keeps its logs private to the user who ran it: each
+  log is a new mode-600 file (it never writes through a file or symlink already at
+  the log's name), a log directory it creates is mode 700, and an existing
+  `.loop-logs/` the user owns is tightened to 700. A `LOG_DIR` the operator chose
+  and already has keeps its mode, with a warning if other users can get into it.
+  A log directory or log it cannot create now stops the run (#99).
 - `scripts/sync-guardrails.sh` never writes through a symlink in the target repo.
   If a file it would write, or a directory above one, is a symlink, it names it and
   writes nothing, so a committed link cannot send the sync's writes outside the
@@ -52,6 +58,10 @@ removes it from a repo made with "Use this template", and sync never copies it.
   have reviewed. Commit the pin with the agents.
 - **`docs/BACKLOG.md`** (seeded) gained a paragraph on the pin under "Reviewers";
   copy it from the template if you want it.
+- **Loop logs (#99):** the next driver run makes the default `.loop-logs/` private,
+  which also hides the logs earlier runs wrote there. If you set `LOG_DIR` to a
+  directory of your own, the driver leaves it as it is: run
+  `chmod 700 "$LOG_DIR" && chmod 600 "$LOG_DIR"/item-*.log` to hide earlier logs.
 - If an earlier sync dropped one of your own hooks from `.claude/settings.json`
   (#98), restore it from that file's git history. Otherwise a re-sync is enough.
 

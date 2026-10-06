@@ -62,7 +62,8 @@ MAX_ITEMS="${MAX_ITEMS:-25}"
 PACE_SECONDS="${PACE_SECONDS:-5}"
 MAX_RETRIES="${MAX_RETRIES:-3}"
 BACKOFF_SECONDS="${BACKOFF_SECONDS:-300}"
-LOG_DIR="${LOG_DIR:-.loop-logs}"
+DEFAULT_LOG_DIR=.loop-logs
+LOG_DIR="${LOG_DIR:-$DEFAULT_LOG_DIR}"
 BG_WAIT_SECONDS="${BG_WAIT_SECONDS:-2700}"
 case "$BG_WAIT_SECONDS" in
   ''|*[!0-9]*) echo "✗ BG_WAIT_SECONDS must be a whole number of seconds, got: $BG_WAIT_SECONDS" >&2; exit 1 ;;
@@ -127,7 +128,24 @@ case "$tv_rc" in
   *) echo "⚠ ${tv_out:-could not compare this repo with the template}" >&2 ;;
 esac
 
-mkdir -p "$LOG_DIR"
+# The logs hold whole session transcripts (issue text, code, command output), so
+# only this user may read them (#99). A LOG_DIR the driver creates is mode 700, and
+# so is the default one this user owns, which earlier runs created with the default
+# umask. A LOG_DIR the operator chose and already has keeps its mode, and so do a
+# symlinked default's target and a default another user owns (a shared checkout
+# must still run); each log is still mode 600 (new_log).
+if [ ! -e "$LOG_DIR" ] && [ ! -L "$LOG_DIR" ]; then
+  { mkdir -p -- "$(dirname -- "$LOG_DIR")" && mkdir -m 700 -- "$LOG_DIR"; } || { echo "✗ cannot create the log directory $LOG_DIR. Stopping." >&2; exit 1; }
+elif [ "$LOG_DIR" = "$DEFAULT_LOG_DIR" ] && [ -d "$LOG_DIR" ] && [ ! -L "$LOG_DIR" ] && [ -O "$LOG_DIR" ]; then
+  # No `--`: macOS chmod rejects it, and this path is always .loop-logs.
+  chmod 700 "$LOG_DIR" || { echo "✗ cannot make $LOG_DIR private (mode 700). Stopping." >&2; exit 1; }
+fi
+[ -d "$LOG_DIR" ] || { echo "✗ the log directory $LOG_DIR is not a directory. Stopping." >&2; exit 1; }
+# A directory left as it was may still let others in: say so, but run.
+log_dir_mode="$(ls -ldL -- "$LOG_DIR" | cut -c5-10)"
+if [ "$log_dir_mode" != ------ ]; then
+  echo "⚠ the log directory $LOG_DIR is not private to you (group/other bits: ${log_dir_mode:-unknown}); the driver left its mode as it was. New logs are still mode 600." >&2
+fi
 
 # Single-instance lock, so two drivers can't double-claim, and so a /work-next-item
 # started by hand while this runs stops at its own lock check. It reclaims a lock a
@@ -210,11 +228,36 @@ run_item() {
   local ceiling_ms=$(( BG_WAIT_SECONDS * 1000 ))
   if [ -n "${MODEL:-}" ]; then
     env -u BACKLOG_LOOP_STAGED -u BACKLOG_LOOP_ROOT CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS="$ceiling_ms" \
-      claude -p "/work-next-item" --permission-mode acceptEdits --model "$MODEL" >"$1" 2>&1
+      claude -p "/work-next-item" --permission-mode acceptEdits --model "$MODEL" >&3 2>&3 3>&-
   else
     env -u BACKLOG_LOOP_STAGED -u BACKLOG_LOOP_ROOT CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS="$ceiling_ms" \
-      claude -p "/work-next-item" --permission-mode acceptEdits >"$1" 2>&1
+      claude -p "/work-next-item" --permission-mode acceptEdits >&3 2>&3 3>&-
   fi
+}
+
+# Opens log $1 on fd 3 as a new mode-600 file, for run_item to write to (#99). The
+# session writes to that fd and never reopens the path, so a file or symlink put at
+# the predictable name afterwards gets nothing. Nothing may be at $1 beforehand
+# either: the -e/-L checks refuse it, and noclobber (O_CREAT|O_EXCL) refuses a
+# regular file or link that appears between the check and the open. (A FIFO or
+# device raced in there is not refused; that needs a LOG_DIR other users can write
+# to, which the operator chose.) The umask and noclobber are restored at once: the
+# session must create the repo's files as before. A log that cannot be created
+# stops the run, rather than read as a failed session and be retried with backoff.
+new_log() {
+  local old_umask rc
+  if [ -e "$1" ] || [ -L "$1" ]; then
+    echo "✗ cannot create the log $1: something is already there. Stopping." >&2
+    exit 1
+  fi
+  old_umask="$(umask)"
+  umask 077
+  set -C
+  exec 3>"$1"
+  rc=$?
+  set +C
+  umask "$old_umask"
+  [ "$rc" -eq 0 ] || { echo "✗ cannot create the log $1. Stopping." >&2; exit 1; }
 }
 
 # A session that ends its turn while a command still runs (#84) leaves its work
@@ -257,8 +300,10 @@ while [ "$count" -lt "$MAX_ITEMS" ]; do
 
   count=$((count + 1))
   ts="$(date +%Y%m%d-%H%M%S)"
-  # The item number keeps names unique even when two items start in the same second.
-  base="$LOG_DIR/item-$ts-$count"
+  # The item number keeps names unique even when two items start in the same second,
+  # and the PID when a re-run starts in the same second as the last run: new_log
+  # refuses a name that is taken.
+  base="$LOG_DIR/item-$ts-$$-$count"
   log="$base.log"
   echo "▶ [$count/$MAX_ITEMS] $remaining issue(s) to work or follow up → /work-next-item (log: $log)"
 
@@ -268,7 +313,11 @@ while [ "$count" -lt "$MAX_ITEMS" ]; do
     # Each attempt gets its own log, so a retry cannot erase why the last one failed.
     [ "$attempt" -eq 1 ] || log="$base.attempt$attempt.log"
     clear_drained_mark
-    if run_item "$log"; then
+    new_log "$log"
+    item_rc=0
+    run_item || item_rc=$?
+    exec 3>&-
+    if [ "$item_rc" -eq 0 ]; then
       break
     fi
     if [ "$attempt" -ge "$MAX_RETRIES" ]; then

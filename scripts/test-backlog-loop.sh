@@ -52,6 +52,7 @@ setup() {
     printf 'echo "${CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS:-unset}" >>bgwait\n'
     printf 'echo "${BACKLOG_LOOP_STAGED:-unset} ${BACKLOG_LOOP_ROOT:-unset}" >>staging-env\n'
     printf 'echo "${GH_REPO:-unset}" >>gh-repo-env\n'
+    printf 'umask >>umask-seen\n'
     printf 'scripts/loop-lock.sh check >>check-out 2>&1; echo $? >>check-rc\n'
     if [ "$2" = block ]; then
       # Gives up after 30s so a failed test cannot leave it running.
@@ -129,6 +130,65 @@ check "a retried item still completes" "[ $rc -eq 0 ]"
 check "keeps the failed attempt's log" "grep -l 'first attempt boom' '$flogs'/item-*.log >/dev/null"
 check "writes the retry to its own log" "grep -l 'second attempt ok' '$flogs'/item-*.attempt2.log >/dev/null"
 check "names the failed attempt's log in the retry message" "grep -q 'attempt 1 failed (log: ' '$F/out'"
+
+# Logs hold whole session transcripts, so only the user who ran the driver may read
+# them (#99). Each run sets umask 022, so the checks do not depend on this shell's.
+mode() { ls -ldL "$1" | cut -c1-10; }
+run_default() { PATH="$1/bin:$PATH" PACE_SECONDS=0 "$1/scripts/backlog-loop.sh" >"$1/out" 2>&1; }
+L="$(setup privatelogs flaky)"
+(umask 022; BACKOFF_SECONDS=0 run "$L"); rc=$?
+llogs="$WORK/logs-privatelogs"
+check "a LOG_DIR the driver creates is mode 700" "[ $rc -eq 0 ] && [ \"\$(mode '$llogs')\" = drwx------ ]"
+check "its logs, a retry's included, are mode 600" "( n=0; for f in '$llogs'/item-*.log; do [ \"\$(mode \"\$f\")\" = -rw------- ] || exit 1; n=\$((n + 1)); done; [ \$n -ge 2 ] )"
+check "its sessions keep the driver's umask" "[ \"\$(sort -u '$L/umask-seen')\" = 0022 ]"
+D="$(setup defaultlogdir progress)"
+mkdir -m 755 "$D/.loop-logs"
+(umask 022; run_default "$D"); rc=$?
+check "tightens an existing default .loop-logs to 700" "[ $rc -eq 0 ] && [ \"\$(mode '$D/.loop-logs')\" = drwx------ ] && ls '$D/.loop-logs'/item-*.log >/dev/null"
+O="$(setup ownlogdir progress)"
+mkdir -m 755 "$WORK/logs-ownlogdir"
+(umask 022; run "$O"); rc=$?
+check "leaves an existing LOG_DIR the operator chose as it was" "[ $rc -eq 0 ] && [ \"\$(mode '$WORK/logs-ownlogdir')\" = drwxr-xr-x ]"
+check "but still writes its logs there as mode 600" "[ \"\$(mode \"\$(ls '$WORK/logs-ownlogdir'/item-*.log | head -1)\")\" = -rw------- ]"
+check "and warns that the directory is not private" "grep -q 'logs-ownlogdir is not private to you' '$O/out'"
+check "a private LOG_DIR gets no such warning" "! grep -q 'not private to you' '$L/out'"
+NE="$(setup nestedlogdir progress)"
+(umask 022; PATH="$NE/bin:$PATH" PACE_SECONDS=0 LOG_DIR="$WORK/nested/a/logs" "$NE/scripts/backlog-loop.sh" >"$NE/out" 2>&1); rc=$?
+check "creates a nested LOG_DIR, its leaf mode 700" "[ $rc -eq 0 ] && [ \"\$(mode '$WORK/nested/a/logs')\" = drwx------ ]"
+# A file or symlink already at a log's name is never written through: the run stops
+# and the target is untouched. The first attempt plants a symlink at the retry's
+# log name, then fails, so the driver's next log name is the planted one.
+PL="$(setup plantedlog steps)"
+mkdir -m 700 "$WORK/logs-planted"
+echo keep >"$WORK/victim"; chmod 644 "$WORK/victim"
+printf 'f="$(ls "%s"/item-*.log)"\nln -s "%s" "${f%%.log}.attempt2.log"\nexit 1\n' "$WORK/logs-planted" "$WORK/victim" >"$PL/step-1"
+PATH="$PL/bin:$PATH" PACE_SECONDS=0 BACKOFF_SECONDS=0 LOG_DIR="$WORK/logs-planted" "$PL/scripts/backlog-loop.sh" >"$PL/out" 2>&1; rc=$?
+check "refuses a symlink planted at the log's name, leaving its target alone" "[ $rc -eq 1 ] && [ \$(wc -l <'$PL/calls') -eq 1 ] && [ -L \"\$(ls -d '$WORK/logs-planted'/item-*.attempt2.log)\" ] && [ \"\$(cat '$WORK/victim')\" = keep ] && [ \"\$(mode '$WORK/victim')\" = -rw-r--r-- ] && grep -q 'already there' '$PL/out'"
+Y="$(setup linkedlogdir progress)"
+mkdir -m 755 "$WORK/linked-target"
+ln -s "$WORK/linked-target" "$Y/.loop-logs"
+(umask 022; run_default "$Y"); rc=$?
+check "does not chmod the directory a symlinked .loop-logs points at" "[ $rc -eq 0 ] && [ \"\$(mode '$WORK/linked-target')\" = drwxr-xr-x ]"
+RF="$(setup filelogdir progress)"
+: >"$RF/.loop-logs"; chmod 644 "$RF/.loop-logs"
+run_default "$RF"; rc=$?
+check "a regular file named .loop-logs stops the run, its mode untouched" "[ $rc -eq 1 ] && [ ! -s '$RF/calls' ] && [ \"\$(mode '$RF/.loop-logs')\" = -rw-r--r-- ] && grep -q 'not a directory' '$RF/out'"
+DL="$(setup danglinglogdir progress)"
+ln -s "$WORK/no-such-dir" "$DL/.loop-logs"
+run_default "$DL"; rc=$?
+check "a dangling .loop-logs symlink says it is not a directory" "[ $rc -eq 1 ] && [ ! -s '$DL/calls' ] && grep -q 'not a directory' '$DL/out'"
+N="$(setup badlogdir progress)"
+: >"$WORK/notadir"
+PATH="$N/bin:$PATH" PACE_SECONDS=0 BACKOFF_SECONDS=0 LOG_DIR="$WORK/notadir/logs" "$N/scripts/backlog-loop.sh" >"$N/out" 2>&1; rc=$?
+check "stops before any item when it cannot create LOG_DIR" "[ $rc -ne 0 ] && [ ! -s '$N/calls' ] && grep -q '✗.*notadir/logs' '$N/out' && ! grep -q 'attempt 1 failed' '$N/out'"
+# A log it cannot create stops the run, not read as a failed session and retried.
+# Root ignores the read-only mode, so the check needs a normal user.
+if [ "$(id -u)" -ne 0 ]; then
+  RO="$(setup readonlylogdir progress)"
+  mkdir -m 555 "$WORK/logs-readonly"
+  PATH="$RO/bin:$PATH" PACE_SECONDS=0 BACKOFF_SECONDS=0 LOG_DIR="$WORK/logs-readonly" "$RO/scripts/backlog-loop.sh" >"$RO/out" 2>&1; rc=$?
+  check "stops before any item when it cannot create a log" "[ $rc -eq 1 ] && [ ! -s '$RO/calls' ] && grep -q 'cannot create the log ' '$RO/out' && ! grep -q 'attempt 1 failed' '$RO/out'"
+fi
 
 # The driver must not depend on the checkout its sessions change (#25).
 B="$(setup sabotage sabotage)"
@@ -276,7 +336,7 @@ committed_repo() { # committed_repo <name> <step-1 script>
   local dir; dir="$(setup "$1" steps)"
   echo 0 >"$dir/count"; echo "$IN_REVIEW" >"$dir/extra.json"
   printf '%s\n' "$2" >"$dir/step-1"
-  printf '%s\n' calls bgwait staging-env gh-repo-env check-out check-rc finished started out >>"$dir/.git/info/exclude"
+  printf '%s\n' calls bgwait staging-env gh-repo-env umask-seen check-out check-rc finished started out >>"$dir/.git/info/exclude"
   git -C "$dir" add -A
   git -C "$dir" -c user.name=t -c user.email=t@t commit -qm fixture
   git -C "$dir" update-ref refs/remotes/origin/main HEAD
