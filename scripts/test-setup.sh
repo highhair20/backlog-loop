@@ -223,7 +223,6 @@ gate_case() { # gate_case <warns|quiet> <description> <visibility> [Gate: line]
 }
 gate_case warns "public, gate off" PUBLIC "- Gate: off"
 gate_case warns "public, no Proposal gate section" PUBLIC
-gate_case warns "public, an unreadable gate setting" PUBLIC "- Gate: maybe"
 gate_case quiet "public, gate on" PUBLIC "- Gate: on"
 gate_case quiet "public, gate on in another case and spacing" PUBLIC "-   gate :ON "
 gate_case quiet "private, gate off" PRIVATE "- Gate: off"
@@ -237,6 +236,20 @@ GO="$(configured_repo gateelsewhere)"
 printf '\n## Notes\n\n- Gate: on\n' >>"$GO/CLAUDE.md"
 FAKE_VISIBILITY=PUBLIC run "$GO"
 check "a Gate: line outside ## Proposal gate does not count" "grep -q 'proposal gate is off' '$GO/.fake/out'"
+# The loop stops on an unreadable setting rather than guess off, so setup says so.
+GU="$(configured_repo gateunreadable)"
+printf '\n## Proposal gate\n\n- Gate: maybe\n' >>"$GU/CLAUDE.md"
+FAKE_VISIBILITY=PUBLIC run "$GU"; rc=$?
+check "public, an unreadable Gate: value is named as such" "[ $rc -eq 0 ] && grep -q 'Gate: line is missing or not on/off.*README.md#security' '$GU/.fake/out' && ! grep -q 'proposal gate is off' '$GU/.fake/out'"
+printf '# acme\n\n## Verify\n\n```sh\nmake lint\nmake test\n```\n\n## Proposal gate\n\nNo setting here.\n' >"$GU/CLAUDE.md"
+FAKE_VISIBILITY=PUBLIC run "$GU"
+check "public, a Proposal gate section with no Gate: line is named as unreadable" "grep -q 'Gate: line is missing or not on/off' '$GU/.fake/out'"
+# The skeleton as seeded, on a public repo: the realistic case.
+GS="$(fresh_repo gateskeleton)"
+FAKE_VISIBILITY=PUBLIC run "$GS"
+check "the skeleton's Gate: off on a public repo warns" "grep -q 'public, and the proposal gate is off' '$GS/.fake/out'"
+# The warning points at this anchor, so the heading must exist.
+check "README.md has the ## Security section the warning points to" "grep -qx '## Security' '$ROOT/README.md'"
 
 # A repo made with "Use this template" starts with the template's own CLAUDE.md.
 O="$(fresh_repo owncopy)"
