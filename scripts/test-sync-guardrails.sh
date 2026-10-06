@@ -131,13 +131,14 @@ link_target() {
 
 # One of each kind of write: managed copy, settings merge, .gitignore merge, version stamp.
 for rel in .claude/commands/work-next-item.md .claude/settings.json .gitignore .claude/template-version; do
+  # Valid JSON, so a settings merge through the link would succeed and change it.
   out="$WORK/outside-${rel//\//_}"
-  echo outside >"$out"
+  echo '{"outside": true}' >"$out"
   L="$(link_target "link${rel//\//_}" "$rel" "$out")"
   "$SYNC" "$L" >"$WORK/link.out" 2>&1
   rc=$?
   check "refuses a symlinked $rel, naming it" "[ $rc -ne 0 ] && grep -q 'symlink' '$WORK/link.out' && grep -qF '$rel' '$WORK/link.out'"
-  check "leaves the file behind a symlinked $rel unchanged" "[ \"\$(cat '$out')\" = outside ]"
+  check "leaves the file behind a symlinked $rel unchanged" "[ \"\$(cat '$out')\" = '{\"outside\": true}' ]"
   check "writes nothing into a target with a symlinked $rel" "[ -z \"\$(git -C '$L' status --porcelain)\" ] && [ ! -e '$L/scripts' ]"
 done
 
