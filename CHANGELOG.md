@@ -38,6 +38,10 @@ removes it from a repo made with "Use this template", and sync never copies it.
   If a file it would write, or a directory above one, is a symlink, it names it and
   writes nothing, so a committed link cannot send the sync's writes outside the
   repo (#96).
+- `scripts/sync-guardrails.sh` treats a hook as the template's only when its
+  command runs a managed hook script by its path. A repo's own hook whose command
+  merely contains a managed script's name (`my-setup.sh-wrapper`, `scripts/setup.sh`)
+  was dropped on sync; it is now kept (#98).
 
 ### Manual steps for existing repos
 
@@ -48,6 +52,8 @@ removes it from a repo made with "Use this template", and sync never copies it.
   have reviewed. Commit the pin with the agents.
 - **`docs/BACKLOG.md`** (seeded) gained a paragraph on the pin under "Reviewers";
   copy it from the template if you want it.
+- If an earlier sync dropped one of your own hooks from `.claude/settings.json`
+  (#98), restore it from that file's git history. Otherwise a re-sync is enough.
 
 ## [0.1.0] - 2026-10-04
 
