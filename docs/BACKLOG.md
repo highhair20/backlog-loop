@@ -251,8 +251,9 @@ plugins. They are vendored from [ECC](https://github.com/affaan-m/ECC) (MIT) by
 and re-run the script. To add one, add a context file named after the ECC agent,
 re-run, and add a row to `## Specialist reviewers` in `CLAUDE.md`.
 
-The script vendors only from the ECC commit in `scripts/ECC_PIN`, and refuses an ECC
-checkout at any other commit, or with uncommitted changes to its agents. To take a
+The script vendors only from the ECC commit in `scripts/ECC_PIN`: it refuses an ECC
+checkout at any other commit, and reads the files from that commit, so local edits
+in the checkout are never vendored. To take a
 newer ECC, check it out, review what changed in its `agents/`, then run
 `scripts/vendor-agents.sh --adopt`: it vendors from that commit and pins it. Commit
 the pin with the regenerated agents.

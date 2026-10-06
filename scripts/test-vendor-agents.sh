@@ -144,27 +144,41 @@ for bad in main "" "$OTHER extra" "${OTHER:0:7}" "$(printf '%s' "$OTHER" | tr a-
   check "refuses a malformed pin ('$bad')" "[ $rc -ne 0 ] && grep -q 'ECC_PIN' '$W/out' && [ -z \"\$(ls -A '$W/.claude/agents')\" ]"
 done
 
-# A pinned commit says nothing about files changed since it, so a checkout with
-# uncommitted changes to what is vendored is refused, --adopt or not.
-D="$(target dirty alpha)"
-echo "tampered" >>"$ECC/agents/alpha.md"
+C="$(target crlf alpha)"
+printf '%s\r\n' "$(head_sha)" >"$C/scripts/ECC_PIN"
+run "$C"; rc=$?
+check "accepts a pin saved with a CRLF line ending" "[ $rc -eq 0 ]"
+
+# What is vendored is the pinned commit's content, whatever the working tree
+# holds: an edit, an assume-unchanged edit that git status hides, or a file
+# ignored there that the commit never had.
+D="$(target dirty alpha extra)"
+echo "TAMPERED" >>"$ECC/agents/alpha.md"
+echo "TAMPERED" >>"$ECC/LICENSE"
+printf -- '---\nname: extra\n---\nTAMPERED\n' >"$ECC/agents/extra.md"
+echo "agents/extra.md" >>"$ECC/.git/info/exclude"
 run "$D"; rc=$?
-check "refuses an ECC checkout with an uncommitted agent change" "[ $rc -ne 0 ] && grep -q 'uncommitted' '$D/out' && [ -z \"\$(ls -A '$D/.claude/agents')\" ]"
-run "$D" "$ECC" --adopt; rc=$?
-check "--adopt refuses it too, and keeps the pin" "[ $rc -ne 0 ] && [ -z \"\$(ls -A '$D/.claude/agents')\" ] && [ \"\$(cat '$D/scripts/ECC_PIN')\" = \"\$(head_sha)\" ]"
+check "refuses an agent that exists only in the working tree, even if ignored" "[ $rc -ne 0 ] && grep -q \"no agent named 'extra'\" '$D/out' && [ -z \"\$(ls -A '$D/.claude/agents')\" ]"
+rm "$D/.claude/agent-context/extra.md"
+run "$D"; rc=$?
+check "vendors the committed agent, not a working-tree edit" "[ $rc -eq 0 ] && ! grep -q TAMPERED '$D/.claude/agents/alpha.md' && grep -q 'Upstream body line' '$D/.claude/agents/alpha.md'"
+check "vendors the committed LICENSE, not a working-tree edit" "! grep -q TAMPERED '$D/.claude/agents/LICENSE.ECC' && grep -q 'MIT License' '$D/.claude/agents/LICENSE.ECC'"
+git -C "$ECC" checkout -q -- agents/alpha.md LICENSE
+git -C "$ECC" update-index --assume-unchanged agents/alpha.md
+echo "TAMPERED" >>"$ECC/agents/alpha.md"
+run "$D"; rc=$?
+check "vendors the committed agent under an assume-unchanged edit" "[ $rc -eq 0 ] && ! grep -q TAMPERED '$D/.claude/agents/alpha.md'"
+git -C "$ECC" update-index --no-assume-unchanged agents/alpha.md
 git -C "$ECC" checkout -q -- agents/alpha.md
-echo "tampered" >>"$ECC/LICENSE"
-run "$D"; rc=$?
-check "refuses an uncommitted LICENSE change" "[ $rc -ne 0 ] && [ -z \"\$(ls -A '$D/.claude/agents')\" ]"
-git -C "$ECC" checkout -q -- LICENSE
-echo "untracked" >"$ECC/agents/extra.md"
-run "$D"; rc=$?
-check "refuses an untracked file in agents/" "[ $rc -ne 0 ] && [ -z \"\$(ls -A '$D/.claude/agents')\" ]"
 rm "$ECC/agents/extra.md"
-echo "elsewhere" >"$ECC/README.md"
-run "$D"; rc=$?
-check "ignores changes outside agents/ and LICENSE" "[ $rc -eq 0 ]"
-rm "$ECC/README.md"
+
+# The pin is written last: a run that fails while writing agents keeps the old one.
+F="$(target writefail alpha)"
+echo "$OTHER" >"$F/scripts/ECC_PIN"
+chmod a-w "$F/.claude/agents"
+run "$F" "$ECC" --adopt; rc=$?
+chmod u+w "$F/.claude/agents"
+check "a --adopt that fails writing agents keeps the old pin" "[ $rc -ne 0 ] && [ \"\$(cat '$F/scripts/ECC_PIN')\" = '$OTHER' ]"
 
 run "$P" "$ECC" --bogus; rc=$?
 check "refuses an unknown argument, with usage" "[ $rc -ne 0 ] && grep -qi 'usage' '$P/out'"

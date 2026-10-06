@@ -25,9 +25,9 @@ removes it from a repo made with "Use this template", and sync never copies it.
   uncommitted edits or unpushed commits, the driver names the branch and the
   session's log, instead of only "no progress" (#85).
 - `scripts/vendor-agents.sh` vendors only from the ECC commit pinned in the new
-  seeded `scripts/ECC_PIN`. It refuses a checkout at any other commit, or one with
-  uncommitted changes to `agents/` or `LICENSE`; `--adopt` vendors from the
-  checkout's commit and pins it (#97).
+  seeded `scripts/ECC_PIN`. It refuses a checkout at any other commit and reads
+  the agents and `LICENSE` from the commit, never the working tree; `--adopt`
+  vendors from the checkout's commit and pins it (#97).
 
 ### Manual steps for existing repos
 
