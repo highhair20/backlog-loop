@@ -25,6 +25,13 @@ removes it from a repo made with "Use this template", and sync never copies it.
   uncommitted edits or unpushed commits, the driver names the branch and the
   session's log, instead of only "no progress" (#85).
 
+### Fixed
+
+- `scripts/sync-guardrails.sh` never writes through a symlink in the target repo.
+  If a file it would write, or a directory above one, is a symlink, it names it and
+  writes nothing, so a committed link cannot send the sync's writes outside the
+  repo (#96).
+
 ### Manual steps for existing repos
 
 - None.
