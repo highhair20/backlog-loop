@@ -173,12 +173,29 @@ git -C "$ECC" checkout -q -- agents/alpha.md
 rm "$ECC/agents/extra.md"
 
 # The pin is written last: a run that fails while writing agents keeps the old one.
-F="$(target writefail alpha)"
-echo "$OTHER" >"$F/scripts/ECC_PIN"
-chmod a-w "$F/.claude/agents"
-run "$F" "$ECC" --adopt; rc=$?
-chmod u+w "$F/.claude/agents"
-check "a --adopt that fails writing agents keeps the old pin" "[ $rc -ne 0 ] && [ \"\$(cat '$F/scripts/ECC_PIN')\" = '$OTHER' ]"
+# A read-only directory stops nothing for root, so the case needs another user.
+if [ "$(id -u)" -ne 0 ]; then
+  F="$(target writefail alpha)"
+  echo "$OTHER" >"$F/scripts/ECC_PIN"
+  chmod a-w "$F/.claude/agents"
+  run "$F" "$ECC" --adopt; rc=$?
+  chmod u+w "$F/.claude/agents"
+  check "a --adopt that fails writing agents keeps the old pin" "[ $rc -ne 0 ] && [ \"\$(cat '$F/scripts/ECC_PIN')\" = '$OTHER' ]"
+else
+  echo "skip a --adopt that fails writing agents keeps the old pin (running as root)"
+fi
+
+# --adopt must not write a pin that every later run would refuse.
+E256="$WORK/ecc256"
+if git init -q --object-format=sha256 -b main "$E256" 2>/dev/null; then
+  cp -R "$ECC/agents" "$ECC/LICENSE" "$E256/"
+  git -C "$E256" add -A && git_q -C "$E256" commit -qm ecc
+  Q="$(target sha256 alpha)"
+  run "$Q" "$E256" --adopt; rc=$?
+  check "--adopt refuses a SHA-256 ECC and keeps the pin" "[ $rc -ne 0 ] && grep -q 'SHA-1' '$Q/out' && [ \"\$(cat '$Q/scripts/ECC_PIN')\" = \"\$(head_sha)\" ] && [ -z \"\$(ls -A '$Q/.claude/agents')\" ]"
+else
+  echo "skip --adopt refuses a SHA-256 ECC (this git cannot make one)"
+fi
 
 run "$P" "$ECC" --bogus; rc=$?
 check "refuses an unknown argument, with usage" "[ $rc -ne 0 ] && grep -qi 'usage' '$P/out'"

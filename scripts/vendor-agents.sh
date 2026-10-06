@@ -48,14 +48,16 @@ done
 
 root="$(git rev-parse --show-toplevel 2>/dev/null)" || die "not inside a git repository"
 cd "$root"
-[ -d "$ECC_ROOT/agents" ] || die "no ECC agents at $ECC_ROOT/agents (set ECC_ROOT to a clone of https://github.com/affaan-m/ECC)"
 [ -f "$COMMON" ] || die "missing $COMMON"
 # git looks in parent directories too: a plain copy of ECC inside some other repo
-# would otherwise report that repo's commit as ECC's.
-top="$(git -C "$ECC_ROOT" rev-parse --show-toplevel 2>/dev/null)" \
-  && [ "$top" = "$(cd "$ECC_ROOT" && pwd -P)" ] \
-  || die "$ECC_ROOT is not the top of a git checkout, so the vendored commit is unknown"
+# would otherwise report that repo's commit as ECC's. A non-empty prefix means
+# ECC_ROOT is below the top of the checkout git found.
+prefix="$(git -C "$ECC_ROOT" rev-parse --show-prefix 2>/dev/null)" && [ -z "$prefix" ] \
+  || die "$ECC_ROOT is not the top of a git checkout, so the vendored commit is unknown (set ECC_ROOT to a clone of https://github.com/affaan-m/ECC)"
 sha="$(git -C "$ECC_ROOT" rev-parse HEAD 2>/dev/null)" || die "$ECC_ROOT has no commit checked out, so the vendored commit is unknown"
+# Checked here, not only in the pin: --adopt must never write a pin that every
+# later run would refuse (a SHA-256 repository's hashes are 64 characters).
+[[ "$sha" =~ $SHA_RE ]] || die "$ECC_ROOT's commit '$sha' is not a 40-character SHA-1 hash, which $PIN requires"
 
 if [ "$adopt" -eq 0 ]; then
   [ -f "$PIN" ] || die "no $PIN, so there is no expected ECC commit. $ECC_ROOT is at $sha: once you trust that commit, re-run with --adopt to pin it"
