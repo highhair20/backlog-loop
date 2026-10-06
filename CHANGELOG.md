@@ -34,8 +34,8 @@ removes it from a repo made with "Use this template", and sync never copies it.
 
 ### Manual steps for existing repos
 
-- None. If an earlier sync dropped one of your own hooks from
-  `.claude/settings.json`, restore it from that file's git history.
+- If an earlier sync dropped one of your own hooks from `.claude/settings.json`
+  (#98), restore it from that file's git history. Otherwise a re-sync is enough.
 
 ## [0.1.0] - 2026-10-04
 
