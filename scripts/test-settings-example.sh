@@ -72,15 +72,36 @@ for cmd in "scripts/loop-lock.sh acquire 1" "scripts/loop-lock.sh release 1"; do
   if matches_any "$cmd" "${ALLOW[@]}"; then fail "allowed, but only the driver should run it: $cmd"; else echo "ok   not allowed: $cmd"; fi
 done
 
+# A deny rule ending in ":*" is Claude Code's legacy prefix form ("starts with"), so
+# "git push * :*" would deny every push. None may end that way except whole commands.
+if jq -r '.permissions.deny[]' "$ROOT/.claude/settings.json" | grep -E '^Bash\(git push .* :\*\)$' >/dev/null; then fail "a git push deny rule ends in ' :*', which denies every push"; else echo "ok   no git push deny rule ends in ' :*'"; fi
+
+# The git commands whose options can run a program are allowed only in the forms the
+# loop writes (#95): a broad glob would admit --upload-pack and friends.
+for broad in "git fetch *" "git pull *" "git ls-remote *"; do
+  if printf '%s\n' "${ALLOW[@]}" | grep -qxF "$broad"; then fail "allows the broad form, which admits options that run a program: $broad"; else echo "ok   not allowed broadly: $broad"; fi
+done
+
 # The deny list must still win for the pushes that matter, even with the allow rules.
 # A pushed release tag (v1.2.3) often triggers a deploy, so it counts as one of them.
-for cmd in "git push origin main" "git push -u origin HEAD:main" "git push --force origin x" "gh pr merge 1" "gh api repos/{owner}/{repo}/pulls/1/merge -X PUT" "gh api repos/{owner}/{repo}/pulls/1/merge -X PUT -f a=/comments --paginate" "git push origin v1.2.3" "git push --follow-tags" "git push --follow origin x" "git push --tag origin x" "git push --ta origin x" "git push --foll origin x" "git push origin +v1.4.0"; do
+for cmd in "git push origin main" "git push -u origin HEAD:main" "git push --force origin x" "gh pr merge 1" "gh api repos/{owner}/{repo}/pulls/1/merge -X PUT" "gh api repos/{owner}/{repo}/pulls/1/merge -X PUT -f a=/comments --paginate" "git push origin v1.2.3" "git push --follow-tags" "git push --follow origin x" "git push --tag origin x" "git push --ta origin x" "git push --foll origin x" "git push origin +v1.4.0" \
+  "git push origin HEAD:refs/heads/main" "git push origin :refs/heads/main" "git push origin :main" "git push origin fix/1-x:refs/heads/main" \
+  "git fetch --upload-pack=x ." "git pull --upload-pack=x ." "git ls-remote --upload-pack=x ." "git push --receive-pack=x origin fix/1-x" "git push --exec=x origin fix/1-x" \
+  "git diff --output=/tmp/x" "git log --oneline --output=/tmp/x" \
+  "git -c core.sshCommand=x fetch origin" "git --config-env=core.sshCommand=X fetch origin" "git config core.sshCommand x" "git config alias.st !x" \
+  "git pull --no-rebase --no-edit origin --upload-p=x" "git ls-remote --heads origin --upload-p=x" "git ls-remote --heads origin --u=x" "git fetch origin --upl=x" \
+  "git push origin x --receive=x" "git push origin x --rece=x" "git push origin x --exe=x" "git push origin x --e=x" \
+  "git diff --out=/tmp/x" "git log --outp=/tmp/x" "git show --output=/tmp/x" "git show HEAD --ou=/tmp/x" \
+  "git config" "git -C . config k v" "git push origin :refs/heads/abandoned/1-x" "git ls-remote --heads origin --exec=x" "git fetch origin --exe=x" "git pull --no-rebase --no-edit origin --exec=x" "git fetch origin main --upload-pack=x" \
+  "git push origin HEAD:heads/main" "git push origin fix/1-x:heads/main" \
+  "git -C . fetch --upload-pack=x ." "git -C . ls-remote --upl=x ." "git -C . pull --exec=x ." "git -C . push --receive-pack=x origin x" "git --no-pager diff --output=x" "git -C . log --outp=/tmp/x" "git --no-pager show --ou=x" \
+  "git -C . -c core.sshCommand=x fetch origin" "git --no-pager -c core.fsmonitor=x status" "git -C . --config-env=core.pager=X log"; do
   if matches_any "$cmd" "${DENY[@]}"; then echo "ok   still denied: $cmd"; else fail "not denied: $cmd"; fi
 done
 
 # The test above skips any loop command the deny list matches, so a deny rule that
 # grew too broad would silently stop the loop. Pin the pushes the loop needs (#41).
-for cmd in "git push -u origin fix/1-x" "git push origin fix/1-x" "git push origin --delete fix/1-x" "git push origin HEAD:refs/heads/abandoned/1-abc1234"; do
+for cmd in "git push -u origin fix/1-x" "git push origin fix/1-x" "git push origin --delete fix/1-x" "git push origin HEAD:refs/heads/abandoned/1-abc1234" "git push origin fix/1-x:refs/heads/abandoned/1-abc1234" "git fetch origin" "git fetch origin main" "git -C . status --short" "git --no-pager log --oneline -3" "git -C . diff --name-only main...HEAD" "git push origin feat/7-heads-up" "git pull --ff-only" "git pull --no-rebase --no-edit origin fix/1-x" "git ls-remote --heads origin" "git ls-remote --heads origin fix/1-x" "git diff --name-only main...HEAD" "git log --oneline origin/main..HEAD" "git commit -m fix: deny --upload-pack, --receive-pack, --exec and --output (#95)" "git commit -m docs: git -c and git config are denied, as is refs/heads/main"; do
   if matches_any "$cmd" "${DENY[@]}"; then fail "denied, but the loop needs it: $cmd"; else echo "ok   not denied: $cmd"; fi
 done
 
