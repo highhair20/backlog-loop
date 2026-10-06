@@ -54,6 +54,10 @@ removes it from a repo made with "Use this template", and sync never copies it.
   have reviewed. Commit the pin with the agents.
 - **`docs/BACKLOG.md`** (seeded) gained a paragraph on the pin under "Reviewers";
   copy it from the template if you want it.
+- **Loop logs (#99):** the next driver run makes the default `.loop-logs/` private,
+  which also hides the logs earlier runs wrote there. If you set `LOG_DIR` to a
+  directory of your own, the driver leaves it as it is: run
+  `chmod 700 "$LOG_DIR" && chmod 600 "$LOG_DIR"/item-*.log` to hide earlier logs.
 
 ## [0.1.0] - 2026-10-04
 

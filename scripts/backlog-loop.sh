@@ -142,7 +142,7 @@ elif [ "$LOG_DIR" = "$DEFAULT_LOG_DIR" ] && [ -d "$LOG_DIR" ] && [ ! -L "$LOG_DI
 fi
 [ -d "$LOG_DIR" ] || { echo "✗ the log directory $LOG_DIR is not a directory. Stopping." >&2; exit 1; }
 # A directory left as it was may still let others in: say so, but run.
-log_dir_mode="$(ls -ldL "$LOG_DIR" | cut -c5-10)"
+log_dir_mode="$(ls -ldL -- "$LOG_DIR" | cut -c5-10)"
 if [ "$log_dir_mode" != ------ ]; then
   echo "⚠ the log directory $LOG_DIR is not private to you (group/other bits: ${log_dir_mode:-unknown}); the driver left its mode as it was. New logs are still mode 600." >&2
 fi
@@ -300,8 +300,10 @@ while [ "$count" -lt "$MAX_ITEMS" ]; do
 
   count=$((count + 1))
   ts="$(date +%Y%m%d-%H%M%S)"
-  # The item number keeps names unique even when two items start in the same second.
-  base="$LOG_DIR/item-$ts-$count"
+  # The item number keeps names unique even when two items start in the same second,
+  # and the PID when a re-run starts in the same second as the last run: new_log
+  # refuses a name that is taken.
+  base="$LOG_DIR/item-$ts-$$-$count"
   log="$base.log"
   echo "▶ [$count/$MAX_ITEMS] $remaining issue(s) to work or follow up → /work-next-item (log: $log)"
 

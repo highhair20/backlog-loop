@@ -156,15 +156,14 @@ NE="$(setup nestedlogdir progress)"
 (umask 022; PATH="$NE/bin:$PATH" PACE_SECONDS=0 LOG_DIR="$WORK/nested/a/logs" "$NE/scripts/backlog-loop.sh" >"$NE/out" 2>&1); rc=$?
 check "creates a nested LOG_DIR, its leaf mode 700" "[ $rc -eq 0 ] && [ \"\$(mode '$WORK/nested/a/logs')\" = drwx------ ]"
 # A file or symlink already at a log's name is never written through: the run stops
-# and the target is untouched. A fake date makes the name predictable.
-PL="$(setup plantedlog progress)"
-printf '#!/usr/bin/env bash\nif [ "$1" = +%%Y%%m%%d-%%H%%M%%S ]; then echo 20260101-000000; else exec /bin/date "$@"; fi\n' >"$PL/bin/date"
-chmod +x "$PL/bin/date"
+# and the target is untouched. The first attempt plants a symlink at the retry's
+# log name, then fails, so the driver's next log name is the planted one.
+PL="$(setup plantedlog steps)"
 mkdir -m 700 "$WORK/logs-planted"
 echo keep >"$WORK/victim"; chmod 644 "$WORK/victim"
-ln -s "$WORK/victim" "$WORK/logs-planted/item-20260101-000000-1.log"
+printf 'f="$(ls "%s"/item-*.log)"\nln -s "%s" "${f%%.log}.attempt2.log"\nexit 1\n' "$WORK/logs-planted" "$WORK/victim" >"$PL/step-1"
 PATH="$PL/bin:$PATH" PACE_SECONDS=0 BACKOFF_SECONDS=0 LOG_DIR="$WORK/logs-planted" "$PL/scripts/backlog-loop.sh" >"$PL/out" 2>&1; rc=$?
-check "refuses a symlink planted at the log's name, leaving its target alone" "[ $rc -eq 1 ] && [ ! -s '$PL/calls' ] && [ \"\$(cat '$WORK/victim')\" = keep ] && [ \"\$(mode '$WORK/victim')\" = -rw-r--r-- ] && grep -q 'already there' '$PL/out'"
+check "refuses a symlink planted at the log's name, leaving its target alone" "[ $rc -eq 1 ] && [ \$(wc -l <'$PL/calls') -eq 1 ] && [ -L \"\$(ls -d '$WORK/logs-planted'/item-*.attempt2.log)\" ] && [ \"\$(cat '$WORK/victim')\" = keep ] && [ \"\$(mode '$WORK/victim')\" = -rw-r--r-- ] && grep -q 'already there' '$PL/out'"
 Y="$(setup linkedlogdir progress)"
 mkdir -m 755 "$WORK/linked-target"
 ln -s "$WORK/linked-target" "$Y/.loop-logs"
