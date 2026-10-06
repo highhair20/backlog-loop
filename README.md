@@ -138,7 +138,8 @@ The steps it checks:
 4. **Protect `main`:** `scripts/protect-main.sh <owner>/<repo> <ci-job-name>…`.
    It creates a branch ruleset that requires a pull request and the named CI
    checks, and lets admins bypass only by merging a PR. This is the only guardrail
-   that holds no matter how a command is phrased (see [Limits](#limits)). It is
+   that holds no matter how a command is phrased, so it is required (see
+   [Security](#security)). It is
    safe to re-run. On GitHub Enterprise, put the host in front:
    `scripts/protect-main.sh <host>/<owner>/<repo> …` (`setup.sh` prints it that way).
    A bare `<owner>/<repo>` goes to gh's default host (github.com unless `GH_HOST`
@@ -156,6 +157,9 @@ The steps it checks:
    it: `setup.sh --fix` adds it to `contact_links` in
    `.github/ISSUE_TEMPLATE/config.yml`, keeping any links already there. It is a
    warning, not a failure.
+7. **On a public repo, turn the proposal gate on** (`- Gate: on` under
+   `## Proposal gate` in `CLAUDE.md`). `setup.sh` warns when a public repo has it
+   off; [Security](#security) says why. It is a warning, not a failure.
 
 ### An existing repository
 
@@ -286,6 +290,38 @@ The guardrails are layered, from softest to hardest:
    `main`. You set this up once per repo.
 5. **You** — every change reaches `main` only through a merge you make.
 
+## Security
+
+The loop acts with your credentials: your `gh` login, your git push access, and
+whatever your shell can reach. Know what that lets it do.
+
+- **Issue bodies and comments are untrusted input that steers the loop.** The model
+  reads them as its task. A misleading issue can ask for code that does something
+  other than what its title says.
+- **Labelling an issue tells the loop to follow it.** A priority label (`P0`–`P3`)
+  is what makes an issue selectable. Only people with triage access can add one,
+  but adding it is your approval of what the issue says.
+- **Verify runs repo code as you.** A headless session accepts its own edits and
+  then runs your Verify commands, so code an issue asked for runs with your
+  credentials before you see a PR.
+
+**On a public repository,** where anyone can open an issue:
+
+- **Turn the proposal gate on** (`- Gate: on` under `## Proposal gate` in
+  `CLAUDE.md`). A hand-written issue then gets a proposal for you to approve with
+  `heal:approved` before any code runs. `setup.sh` warns when a public repo has it
+  off. Issues carrying the section's `Machine-filed label` skip the proposal, so
+  leave it `none`, or name a label only your automation applies: never one an issue
+  form adds by itself, such as `bug` or `enhancement`.
+- **Label only issues you have read**, comments included.
+- **Run unattended loops in an isolated environment**: a container, a VM, or a
+  scheduled routine ([`docs/ROUTINE.md`](docs/ROUTINE.md)), with a fine-grained
+  token limited to this one repository rather than your everyday login.
+
+**The `protect-main` ruleset is required, not optional** (Getting started, step 4).
+It is the only guardrail that holds whatever the command text: the deny rules match
+spellings, and some forms get past them (see [Limits](#limits)).
+
 ## Limits
 
 - **Permission rules match command text; they are a filter, not a wall.** A
@@ -299,7 +335,7 @@ The guardrails are layered, from softest to hardest:
   it, but an interactive session would ask you rather than refuse. Claude Code itself refuses edits under `.git/` (a "sensitive file", even
   with edits auto-approved), so a session cannot plant a git hook or config instead.
   A headless session still runs your Verify commands, which run this repo's code with
-  your credentials: label only issues you have read, and see the proposal gate.
+  your credentials: label only issues you have read, and see [Security](#security).
 - The deny rules block merging through `gh api`, but not other raw API writes: a
   `gh api -X PUT repos/<owner>/<repo>/contents/<path>` can still write to `main`.
   The branch ruleset blocks that too.
