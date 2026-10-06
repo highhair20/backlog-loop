@@ -89,11 +89,24 @@ ecc_commit "add broken"
 B="$(target broken broken)"
 run "$B"; rc=$?
 check "refuses upstream frontmatter with no closing ---" "[ $rc -ne 0 ] && [ ! -e '$B/.claude/agents/broken.md' ] && grep -q 'frontmatter' '$B/out'"
+# A failed --adopt must not move the pin: it would claim agents never vendored.
+echo 0123456789abcdef0123456789abcdef01234567 >"$B/scripts/ECC_PIN"
+run "$B" "$ECC" --adopt; rc=$?
+check "a failed --adopt keeps the old pin" "[ $rc -ne 0 ] && grep -qx 0123456789abcdef0123456789abcdef01234567 '$B/scripts/ECC_PIN'"
 git -C "$ECC" rm -q agents/broken.md && ecc_commit "remove broken"
 
 M="$(target missing alpha)"
 run "$M" "$WORK/no-such-ecc"; rc=$?
 check "refuses without an ECC checkout" "[ $rc -ne 0 ] && grep -q 'ECC_ROOT' '$M/out'"
+
+# A plain copy of ECC inside another repo: git would report that repo's commit.
+OUTER="$WORK/outer"
+mkdir -p "$OUTER" && git -C "$OUTER" init -q -b main
+mkdir -p "$OUTER/ecc-copy" && cp -R "$ECC/agents" "$ECC/LICENSE" "$OUTER/ecc-copy/"
+git -C "$OUTER" add -A && git_q -C "$OUTER" commit -qm outer
+git -C "$OUTER" rev-parse HEAD >"$M/scripts/ECC_PIN"
+run "$M" "$OUTER/ecc-copy"; rc=$?
+check "refuses an ECC copy that is not the top of its own checkout" "[ $rc -ne 0 ] && grep -q 'top of a git checkout' '$M/out' && [ -z \"\$(ls -A '$M/.claude/agents')\" ]"
 
 # --- the pin: vendor only from the ECC commit named in scripts/ECC_PIN ---
 head_sha() { git -C "$ECC" rev-parse HEAD; }
@@ -124,7 +137,7 @@ check "refuses with no pin file, naming --adopt" "[ $rc -ne 0 ] && grep -q -- '-
 run "$Z" "$ECC" --adopt; rc=$?
 check "--adopt writes a missing pin" "[ $rc -eq 0 ] && [ \"\$(cat '$Z/scripts/ECC_PIN')\" = \"\$(head_sha)\" ]"
 
-for bad in main "" "$OTHER extra"; do
+for bad in main "" "$OTHER extra" "${OTHER:0:7}" "$(printf '%s' "$OTHER" | tr a-f A-F)"; do
   W="$(target "badpin-${#bad}" alpha)"
   printf '%s\n' "$bad" >"$W/scripts/ECC_PIN"
   run "$W"; rc=$?
