@@ -190,6 +190,10 @@ cd my-app && scripts/setup.sh --fix
 `setup.sh` then lists anything still missing, such as the branch ruleset.
 
 The sync never commits. Review `git diff` in your repo, then commit it on a branch.
+It never writes through a symlink either: if a file it would write, or a directory
+above one (such as `.claude`), is a symlink in your repo, it names the link and
+changes nothing. A seeded file you already have may be a link, since sync leaves it
+alone.
 It treats files three ways, so re-running it later is safe:
 
 | Kind | Files | On every sync |
