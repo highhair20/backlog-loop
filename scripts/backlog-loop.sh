@@ -130,12 +130,13 @@ esac
 
 # The logs hold whole session transcripts (issue text, code, command output), so
 # only this user may read them (#99). A LOG_DIR the driver creates is mode 700, and
-# so is the default one, which earlier runs created with the default umask. A
-# LOG_DIR the operator chose and already has keeps its mode, and so does whatever a
-# symlinked default points at; each log is still mode 600 (new_log).
-if [ ! -e "$LOG_DIR" ]; then
+# so is the default one this user owns, which earlier runs created with the default
+# umask. A LOG_DIR the operator chose and already has keeps its mode, and so do a
+# symlinked default's target and a default another user owns (a shared checkout
+# must still run); each log is still mode 600 (new_log).
+if [ ! -e "$LOG_DIR" ] && [ ! -L "$LOG_DIR" ]; then
   { mkdir -p -- "$(dirname -- "$LOG_DIR")" && mkdir -m 700 -- "$LOG_DIR"; } || { echo "✗ cannot create the log directory $LOG_DIR. Stopping." >&2; exit 1; }
-elif [ "$LOG_DIR" = "$DEFAULT_LOG_DIR" ] && [ ! -L "$LOG_DIR" ]; then
+elif [ "$LOG_DIR" = "$DEFAULT_LOG_DIR" ] && [ -d "$LOG_DIR" ] && [ ! -L "$LOG_DIR" ] && [ -O "$LOG_DIR" ]; then
   # No `--`: macOS chmod rejects it, and this path is always .loop-logs.
   chmod 700 "$LOG_DIR" || { echo "✗ cannot make $LOG_DIR private (mode 700). Stopping." >&2; exit 1; }
 fi
@@ -229,13 +230,17 @@ run_item() {
   fi
 }
 
-# Creates log $1 as mode 600 before the session writes to it (#99). The umask is
-# set only in this subshell: the session must create the repo's files as before.
+# Creates log $1 as a new mode-600 file before the session writes to it (#99). The
+# umask is set only in this subshell: the session must create the repo's files as
+# before. Nothing may already be at $1: in a LOG_DIR others can write to, a file or
+# symlink planted at the predictable name would otherwise be written through. The
+# -e/-L checks refuse anything there, and noclobber (O_EXCL) closes the gap between
+# the check and the create.
 # A log that cannot be created stops the run, rather than read as a failed session
 # and be retried with backoff.
 new_log() {
-  # chmod too: `:>` keeps the mode of a file that already exists.
-  { ( umask 077 && : >"$1" ) && chmod 600 "$1"; } || { echo "✗ cannot create the log $1. Stopping." >&2; exit 1; }
+  { [ ! -e "$1" ] && [ ! -L "$1" ] && ( umask 077 && set -C && : >"$1" ); } \
+    || { echo "✗ cannot create the log $1 (it must not exist yet). Stopping." >&2; exit 1; }
 }
 
 # A session that ends its turn while a command still runs (#84) leaves its work

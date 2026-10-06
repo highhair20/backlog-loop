@@ -35,9 +35,11 @@ removes it from a repo made with "Use this template", and sync never copies it.
 ### Fixed
 
 - `scripts/backlog-loop.sh` keeps its logs private to the user who ran it: each
-  log is mode 600, a log directory it creates is mode 700, and an existing
-  `.loop-logs/` is tightened to 700. A `LOG_DIR` the operator chose and already has
-  keeps its mode. A log directory or log it cannot create now stops the run (#99).
+  log is a new mode-600 file (it never writes through a file or symlink already at
+  the log's name), a log directory it creates is mode 700, and an existing
+  `.loop-logs/` the user owns is tightened to 700. A `LOG_DIR` the operator chose
+  and already has keeps its mode. A log directory or log it cannot create now
+  stops the run (#99).
 - `scripts/sync-guardrails.sh` never writes through a symlink in the target repo.
   If a file it would write, or a directory above one, is a symlink, it names it and
   writes nothing, so a committed link cannot send the sync's writes outside the

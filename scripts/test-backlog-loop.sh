@@ -155,6 +155,14 @@ mkdir -m 755 "$WORK/linked-target"
 ln -s "$WORK/linked-target" "$Y/.loop-logs"
 (umask 022; run_default "$Y"); rc=$?
 check "does not chmod the directory a symlinked .loop-logs points at" "[ $rc -eq 0 ] && [ \"\$(mode '$WORK/linked-target')\" = drwxr-xr-x ]"
+RF="$(setup filelogdir progress)"
+: >"$RF/.loop-logs"; chmod 644 "$RF/.loop-logs"
+run_default "$RF"; rc=$?
+check "a regular file named .loop-logs stops the run, its mode untouched" "[ $rc -eq 1 ] && [ ! -s '$RF/calls' ] && [ \"\$(mode '$RF/.loop-logs')\" = -rw-r--r-- ] && grep -q 'not a directory' '$RF/out'"
+DL="$(setup danglinglogdir progress)"
+ln -s "$WORK/no-such-dir" "$DL/.loop-logs"
+run_default "$DL"; rc=$?
+check "a dangling .loop-logs symlink says it is not a directory" "[ $rc -eq 1 ] && [ ! -s '$DL/calls' ] && grep -q 'not a directory' '$DL/out'"
 N="$(setup badlogdir progress)"
 : >"$WORK/notadir"
 PATH="$N/bin:$PATH" PACE_SECONDS=0 BACKOFF_SECONDS=0 LOG_DIR="$WORK/notadir/logs" "$N/scripts/backlog-loop.sh" >"$N/out" 2>&1; rc=$?
