@@ -306,7 +306,9 @@ whatever your shell can reach. Know what that lets it do.
 - **Turn the proposal gate on** (`- Gate: on` under `## Proposal gate` in
   `CLAUDE.md`). A hand-written issue then gets a proposal for you to approve with
   `heal:approved` before any code runs. `setup.sh` warns when a public repo has it
-  off.
+  off. Issues carrying the section's `Machine-filed label` skip the proposal, so
+  leave it `none`, or name a label only your automation applies: never one an issue
+  form adds by itself, such as `bug` or `enhancement`.
 - **Label only issues you have read**, comments included.
 - **Run unattended loops in an isolated environment**: a container, a VM, or a
   scheduled routine ([`docs/ROUTINE.md`](docs/ROUTINE.md)), with a fine-grained

@@ -550,18 +550,20 @@ check_ruleset() {
   fi
 }
 
-# The value of the Gate: line under ## Proposal gate, lowercased with spaces
-# dropped, as /work-next-item reads it ("gate:ON" is on): "none" when there is no
-# such section (the gate is off), empty when the section has no Gate: line.
+# The value of the Gate: line under ## Proposal gate, lowercased with spaces and
+# bold marks dropped, as /work-next-item reads it ("gate:ON" is on): "none" when
+# there is no such section (the gate is off), empty when the section has no Gate:
+# line. Lines in code fences never count.
 proposal_gate() {
   [ -f CLAUDE.md ] || { echo none; return 0; }
   awk '
     /^```/ { in_code = !in_code; next }
-    !in_code && /^## / { in_gate = ($0 ~ /^## Proposal gate[[:space:]]*$/); seen = seen || in_gate; next }
+    in_code { next }
+    /^## / { in_gate = (tolower($0) ~ /^## proposal gate[[:space:]]*$/); seen = seen || in_gate; next }
     in_gate {
       line = tolower($0)
-      gsub(/[[:space:]]/, "", line)
-      if (sub(/^-?gate:/, "", line)) { value = line; exit }
+      gsub(/[[:space:]]|\*\*|__/, "", line)
+      if (sub(/^[-*+]?gate:/, "", line)) { value = line; exit }
     }
     END { print (seen ? value : "none") }
   ' CLAUDE.md
@@ -571,16 +573,27 @@ proposal_gate() {
 # follows it with your credentials, so the proposal gate should be on (#100).
 check_security() {
   echo "Security"
-  local visibility rc=0 hint="set '- Gate: on' under ## Proposal gate in CLAUDE.md"
-  visibility="$(gh repo view "$repo_full" --json visibility --jq .visibility 2>&1)" || rc=$?
+  local visibility why rc=0 hint="set '- Gate: on' under ## Proposal gate in CLAUDE.md"
+  if ! why="$(mktemp)"; then
+    warn "could not create a temp file, so the proposal gate was not checked (see README.md#security)"
+    return
+  fi
+  visibility="$(gh repo view "$repo_full" --json visibility --jq .visibility 2>"$why")" || rc=$?
   if [ "$rc" -ne 0 ] || [ -z "$visibility" ]; then
-    warn "could not read the visibility of $repo, so the proposal gate was not checked (see README.md#security)${visibility:+: $(printf '%s' "$visibility" | tr '\n' ' ')}"
+    warn "could not read the visibility of $repo, so the proposal gate was not checked (see README.md#security): $(tr '\n' ' ' <"$why")"
+    rm -f "$why"
     return
   fi
-  if [ "$visibility" != PUBLIC ]; then
-    ok "$repo is not public ($(printf '%s' "$visibility" | tr '[:upper:]' '[:lower:]')), so the proposal gate is your choice"
-    return
-  fi
+  rm -f "$why"
+  case "$visibility" in
+    PUBLIC) ;;
+    PRIVATE|INTERNAL)
+      ok "$repo is not public ($(printf '%s' "$visibility" | tr '[:upper:]' '[:lower:]')), so the proposal gate is your choice"
+      return ;;
+    *)
+      warn "$repo has an unknown visibility ($visibility), so the proposal gate was not checked (see README.md#security)"
+      return ;;
+  esac
   case "$(proposal_gate)" in
     on) ok "$repo is public, and the proposal gate is on" ;;
     off|none) warn "$repo is public, and the proposal gate is off: a labelled issue from anyone steers the loop (see README.md#security)" "$hint" ;;
