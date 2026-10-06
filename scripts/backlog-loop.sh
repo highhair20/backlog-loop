@@ -62,7 +62,8 @@ MAX_ITEMS="${MAX_ITEMS:-25}"
 PACE_SECONDS="${PACE_SECONDS:-5}"
 MAX_RETRIES="${MAX_RETRIES:-3}"
 BACKOFF_SECONDS="${BACKOFF_SECONDS:-300}"
-LOG_DIR="${LOG_DIR:-.loop-logs}"
+DEFAULT_LOG_DIR=.loop-logs
+LOG_DIR="${LOG_DIR:-$DEFAULT_LOG_DIR}"
 BG_WAIT_SECONDS="${BG_WAIT_SECONDS:-2700}"
 case "$BG_WAIT_SECONDS" in
   ''|*[!0-9]*) echo "✗ BG_WAIT_SECONDS must be a whole number of seconds, got: $BG_WAIT_SECONDS" >&2; exit 1 ;;
@@ -127,7 +128,18 @@ case "$tv_rc" in
   *) echo "⚠ ${tv_out:-could not compare this repo with the template}" >&2 ;;
 esac
 
-mkdir -p "$LOG_DIR"
+# The logs hold whole session transcripts (issue text, code, command output), so
+# only this user may read them (#99). A LOG_DIR the driver creates is mode 700, and
+# so is the default one, which earlier runs created with the default umask. A
+# LOG_DIR the operator chose and already has keeps its mode, and so does whatever a
+# symlinked default points at; each log is still mode 600 (new_log).
+if [ ! -e "$LOG_DIR" ]; then
+  { mkdir -p -- "$(dirname -- "$LOG_DIR")" && mkdir -m 700 -- "$LOG_DIR"; } || { echo "✗ cannot create the log directory $LOG_DIR. Stopping." >&2; exit 1; }
+elif [ "$LOG_DIR" = "$DEFAULT_LOG_DIR" ] && [ ! -L "$LOG_DIR" ]; then
+  # No `--`: macOS chmod rejects it, and this path is always .loop-logs.
+  chmod 700 "$LOG_DIR" || { echo "✗ cannot make $LOG_DIR private (mode 700). Stopping." >&2; exit 1; }
+fi
+[ -d "$LOG_DIR" ] || { echo "✗ the log directory $LOG_DIR is not a directory. Stopping." >&2; exit 1; }
 
 # Single-instance lock, so two drivers can't double-claim, and so a /work-next-item
 # started by hand while this runs stops at its own lock check. It reclaims a lock a
@@ -217,6 +229,14 @@ run_item() {
   fi
 }
 
+# Creates log $1 as mode 600 before the session writes to it (#99). The umask is
+# set only in this subshell: the session must create the repo's files as before.
+# A log that cannot be created stops the run, rather than read as a failed session
+# and be retried with backoff.
+new_log() {
+  ( umask 077 && : >"$1" ) || { echo "✗ cannot create the log $1. Stopping." >&2; exit 1; }
+}
+
 # A session that ends its turn while a command still runs (#84) leaves its work
 # uncommitted or unpushed, and only its log said so. After a stall, name the branch
 # it left that on (#85). A branch with no upstream was never pushed (Step 6 pushes
@@ -268,6 +288,7 @@ while [ "$count" -lt "$MAX_ITEMS" ]; do
     # Each attempt gets its own log, so a retry cannot erase why the last one failed.
     [ "$attempt" -eq 1 ] || log="$base.attempt$attempt.log"
     clear_drained_mark
+    new_log "$log"
     if run_item "$log"; then
       break
     fi

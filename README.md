@@ -260,6 +260,11 @@ has, the driver names the branch and that session's log. Usually the session end
 its turn while a command it started was still running, so the work never reached a
 commit or a push.
 
+**Logs are private.** Each session's log holds its whole transcript: issue text,
+code, and command output. So the driver writes each log as mode 600, creates its
+log directory as mode 700, and tightens an existing `.loop-logs/` to 700. A
+`LOG_DIR` you point elsewhere that already exists keeps its permissions.
+
 **One driver at a time.** `backlog-loop.sh` holds a lock in the git directory
 (`.git/backlog-loop.lock`) while it runs, so a second driver in the same clone
 refuses to start, whatever its `LOG_DIR`. A lock left by a crashed or killed run is
