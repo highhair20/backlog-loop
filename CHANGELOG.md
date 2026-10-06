@@ -29,6 +29,13 @@ removes it from a repo made with "Use this template", and sync never copies it.
   the agents and `LICENSE` from the commit, never the working tree; `--adopt`
   vendors from the checkout's commit and pins it (#97).
 
+### Fixed
+
+- `scripts/sync-guardrails.sh` never writes through a symlink in the target repo.
+  If a file it would write, or a directory above one, is a symlink, it names it and
+  writes nothing, so a committed link cannot send the sync's writes outside the
+  repo (#96).
+
 ### Manual steps for existing repos
 
 - **`scripts/ECC_PIN`:** a sync seeds the template's pin. If your reviewer agents
