@@ -234,7 +234,8 @@ run_item() {
 # A log that cannot be created stops the run, rather than read as a failed session
 # and be retried with backoff.
 new_log() {
-  ( umask 077 && : >"$1" ) || { echo "✗ cannot create the log $1. Stopping." >&2; exit 1; }
+  # chmod too: `:>` keeps the mode of a file that already exists.
+  { ( umask 077 && : >"$1" ) && chmod 600 "$1"; } || { echo "✗ cannot create the log $1. Stopping." >&2; exit 1; }
 }
 
 # A session that ends its turn while a command still runs (#84) leaves its work

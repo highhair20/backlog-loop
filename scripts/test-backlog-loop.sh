@@ -159,6 +159,14 @@ N="$(setup badlogdir progress)"
 : >"$WORK/notadir"
 PATH="$N/bin:$PATH" PACE_SECONDS=0 BACKOFF_SECONDS=0 LOG_DIR="$WORK/notadir/logs" "$N/scripts/backlog-loop.sh" >"$N/out" 2>&1; rc=$?
 check "stops before any item when it cannot create LOG_DIR" "[ $rc -ne 0 ] && [ ! -s '$N/calls' ] && grep -q '✗.*notadir/logs' '$N/out' && ! grep -q 'attempt 1 failed' '$N/out'"
+# A log it cannot create stops the run, not read as a failed session and retried.
+# Root ignores the read-only mode, so the check needs a normal user.
+if [ "$(id -u)" -ne 0 ]; then
+  RO="$(setup readonlylogdir progress)"
+  mkdir -m 555 "$WORK/logs-readonly"
+  PATH="$RO/bin:$PATH" PACE_SECONDS=0 BACKOFF_SECONDS=0 LOG_DIR="$WORK/logs-readonly" "$RO/scripts/backlog-loop.sh" >"$RO/out" 2>&1; rc=$?
+  check "stops before any item when it cannot create a log" "[ $rc -eq 1 ] && [ ! -s '$RO/calls' ] && grep -q 'cannot create the log ' '$RO/out' && ! grep -q 'attempt 1 failed' '$RO/out'"
+fi
 
 # The driver must not depend on the checkout its sessions change (#25).
 B="$(setup sabotage sabotage)"
