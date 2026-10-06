@@ -82,14 +82,21 @@ die() { echo "sync-guardrails: $*" >&2; exit 1; }
 # stays in synced repos — the script cannot tell it from one the repo added.
 #
 # Hooks: registrations of the managed hook scripts are managed too. Any target
-# command naming one is dropped, then the template's entries are added, so a
-# changed invocation replaces the old one instead of running twice. Other hooks
-# are kept, and a template entry is added only if one of its commands is new.
+# command that runs one is dropped, then the template's entries are added, so a
+# changed invocation replaces the old one instead of running twice. A command
+# runs one when its first word, unquoted, is the script's path or ends in
+# /<path>; a command that only mentions the name (my-setup.sh-wrapper) is the
+# repo's own (#98). Other hooks are kept, and a template entry is added only if
+# one of its commands is new.
 merge_settings() {
-  local managed
-  managed="$(printf '%s\n' "${MANAGED[@]##*/}" | jq -R . | jq -s .)"
+  local managed f hook_paths=()
+  for f in "${MANAGED[@]}"; do
+    case "$f" in .claude/hooks/*) hook_paths+=("$f") ;; esac
+  done
+  managed="$(printf '%s\n' ${hook_paths[@]+"${hook_paths[@]}"} | jq -R 'select(length > 0)' | jq -s .)"
   jq -s --argjson managed "$managed" '
-    def is_managed: . as $c | [$managed[] as $m | $c | contains($m)] | any;
+    def exe_path: first(capture("^\\s*(?:\"(?<q>[^\"]*)\"|'"'"'(?<s>[^'"'"']*)'"'"'|(?<w>\\S+))") | .q // .s // .w) // "";
+    def is_managed: exe_path as $p | any($managed[]; . as $m | $p == $m or ($p | endswith("/" + $m)));
     .[0] as $t | .[1] as $s
     | $t
     | .permissions.deny = (($t.permissions.deny // []) + (($s.permissions.deny // []) - ($t.permissions.deny // [])))

@@ -140,6 +140,23 @@ check "registers the review gate exactly once" "[ \"\$(jq '[.hooks.Stop[].hooks[
 check "drops the stale registration" "! grep -q -- '--old' '$S/.claude/settings.json'"
 check "keeps unrelated hooks when replacing" "jq -e '[.hooks.Stop[].hooks[].command] | index(\"echo local-stop\")' '$S/.claude/settings.json' >/dev/null"
 
+# --- a repo hook whose command only contains a managed name is the repo's (#98) ---
+# Only a command that runs a managed hook script, by its path, is the template's.
+H="$(new_target ownhooks)"
+OWN_HOOKS='["my-setup.sh-wrapper","/opt/bin/my-pr-review-gate.sh","scripts/setup.sh","echo pr-review-gate.sh done","\"$CLAUDE_PROJECT_DIR/.claude/hooks/pr-review-gate.sh.bak\""]'
+jq --argjson c "$OWN_HOOKS" '.hooks.Stop += [{"matcher":"*","hooks":[$c[] | {"type":"command","command":.}]}]' "$H/.claude/settings.json" >"$H/s.tmp" && mv "$H/s.tmp" "$H/.claude/settings.json"
+git -C "$H" -c user.name=t -c user.email=t@t commit -qam own-hooks
+"$SYNC" "$H" >/dev/null 2>&1
+check "keeps repo hooks that merely contain a managed name, unchanged" "jq -e --argjson c '$OWN_HOOKS' '[.hooks.Stop[] | select(.hooks | map(.command) == \$c)] | length == 1' '$H/.claude/settings.json' >/dev/null"
+check "still adds the template's review gate beside them" "jq -e '[.hooks.Stop[].hooks[].command] | index(\"\\\"\$CLAUDE_PROJECT_DIR/.claude/hooks/pr-review-gate.sh\\\"\")' '$H/.claude/settings.json' >/dev/null"
+
+# --- the template's quoted registration, with a changed invocation, is still replaced ---
+Q="$(new_target quoted)"
+jq '.hooks.Stop += [{"matcher":"*","hooks":[{"type":"command","command":"\"$CLAUDE_PROJECT_DIR/.claude/hooks/pr-review-gate.sh\" --old","timeout":5}]}]' "$Q/.claude/settings.json" >"$Q/s.tmp" && mv "$Q/s.tmp" "$Q/.claude/settings.json"
+git -C "$Q" -c user.name=t -c user.email=t@t commit -qam quoted
+"$SYNC" "$Q" >/dev/null 2>&1
+check "replaces a quoted managed registration, not duplicates it" "[ \"\$(jq '[.hooks.Stop[].hooks[].command | select(test(\"pr-review-gate.sh\"))] | length' '$Q/.claude/settings.json')\" = 1 ] && ! grep -q -- '--old' '$Q/.claude/settings.json'"
+
 # --- a repo's own reviewer agent is kept ---
 V="$(new_target ownagent)"
 mkdir -p "$V/.claude/agents" && echo "# my own reviewer" >"$V/.claude/agents/pr-test-analyzer.md"

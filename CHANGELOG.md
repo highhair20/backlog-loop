@@ -25,9 +25,17 @@ removes it from a repo made with "Use this template", and sync never copies it.
   uncommitted edits or unpushed commits, the driver names the branch and the
   session's log, instead of only "no progress" (#85).
 
+### Fixed
+
+- `scripts/sync-guardrails.sh` treats a hook as the template's only when its
+  command runs a managed hook script by its path. A repo's own hook whose command
+  merely contains a managed script's name (`my-setup.sh-wrapper`, `scripts/setup.sh`)
+  was dropped on sync; it is now kept (#98).
+
 ### Manual steps for existing repos
 
-- None.
+- None. If an earlier sync dropped one of your own hooks from
+  `.claude/settings.json`, restore it from that file's git history.
 
 ## [0.1.0] - 2026-10-04
 
