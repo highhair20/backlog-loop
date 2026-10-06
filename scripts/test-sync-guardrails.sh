@@ -152,6 +152,15 @@ check "refuses a symlinked .claude directory, naming it" "[ $rc -ne 0 ] && grep 
 check "leaves the directory behind a symlinked .claude unchanged" "[ \"\$(ls -A '$OUTDIR')\" = settings.json ] && [ \"\$(cat '$OUTDIR/settings.json')\" = '{}' ]"
 check "writes nothing into a target with a symlinked .claude" "[ -z \"\$(git -C '$L' status --porcelain)\" ] && [ ! -e '$L/scripts' ]"
 
+# The walk checks every directory, not only the first: here the link is two deep.
+OUTWF="$WORK/outside-workflows"
+mkdir -p "$OUTWF"
+L="$(link_target linknested .github/workflows "$OUTWF")"
+"$SYNC" "$L" >"$WORK/linknested.out" 2>&1
+rc=$?
+check "refuses a symlinked directory below the top level, naming it" "[ $rc -ne 0 ] && grep -qF '.github/workflows' '$WORK/linknested.out'"
+check "writes nothing behind a nested symlinked directory" "[ -z \"\$(ls -A '$OUTWF')\" ] && [ ! -e '$L/scripts' ]"
+
 # [ -e ] calls a dangling link missing, so the seeding would cp through it.
 mkdir -p "$WORK/dangling"
 L="$(link_target linkdangling docs/BACKLOG.md "$WORK/dangling/BACKLOG.md")"
