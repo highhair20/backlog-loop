@@ -74,11 +74,17 @@ gate on.
 
 ## While it runs
 
-- **One runner per repository.** Step 0 treats any `in-progress` issue as a run that
-  died, and recovers it. It cannot tell a run still working in another session from a
-  dead one, and `backlog-loop.sh`'s lock is a local file no cloud session sees. So do
-  not run the loop locally while the routine is live, and keep runs well inside the
-  interval. If runs approach an hour, schedule every two hours or more.
+- **One runner per repository.** Do not run the loop locally while the routine is
+  live, and keep runs well inside the interval. If runs approach an hour, schedule
+  every 2 hours or more. Claims are a backstop for when this slips (#57): every
+  claim is a comment naming the run and its checkout. Step 0 leaves alone a claim
+  younger than three hours, recovers older ones, and recovers a claim from its own
+  checkout at once. Its limits:
+  - A manual or `/loop` session does not take the lock, so two sessions in one
+    checkout can take each other's claim for a dead run's.
+  - A run that dies with a local-only branch (never pushed) leaves nothing a cloud
+    run can see. After three hours the cloud run starts the issue over, and the
+    local work turns up later under `abandoned/`.
 - **Approve a proposal** by adding `heal:approved`. The next run implements it and
   opens a PR assigned to you. For a fresh proposal instead, edit the issue and remove
   `heal:proposed`.

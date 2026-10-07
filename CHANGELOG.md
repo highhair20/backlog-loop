@@ -32,6 +32,15 @@ removes it from a repo made with "Use this template", and sync never copies it.
   set on a public repo, and why the `protect-main` ruleset is required.
   `scripts/setup.sh` warns when a public repo has the proposal gate off (#100).
 
+### Changed
+
+- `/work-next-item` records who holds an issue. Every claim is a comment naming the
+  run and its checkout. Step 0 leaves alone a claim younger than three hours, and
+  recovers an older one, or one from its own checkout, at once. Before, it treated
+  every `in-progress` issue as a dead run's. A run that loses a race to claim an
+  issue posts a release and backs off. One runner per repository is still the rule
+  (`docs/ROUTINE.md`); claims are a backstop for when it slips (#57).
+
 ### Fixed
 
 - `scripts/backlog-loop.sh` keeps its logs private to the user who ran it: each
@@ -62,6 +71,10 @@ removes it from a repo made with "Use this template", and sync never copies it.
   which also hides the logs earlier runs wrote there. If you set `LOG_DIR` to a
   directory of your own, the driver leaves it as it is: run
   `chmod 700 "$LOG_DIR" && chmod 600 "$LOG_DIR"/item-*.log` to hide earlier logs.
+- **Claims (#57):** add `Bash(hostname)`, `Bash(git rev-parse --show-toplevel)` and
+  `Bash(date -u +%Y-%m-%dT%H:%M:%SZ)` to `.claude/settings.local.json`'s allow list
+  (`scripts/missing-allow-rules.sh` names them). Without them a headless run stops
+  at the identity step.
 - If an earlier sync dropped one of your own hooks from `.claude/settings.json`
   (#98), restore it from that file's git history. Otherwise a re-sync is enough.
 

@@ -47,7 +47,7 @@ setup() {
   printf '#!/usr/bin/env bash\ncase "$*" in\n  "repo set-default --view") cat "%s/default" 2>/dev/null; exit 0 ;;\n  "repo view --json url --jq .url") echo https://github.com/o/r; exit 0 ;;\n  "pr list "*) cat "%s/prs.json" 2>/dev/null || echo "[]"; exit 0 ;;\nesac\n"%s/bin/issues-json"\n' "$dir" "$dir" "$dir" >"$dir/bin/gh-base"
   printf '#!/usr/bin/env bash\nexec "%s/bin/gh-base" "$@"\n' "$dir" >"$dir/bin/gh"
   {
-    printf '#!/usr/bin/env bash\ncd "%s" || exit 1\necho x >>calls\n' "$dir"
+    printf '#!/usr/bin/env bash\ncd "%s" || exit 1\necho x >>calls\nprintf "%%s\\n" "$2" >>prompts\n' "$dir"
     # The background-wait ceiling this session was given (#22).
     printf 'echo "${CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS:-unset}" >>bgwait\n'
     printf 'echo "${BACKLOG_LOOP_STAGED:-unset} ${BACKLOG_LOOP_ROOT:-unset}" >>staging-env\n'
@@ -336,7 +336,7 @@ committed_repo() { # committed_repo <name> <step-1 script>
   local dir; dir="$(setup "$1" steps)"
   echo 0 >"$dir/count"; echo "$IN_REVIEW" >"$dir/extra.json"
   printf '%s\n' "$2" >"$dir/step-1"
-  printf '%s\n' calls bgwait staging-env gh-repo-env umask-seen check-out check-rc finished started out >>"$dir/.git/info/exclude"
+  printf '%s\n' calls prompts bgwait staging-env gh-repo-env umask-seen check-out check-rc finished started out >>"$dir/.git/info/exclude"
   git -C "$dir" add -A
   git -C "$dir" -c user.name=t -c user.email=t@t commit -qm fixture
   git -C "$dir" update-ref refs/remotes/origin/main HEAD
@@ -534,6 +534,14 @@ wait_for "$K/finished"
 run "$K"; rc=$?
 check "the next run reclaims a hard-killed driver's lock" "[ $rc -eq 0 ] && grep -qi 'stale' '$K/out' && grep -q 'PID $KILLED' '$K/out'"
 check "and works the rest of the backlog" "[ \"\$(cat '$K/count')\" = 0 ]"
+
+# A session finds its own clone's claims itself (#57), so the driver passes nothing.
+DR="$(setup plainprompt progress)"
+run "$DR"
+check "every session is started as plain /work-next-item" "[ -s '$DR/prompts' ] && ! grep -vqx '/work-next-item' '$DR/prompts'"
+DM="$(setup plainpromptmodel progress)"
+MODEL=x run "$DM"
+check "and with MODEL set" "[ -s '$DM/prompts' ] && ! grep -vqx '/work-next-item' '$DM/prompts'"
 
 echo
 if [ "$failures" -eq 0 ]; then echo "all tests passed"; else echo "$failures test(s) failed" >&2; exit 1; fi
