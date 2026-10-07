@@ -226,8 +226,8 @@ watch what it would do before it can do it.
 
 A prior run may have died (context/usage limit, closed session) after claiming an
 issue but before opening its PR. Reconcile before starting anything new. Another run
-may also be working right now, so first tell a live claim from a dead one. List the
-claimed issues:
+may also be working right now, so first tell a live claim from a dead one. Note the
+time now (the `date` command above), then list the claimed issues:
 
 ```bash
 gh issue list --state open --label in-progress --limit 1000 --json number,title \
@@ -347,9 +347,10 @@ Then:
      Step 1 starts clean.
 3. **A branch exists (remote or local-only) but no open PR** → work was underway.
    Resume *that* issue as this iteration (do not pick a new one). Before resuming, claim it afresh
-   with Step 3's claim comment and run its race check: another runner may have judged
-   the same old claim stale at the same moment, and only the winner resumes. If you
-   lose, leave the issue and go on to Step 1. First, if an earlier
+   with Step 3's claim comment and run its race check against the time you listed the
+   claimed issues above: another runner may have judged the same old claim stale at
+   the same moment, and only the winner resumes. If you lose, leave the issue and
+   resume the next stale one, if any; otherwise go on to Step 1. First, if an earlier
    run stopped in the middle of a merge (`git rev-parse -q --verify MERGE_HEAD` prints
    a hash; no output means none is in progress), abort it: git refuses to change
    branches during a merge, and its conflict markers must not be committed as work.
@@ -401,7 +402,9 @@ Then:
 Note: if an issue is labelled `in-review` but its PR is closed-unmerged, leave it —
 that is a human signal, not loop work.
 
-Proceed to Step 1 only once no resumable in-progress item remains.
+Resume at most one item, the lowest-numbered: it is this iteration. With none to
+resume (every stale item released or handed back, or each resume lost its race), go
+on to Step 1; stale items still waiting are recovered by later runs.
 
 ## Step 1 — Clean base
 
@@ -422,7 +425,8 @@ its CI fails, the maintainer asks for changes, or `main` moves on and it conflic
 Step 2 skips every `in-review` issue, so without this step that PR waits for a human
 while the loop starts new work.
 
-**Find a PR that needs attention.** List the issues in review and the open PRs, and
+**Find a PR that needs attention.** Note the time now (the `date` command above) for
+the race check below, then list the issues in review and the open PRs, and
 pair them by branch name (`<type>/<N>-…`), as Step 0 does:
 
 ```bash
@@ -520,18 +524,18 @@ After 3 follow-ups in a row with no human feedback between them,
 stop following this PR up: hand it back (below) with "follow-up limit reached" and
 what still needs attention, then stop. New feedback starts a fresh count.
 
-**Claim it**, so another runner sees it is being worked: the same claim comment as
-Step 3's (its claim line only), then the label:
+**Claim it**, so another runner sees it is being worked: the claim comment, then
+Step 3's race check against the time you listed above, then the label, only if you won:
 
 ```bash
 gh issue comment <N> --body "<!-- backlog-loop:claim run=<run-id> at=<time> driver=<driver id, or none> --> Claimed by the backlog loop for a follow-up on its PR."
 gh issue edit <N> --remove-label in-review --add-label in-progress
 ```
 
-Then check for a claim race as Step 3 does: if a rival claim (another run's, posted less than 10 minutes before yours) came first,
-back off, and look at the next PR.
-
-If the edit fails, nothing has been touched yet: stop and report it.
+If the comment fails, nothing is claimed: stop and report it. If a rival claim (another runner's, posted after you listed, or less than a minute before) came first,
+back off before the label edit, so the issue stays `in-review` as you found it, and
+look at the next PR. If the label edit fails, stop and report it: the issue is still
+`in-review` with your claim comment, which holds nothing and a later run ignores.
 
 **Do the work** on the PR's own branch. If any git command below fails (the switch,
 the pull, the merge, a push), do not go on to Report and release, which would claim
@@ -636,7 +640,8 @@ steps 2 and 3 run on `main` would save `main`'s own commits.
 
 ## Step 2 — Select the next item
 
-Pick the highest-priority actionable issue. In priority order `P0`, then `P1`,
+Note the time now (the `date` command above) just before you list: Step 3's race
+check compares claims against it. Pick the highest-priority actionable issue. In priority order `P0`, then `P1`,
 then `P2`, then `P3` (always pass `--limit`: `gh` returns only 30 issues by default, which can
 hide every actionable one behind newer in-review or blocked ones):
 
@@ -670,7 +675,27 @@ gh issue view <number> --json title,body
 
 ## Step 3 — Claim it
 
-A claim starts on a fresh branch. Any branch for this issue that exists now
+**Claim it first, and check no other run claimed it at the same moment, before you
+touch anything.** Post the claim comment:
+
+```bash
+gh issue comment <number> --body "<!-- backlog-loop:claim run=<run-id> at=<time> driver=<driver id, or none> --> Claimed by the backlog loop."
+```
+
+If it fails, nothing is claimed: stop and report it. Then read the issue's comments
+again (`gh issue view <number> --json comments`). **A rival** is a claim comment from
+another runner (a different `run=`, and not your own driver: a driver runs one session
+at a time, so its claims are never rivals) posted after you listed the issues in Step
+2, or less than a minute before (its label may not have shown in your listing yet). An
+older claim was already visible to you as `in-progress`, so Step 2 would have skipped
+the issue had its run still held it: that run has since let go. Compare by `createdAt`
+(GitHub's clock); on a tie the smaller `run=` wins. **If a rival came first, back
+off:** you have posted only a comment, so write nothing more, touch no label or
+branch, and go back to Step 2 with this issue excluded. If the re-read fails, you
+cannot tell: stop and report it. Your comment alone holds nothing, since the issue is
+not yet labelled.
+
+Then the claim starts on a fresh branch. Any branch for this issue that exists now
 (`<type>/<number>-…`, local or remote, never `abandoned/…`) is left over from an
 earlier attempt. Resuming it later would redo rejected work, and its name blocks
 Step 4. Look with Step 0's `git ls-remote --heads origin` and `git branch --list`.
@@ -681,14 +706,15 @@ would close that PR. Mark the issue
 `gh issue edit <number> --add-label in-review`, leave the branch alone, and go back
 to Step 2 for another issue.
 
-**Retire a leftover branch before claiming.** Do this for every leftover branch
+**Retire a leftover branch before labelling.** Do this for every leftover branch
 name (a title edit can change the type or slug, so there may be more than one); a
 local and a remote branch with the same name are one. Check it out (the local copy if
 there is one, otherwise fetch the remote one), then run **Give up** steps 2, 4 and 5:
 save its commits under `abandoned/<number>-<short-sha>`, delete the remote copy only
 once it is proven to hold nothing unsaved, then delete the local branch and return to
 `main`. Skip Give up's step 1 (Step 1 left nothing uncommitted) and step 3 (this
-issue is being claimed, not released).
+issue is being claimed, not released). Only a run that won the race gets here, so two
+runners never retire the same branches.
 
 If any of those steps fails (the save, a remote copy step 4 keeps, or step 5's
 switch or delete), do not claim. Left unlabelled, Step 2 would select the issue again
@@ -706,24 +732,13 @@ find the saved work: any unmerged PRs from `<type>/<number>-…` in Step 0's clo
 listing that no comment on the issue names yet (check as Step 0's case 2 does), the
 branches you retired, and any `abandoned/<number>-…` branch on the remote that no
 comment names yet (a run interrupted between retiring and commenting leaves one).
-Comment first, in one comment that is also the claim: a run interrupted between the
-two then leaves an unclaimed issue, not a claim that Step 0 would hand back. The claim
-line comes first; add the retry sentence only when there is something to name.
+Comment first, then label: a run interrupted between the two then leaves an unclaimed
+issue, not a claim that Step 0 would hand back. With nothing to name, just label.
 
 ```bash
-gh issue comment <number> --body "<!-- backlog-loop:claim run=<run-id> at=<time> driver=<driver id, or none> --> Claimed by the backlog loop. Retrying this issue. Earlier PRs closed without merging: <closed PR urls, or none>. Leftover branches: <name> saved as abandoned/<number>-<short-sha> and deleted (or: deleted, no commits to keep; or none). Saved earlier: <abandoned/… branches no comment names, or none>. This attempt starts fresh."
+gh issue comment <number> --body "Retrying this issue. Earlier PRs closed without merging: <closed PR urls, or none>. Leftover branches: <name> saved as abandoned/<number>-<short-sha> and deleted (or: deleted, no commits to keep; or none). Saved earlier: <abandoned/… branches no comment names, or none>. This attempt starts fresh."
 gh issue edit <number> --add-label in-progress
 ```
-
-**Then check no other run claimed it at the same moment.** A label cannot tell, since
-both runs can add it. Read the issue's comments again. A rival is a claim comment from
-another run (a different `run=`) posted less than 10 minutes before yours: Step 2
-skips a claimed issue, so an older claim belongs to a run that has since released it,
-such as the one that opened this issue's PR. Compare by `createdAt` (GitHub's clock),
-and on a tie the smaller `run=` wins. If a rival was first, back off. Leave the label
-(it is that run's), write nothing more, and go back to Step 2 with this issue excluded.
-If the re-read fails, you cannot tell: stop and report it, leaving your claim, which
-expires like any other if no run works it.
 
 ## Step 3.5 — Verify the issue's premise BEFORE writing code
 
