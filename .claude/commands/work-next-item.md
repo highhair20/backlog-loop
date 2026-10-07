@@ -127,9 +127,10 @@ message and stop. Never remove the lock yourself; the message tells the human ho
 clear a stale one. The check passes when this session was started by the driver that
 holds the lock, and it clears a lock whose owner is no longer running.
 
-**Then set this run's identity, once, before Step 0.** Other runners (a scheduled
-routine, another machine) can work this repo at the same time, so every claim says
-whose it is (#57):
+**Then set this run's identity, once, before Step 0.** The rule is one runner per repository
+(`docs/ROUTINE.md`), but a second runner can start by mistake and a dead run leaves
+its claim behind, so every claim says whose it is (#57). Claims are a backstop for
+those cases, not permission to run several loops at once:
 
 - **The run ID:** the time you start plus six random hex characters you choose, e.g.
   `20261006T171119Z-3fa9c1`. Use the same one for every claim this run makes.
@@ -241,15 +242,20 @@ gh issue list --state open --label in-progress --limit 1000 --json number,title 
 For each `in-progress` issue `#N`, read its comments
 (`gh issue view ${N} --json comments`) and find the claim that holds it: the newest
 claim comment (one containing `<!-- backlog-loop:claim`, posted by the loop's own
-account), unless another run's claim was posted less than a minute before it. Then
-the earlier one won its race and holds the issue (the newer one is a loser that backed
-off). Then decide:
+account). Ignore a claim whose run later posted a release
+(`<!-- backlog-loop:release run=<that run's id>`): that run lost a race and backed
+off. Of the rest, the newest holds the issue, unless another run's claim was posted
+less than a minute before it. Then the earlier one won its race and holds the issue
+(the newer one is a loser that backed off but could not post its release). Then decide:
 
 - **Its claim has the same clone ID as yours,** and both are real clone IDs, not
   `none`: a run in this same checkout left it, whether an earlier session of this
-  driver, a driver restarted after a closed terminal, `/loop`, or a manual run. Two
-  runs never share one working tree, and the lock check above passed, so no other run
-  is working this clone: that run is dead. It is stale: recover it now. (A cloud
+  driver, a driver restarted after a closed terminal, `/loop`, or a manual run. The
+  lock check above passed, so no driver is working this clone, and one runner per
+  repository means nothing else is either: that run is dead. It is stale: recover it
+  now. A manual or `/loop` session does not take the lock, so one left running in
+  this checkout alongside another breaks that rule, and its claim is recovered
+  underneath it. (A cloud
   routine run gets a new machine each time, so its claims never match.)
 - **Its claim is younger than 3 hours,** judged by the claim comment's `createdAt`
   (GitHub's clock, not the `at=` a runner wrote) against the time now: another run may
@@ -539,6 +545,7 @@ gh issue edit <N> --remove-label in-review --add-label in-progress
 ```
 
 If the comment fails, nothing is claimed: stop and report it. If a rival claim (another runner's, posted after you listed, or less than a minute before) came first,
+post Step 3's release comment (`<!-- backlog-loop:release run=<run-id> -->`) and
 back off before the label edit, so the issue stays `in-review` as you found it, and
 look at the next PR. If the label edit fails, stop and report it: the issue is still
 `in-review` with your claim comment, which holds nothing and a later run ignores.
@@ -692,15 +699,23 @@ gh issue comment <number> --body "<!-- backlog-loop:claim run=<run-id> at=<time>
 If it fails, nothing is claimed: stop and report it. Then read the issue's comments
 again (`gh issue view <number> --json comments`). **A rival** is a claim comment from
 another runner (a different `run=`, and not your own clone when both are real clone
-IDs, not `none`: one checkout runs one loop at a time, so its claims are never rivals) posted after you listed the issues in Step
+IDs, not `none`: one checkout runs one loop at a time, so its claims are never rivals,
+the same rule as Step 0's) posted after you listed the issues in Step
 2, or less than a minute before (its label may not have shown in your listing yet). An
 older claim was already visible to you as `in-progress`, so Step 2 would have skipped
 the issue had its run still held it: that run has since let go. Compare by `createdAt`
 (GitHub's clock); on a tie the smaller `run=` wins. **If a rival came first, back
-off:** you have posted only a comment, so write nothing more, touch no label or
-branch, and go back to Step 2 with this issue excluded. If the re-read fails, you
-cannot tell: stop and report it. Your comment alone holds nothing, since the issue is
-not yet labelled.
+off:** you have posted only a comment, so touch no label or branch. Release your
+claim, so Step 0 never takes it for the one holding the issue:
+
+```bash
+gh issue comment <number> --body "<!-- backlog-loop:release run=<run-id> --> Released: another run claimed this first."
+```
+
+Then go back to Step 2 with this issue excluded. If the release fails, say so in the
+report and go on: Step 0 still sees the winner for a claim under a minute older than
+yours. If the re-read fails, you cannot tell: stop and report it. Your comment alone
+holds nothing, since the issue is not yet labelled.
 
 **If you won, label it at once,** seconds after the claim, so a run listing next sees
 it claimed (a slower label would outlast the one-minute window above):
@@ -717,7 +732,7 @@ Step 4. Look with Step 0's `git ls-remote --heads origin` and `git branch --list
 But first check it against Step 0's open-PR listing: a branch with an **open PR** is
 not leftover (someone opened one without the `in-review` label), and deleting it
 would close that PR. Mark the issue
-`gh issue edit <number> --add-label in-review`, leave the branch alone, and go back
+`gh issue edit <number> --remove-label in-progress --add-label in-review`, leave the branch alone, and go back
 to Step 2 for another issue.
 
 **Retire a leftover branch before labelling.** Do this for every leftover branch

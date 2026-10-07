@@ -74,12 +74,17 @@ gate on.
 
 ## While it runs
 
-- **Runners can overlap.** Every claim is a comment naming the run that made it and
-  when (#57). Step 0 leaves alone a claim younger than three hours, and recovers older
-  ones. So a routine run that outlasts the
-  hour, or a local loop alongside the routine, never works another run's issue: each
-  still works one issue at a time. The cost: a run that dies holds its issue for up to
-  three hours before another runner recovers it (a later run on the same checkout recovers it at once).
+- **One runner per repository.** Do not run the loop locally while the routine is
+  live, and keep runs well inside the interval. If runs approach an hour, schedule
+  every 2 hours or more. Claims are a backstop for when this slips (#57): every
+  claim is a comment naming the run and its checkout. Step 0 leaves alone a claim
+  younger than three hours, recovers older ones, and recovers a claim from its own
+  checkout at once. Its limits:
+  - A manual or `/loop` session does not take the lock, so two sessions in one
+    checkout can take each other's claim for a dead run's.
+  - A run that dies with a local-only branch (never pushed) leaves nothing a cloud
+    run can see. After three hours the cloud run starts the issue over, and the
+    local work turns up later under `abandoned/`.
 - **Approve a proposal** by adding `heal:approved`. The next run implements it and
   opens a PR assigned to you. For a fresh proposal instead, edit the issue and remove
   `heal:proposed`.

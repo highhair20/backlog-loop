@@ -372,7 +372,7 @@ check "Step 3's own-clone exemption needs two real IDs" "printf '%s' \"\$step3_f
 check "Step 0's race-winner window is the same minute as Step 3's" "printf '%s' \"\$step0_flat\" | grep -q 'less than a minute before it' && ! printf '%s' \"\$step0_flat\" | grep -q 'less than 10 minutes before it'"
 check "a failed date in Steps 2 and 1.5 stops before claiming" "printf '%s' \"\$(flat \"\$step2\")\" | grep -q 'If .date. fails, stop before claiming' && printf '%s' \"\$follow_flat\" | grep -q 'if .date. fails, stop before claiming'"
 check "the race is ordered by GitHub's time, ties to the smaller run ID" "printf '%s' \"\$step3_flat\" | grep -q 'by .createdAt.' && printf '%s' \"\$step3_flat\" | grep -q 'smaller .run=.'"
-check "the loser has touched no label or branch, and writes nothing more" "printf '%s' \"\$step3_flat\" | grep -q 'write nothing more, touch no label or branch'"
+check "the loser touches no label or branch, and only releases its claim" "printf '%s' \"\$step3_flat\" | grep -q 'touch no label or branch' && ! printf '%s' \"\$step3_flat\" | grep -q 'write nothing more'"
 check "a failed re-read stops and leaves the claim to expire" "printf '%s' \"\$step3_flat\" | grep -q 'If the re-read fails'"
 check "the claim comment is posted before the label" "c=\$(printf '%s\n' \"\$step3\" | grep -n -m1 'backlog-loop:claim run=' | cut -d: -f1); l=\$(printf '%s\n' \"\$step3\" | grep -n -m1 'add-label in-progress' | cut -d: -f1); [ -n \"\$c\" ] && [ -n \"\$l\" ] && [ \"\$c\" -lt \"\$l\" ]"
 check "a follow-up that loses a race looks at the next PR" "printf '%s' \"\$follow_flat\" | grep -q 'as you found it, and look at the next PR'"
@@ -389,7 +389,13 @@ check "a claim with no claim comment is stale, as before" "printf '%s' \"\$step0
 check "Step 0 handles every in-progress issue, not just one" "! printf '%s' \"\$step0_flat\" | grep -q 'There should be at most one' && printf '%s' \"\$step0_flat\" | grep -q 'For each .in-progress. issue'"
 check "a claim race goes to the earliest live claim, and the loser backs off" "printf '%s' \"\$step3_flat\" | grep -q 'If a rival came first, back off'"
 check "a dry run reports live and stale claims" "printf '%s' \"\$dry_flat\" | grep -q 'Claims: '"
-check "ROUTINE.md no longer requires one runner per repository" "! grep -q 'One runner per repository' '$ROOT/docs/ROUTINE.md' && grep -q 'claim' '$ROOT/docs/ROUTINE.md'"
+check "ROUTINE.md still requires one runner per repository, with claims as a backstop" "grep -q 'One runner per repository' '$ROOT/docs/ROUTINE.md' && grep -q 'backstop' '$ROOT/docs/ROUTINE.md' && ! grep -q 'Runners can overlap' '$ROOT/docs/ROUTINE.md'"
+check "ROUTINE.md names the limits: a same-checkout manual run, and a local-only branch" "f=\$(tr '\\n' ' ' < '$ROOT/docs/ROUTINE.md' | tr -s ' '); printf '%s' \"\$f\" | grep -q 'does not take the lock' && printf '%s' \"\$f\" | grep -q 'local-only branch'"
+check "a race loser posts a release naming its run, in Step 3 and Step 1.5" "printf '%s' \"\$step3_flat\" | grep -q 'backlog-loop:release run=<run-id>' && printf '%s' \"\$follow_flat\" | grep -q 'backlog-loop:release run=<run-id>'"
+check "Step 0 ignores a claim its own run released" "printf '%s' \"\$step0_flat\" | grep -q 'Ignore a claim whose run later posted a release'"
+check "an open PR found in Step 3 swaps in-progress for in-review" "printf '%s' \"\$step3_flat\" | grep -q 'Mark the issue .gh issue edit <number> --remove-label in-progress --add-label in-review.'"
+check "the identity section no longer invites runners to overlap" "! printf '%s' \"\$pre0_flat\" | grep -q 'can work this repo at the same time' && printf '%s' \"\$pre0_flat\" | grep -q 'one runner per repository'"
+check "the same-clone rule admits a manual run does not take the lock" "! printf '%s' \"\$step0_flat\" | grep -q 'runs never share one working tree' && printf '%s' \"\$step0_flat\" | grep -q 'does not take the lock'"
 
 for row in 'gh pr checks|mcp__github__pull_request_read' 'gh pr view N --json|mcp__github__pull_request_read' 'gh run view|mcp__github__get_job_logs' 'gh pr comment|mcp__github__add_issue_comment' 'gh pr edit|mcp__github__issue_write' 'gh pr update-branch|mcp__github__update_pull_request_branch' 'gh api repos/{owner}/{repo}/pulls|mcp__github__pull_request_read' 'gh api repos/{owner}/{repo}/pulls|get_review_comments'; do
   check "the MCP table maps ${row%%|*} to ${row#*|}" "grep '^| .${row%%|*}' '$CMD' | grep -q -- '${row#*|}'"
