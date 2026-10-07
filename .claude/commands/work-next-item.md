@@ -235,11 +235,15 @@ gh issue list --state open --label in-progress --limit 1000 --json number,title 
 ```
 
 For each `in-progress` issue `#N`, read its comments
-(`gh issue view ${N} --json comments`) and find its newest claim comment, one that
-contains `<!-- backlog-loop:claim`, posted by the loop's own account. Then decide:
+(`gh issue view ${N} --json comments`) and find the claim that holds it: the newest
+claim comment (one containing `<!-- backlog-loop:claim`, posted by the loop's own
+account), unless another run's claim was posted less than 10 minutes before it. Then
+the earlier one won its race and holds the issue (the newer one is a loser that backed
+off). Then decide:
 
-- **Its claim has the same driver id as yours** (`driver=<id>` equals this session's
-  driver ID): an earlier session of your own driver left it, and that driver runs one
+- **Its claim has the same driver id as yours,** and both are real driver IDs, not
+  `none` (a routine run or a manual one has none, and two of those are not one
+  driver): an earlier session of your own driver left it, and that driver runs one
   session at a time, so that run is dead. It is stale: recover it now.
 - **Its claim is younger than 3 hours,** judged by the claim comment's `createdAt`
   (GitHub's clock, not the `at=` a runner wrote) against the time now: another run may
@@ -342,7 +346,10 @@ Then:
      If `git status --porcelain` is then non-empty, stash the edits as case 4 does, so
      Step 1 starts clean.
 3. **A branch exists (remote or local-only) but no open PR** → work was underway.
-   Resume *that* issue as this iteration (do not pick a new one). First, if an earlier
+   Resume *that* issue as this iteration (do not pick a new one). Before resuming, claim it afresh
+   with Step 3's claim comment and run its race check: another runner may have judged
+   the same old claim stale at the same moment, and only the winner resumes. If you
+   lose, leave the issue and go on to Step 1. First, if an earlier
    run stopped in the middle of a merge (`git rev-parse -q --verify MERGE_HEAD` prints
    a hash; no output means none is in progress), abort it: git refuses to change
    branches during a merge, and its conflict markers must not be committed as work.
@@ -521,8 +528,8 @@ gh issue comment <N> --body "<!-- backlog-loop:claim run=<run-id> at=<time> driv
 gh issue edit <N> --remove-label in-review --add-label in-progress
 ```
 
-Then check for a claim race as Step 3 does: if an earlier live claim from another run
-is on the issue, back off, and look at the next PR.
+Then check for a claim race as Step 3 does: if a rival claim (another run's, posted less than 10 minutes before yours) came first,
+back off, and look at the next PR.
 
 If the edit fails, nothing has been touched yet: stop and report it.
 
