@@ -144,7 +144,7 @@ check "the MCP closed listing pages" "grep '^| .gh pr list --state closed' '$CMD
 # Review round 4 of #47.
 # shellcheck disable=SC2034  # read inside check's eval strings
 step3="$(section 'Step 3 ')"
-check "the claim names earlier closed PRs before adding in-progress" "printf '%s' \"\$step3\" | grep -q 'Earlier PRs closed without merging' && [ \$(printf '%s\n' \"\$step3\" | grep -n 'gh issue comment.*Retrying this issue' | cut -d: -f1) -lt \$(printf '%s\n' \"\$step3\" | grep -n 'add-label in-progress' | cut -d: -f1) ]"
+check "the retry comment naming earlier closed PRs follows the claim and the retire" "printf '%s' \"\$step3\" | grep -q 'Earlier PRs closed without merging' && [ \$(printf '%s\n' \"\$step3\" | grep -n 'gh issue comment.*Retrying this issue' | cut -d: -f1) -gt \$(printf '%s\n' \"\$step3\" | grep -n -m1 'add-label in-progress' | cut -d: -f1) ]"
 check "a closed PR's url is matched whole, not as a prefix" "printf '%s' \"\$rejected_case\" | grep -q 'not a prefix'"
 check "a rejection with no branch stashes a dirty tree" "printf '%s' \"\$rejected_case\" | grep -q 'stash the edits'"
 check "the MCP table covers the closed-PR listing" "grep -q '^| .gh pr list --state closed' '$CMD'"
@@ -198,10 +198,12 @@ check "the dry run rules come before Step 0" "[ \$(grep -n '^## Dry run' '$CMD' 
 # --- A retry retires a leftover branch before claiming (#55) ---
 retire="$(printf '%s\n' "$step3" | grep -n -m1 'Retire a leftover branch' | cut -d: -f1)"
 claim="$(printf '%s\n' "$step3" | grep -n -m1 'add-label in-progress' | cut -d: -f1)"
-check "Step 3 retires a leftover branch before it claims" "[ -n '$retire' ] && [ -n '$claim' ] && [ '$retire' -lt '$claim' ]"
+# Since #57, a run claims and labels first (a slow label would outlast the race
+# window), then retires leftover branches; only the race winner reaches the retire.
+check "Step 3 retires a leftover branch only after it has claimed" "[ -n '$retire' ] && [ -n '$claim' ] && [ '$claim' -lt '$retire' ]"
 check "it never treats an abandoned/ branch as leftover" "printf '%s' \"\$step3\" | grep -q 'never .abandoned/'"
 check "it saves before deleting, through Give up's steps" "printf '%s' \"\$step3\" | grep -q 'Give up\*\* steps 2, 4 and 5'"
-check "a failed retire leaves the issue unclaimed but marked for a human" "printf '%s' \"\$step3\" | grep -q 'do not claim' && printf '%s' \"\$step3\" | grep -q 'add-label needs-attention'"
+check "a failed retire releases the claim and marks the issue for a human" "printf '%s' \"\$step3\" | grep -q 'release the claim' && printf '%s' \"\$step3\" | grep -q 'add-label needs-attention'"
 check "a branch with an open PR is never retired" "printf '%s' \"\$step3\" | grep -q 'open PR' && printf '%s' \"\$step3\" | grep -q 'add-label in-review'"
 check "every leftover branch name is retired, not just one" "printf '%s' \"\$step3\" | grep -q 'for every leftover branch'"
 check "a failed local delete or switch also stops the claim" "printf '%s' \"\$step3\" | grep -q 'step 5.s'"
@@ -364,7 +366,11 @@ check "every claim template carries run=, at= and driver=" "[ \$(grep -c 'backlo
 check "a rival is another runner's claim posted after you listed, or under a minute before" "printf '%s' \"\$step3_flat\" | grep -q 'posted after you listed the issues in Step 2, or less than a minute before'"
 check "your own driver's claims are never rivals" "printf '%s' \"\$step3_flat\" | grep -q 'its claims are never rivals'"
 check "Step 2 and Step 1.5 note the time they list" "printf '%s' \"\$(flat \"\$step2\")\" | grep -q 'Note the time now' && printf '%s' \"\$follow_flat\" | grep -q 'Note the time now'"
-check "Step 3 claims and race-checks before retiring any branch or labelling" "c=\$(printf '%s\n' \"\$step3\" | grep -n -m1 'If a rival came first' | cut -d: -f1); r=\$(printf '%s\n' \"\$step3\" | grep -n -m1 'Retire a leftover branch' | cut -d: -f1); l=\$(printf '%s\n' \"\$step3\" | grep -n -m1 'add-label in-progress' | cut -d: -f1); [ -n \"\$c\" ] && [ -n \"\$r\" ] && [ -n \"\$l\" ] && [ \"\$c\" -lt \"\$r\" ] && [ \"\$r\" -lt \"\$l\" ]"
+check "Step 3 labels right after winning the race, then retires branches" "c=\$(printf '%s\n' \"\$step3\" | grep -n -m1 'If a rival came first' | cut -d: -f1); l=\$(printf '%s\n' \"\$step3\" | grep -n -m1 'add-label in-progress' | cut -d: -f1); r=\$(printf '%s\n' \"\$step3\" | grep -n -m1 'Retire a leftover branch' | cut -d: -f1); [ -n \"\$c\" ] && [ -n \"\$l\" ] && [ -n \"\$r\" ] && [ \"\$c\" -lt \"\$l\" ] && [ \"\$l\" -lt \"\$r\" ]"
+check "a failed retire releases the claim it already labelled" "printf '%s' \"\$step3_flat\" | grep -q -- '--remove-label in-progress --add-label needs-attention'"
+check "Step 3's own-driver exemption needs two real IDs" "printf '%s' \"\$step3_flat\" | grep -q 'both are real driver IDs, not .none.'"
+check "Step 0's race-winner window is the same minute as Step 3's" "printf '%s' \"\$step0_flat\" | grep -q 'less than a minute before it' && ! printf '%s' \"\$step0_flat\" | grep -q 'less than 10 minutes before it'"
+check "a failed date in Steps 2 and 1.5 stops before claiming" "printf '%s' \"\$(flat \"\$step2\")\" | grep -q 'If .date. fails, stop before claiming' && printf '%s' \"\$follow_flat\" | grep -q 'if .date. fails, stop before claiming'"
 check "the race is ordered by GitHub's time, ties to the smaller run ID" "printf '%s' \"\$step3_flat\" | grep -q 'by .createdAt.' && printf '%s' \"\$step3_flat\" | grep -q 'smaller .run=.'"
 check "the loser has touched no label or branch, and writes nothing more" "printf '%s' \"\$step3_flat\" | grep -q 'write nothing more, touch no label or branch'"
 check "a failed re-read stops and leaves the claim to expire" "printf '%s' \"\$step3_flat\" | grep -q 'If the re-read fails'"
