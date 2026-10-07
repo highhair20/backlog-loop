@@ -241,16 +241,22 @@ contains `<!-- backlog-loop:claim`, posted by the loop's own account. Then decid
 - **Its claim has the same driver id as yours** (`driver=<id>` equals this session's
   driver ID): an earlier session of your own driver left it, and that driver runs one
   session at a time, so that run is dead. It is stale: recover it now.
-- **Its claim is younger than 3 hours** (its `at=` time against the time now), **or its
-  PR was updated within 3 hours** (`updatedAt` in the open-PR listing below): another
-  run may still be working it. It is live: leave it alone, name it in the report as
-  held by that run, and go on to the next one. The longest session observed took about
-  90 minutes, with every command capped at ten minutes, so three hours outlasts a slow
-  run; a run that died holds its issue that long before another runner recovers it.
+- **Its claim is younger than 3 hours,** judged by the claim comment's `createdAt`
+  (GitHub's clock, not the `at=` a runner wrote) against the time now: another run may
+  still be working it. It is live: leave it alone, name it in the report as held by
+  that run, and go on to the next one. Nothing else renews a claim, a PR's update time
+  included, since a bot's comment would keep a dead run's claim alive. The longest
+  session observed took about 90 minutes, with every command capped at ten minutes,
+  so three hours outlasts a slow run; a run that died holds its issue that long before
+  another runner recovers it, and a run past three hours can be recovered underneath.
+- **If `date` fails,** you cannot tell a live claim from a dead one: treat every claim
+  as live, recover nothing, and say so in the report.
 - **Otherwise,** or with **no claim comment at all** (a label added by hand, or a
   claim from before claims were recorded), it is stale. Recover it as below.
 
-For each stale `#N`, find its branch (the convention is `<type>/<N>-<slug>`):
+For each stale `#N`, find its branch (the convention is `<type>/<N>-<slug>`). If more
+than one stale issue would be resumed (case 3 below), resume only the lowest-numbered
+one this run; the others stay claimed and stale, and later runs recover them:
 
 ```bash
 # Avoid shell grep/jq pipes so this runs under a tight headless allowlist —
@@ -258,7 +264,7 @@ For each stale `#N`, find its branch (the convention is `<type>/<N>-<slug>`):
 git ls-remote --heads origin
 git branch --list
 git status --porcelain
-gh pr list --state open --json number,headRefName,url,updatedAt
+gh pr list --state open --json number,headRefName,url
 gh pr list --state closed --limit 1000 --json number,headRefName,url,mergedAt \
   --jq '.[] | select(.mergedAt == null)'
 ```
@@ -703,10 +709,14 @@ gh issue edit <number> --add-label in-progress
 ```
 
 **Then check no other run claimed it at the same moment.** A label cannot tell, since
-both runs can add it. Read the issue's comments again. If a claim comment from another
-run (a different `run=`) is earlier than yours and still live by Step 0's rule, the
-earliest live claim wins: back off. Leave the label (it is that run's), write nothing
-more, and go back to Step 2 with this issue excluded.
+both runs can add it. Read the issue's comments again. A rival is a claim comment from
+another run (a different `run=`) posted less than 10 minutes before yours: Step 2
+skips a claimed issue, so an older claim belongs to a run that has since released it,
+such as the one that opened this issue's PR. Compare by `createdAt` (GitHub's clock),
+and on a tie the smaller `run=` wins. If a rival was first, back off. Leave the label
+(it is that run's), write nothing more, and go back to Step 2 with this issue excluded.
+If the re-read fails, you cannot tell: stop and report it, leaving your claim, which
+expires like any other if no run works it.
 
 ## Step 3.5 — Verify the issue's premise BEFORE writing code
 

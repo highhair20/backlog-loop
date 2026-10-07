@@ -539,8 +539,12 @@ check "and works the rest of the backlog" "[ \"\$(cat '$K/count')\" = 0 ]"
 # apart from another runner's: one driver runs one session at a time.
 DR="$(setup driverid progress)"
 run "$DR"
-check "every session is started as /work-next-item --driver <host>:<pid>" "[ -s '$DR/prompts' ] && ! grep -vqE '^/work-next-item --driver [^ :]+:[0-9]+\$' '$DR/prompts'"
+check "every session is started as /work-next-item --driver <host>-<pid>-<start>" "[ -s '$DR/prompts' ] && ! grep -vqE '^/work-next-item --driver [^ ]+-[0-9]+-[0-9]+\$' '$DR/prompts'"
 check "every session of one run gets the same driver id" "[ \$(sort -u '$DR/prompts' | wc -l) -eq 1 ]"
+DM="$(setup driveridmodel progress)"
+MODEL=x run "$DM"
+check "the prompt keeps --driver when MODEL is set" "[ -s '$DM/prompts' ] && ! grep -vqE '^/work-next-item --driver [^ ]+\$' '$DM/prompts'"
+check "the driver id includes the driver's start time, so two hosts cannot share it" "grep -qE -- '--driver [^ ]+-[0-9]+-[0-9]{9,}\$' '$DR/prompts'"
 
 echo
 if [ "$failures" -eq 0 ]; then echo "all tests passed"; else echo "$failures test(s) failed" >&2; exit 1; fi

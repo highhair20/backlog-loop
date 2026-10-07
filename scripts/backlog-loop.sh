@@ -158,7 +158,7 @@ export BACKLOG_LOOP_PID=$$
 # a time, so a claim a session finds with this same id was left by an earlier session
 # of this run, which is dead: it recovers that claim at once instead of waiting out
 # the lease another runner's claim gets.
-DRIVER_ID="$(hostname -s 2>/dev/null || hostname):$$"
+DRIVER_ID="$(hostname -s 2>/dev/null || hostname 2>/dev/null || echo host)-$$-$(date +%s)"
 
 # Count open issues a session might work. Two kinds count (#77):
 # - prioritized issues Step 2 could select. in-progress counts (Step 0 recovers it).

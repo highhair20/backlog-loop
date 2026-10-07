@@ -75,8 +75,8 @@ gate on.
 ## While it runs
 
 - **Runners can overlap.** Every claim is a comment naming the run that made it and
-  when (#57). Step 0 leaves alone a claim younger than three hours, or one whose PR was
-  updated in that time, and recovers older ones. So a routine run that outlasts the
+  when (#57). Step 0 leaves alone a claim younger than three hours, and recovers older
+  ones. So a routine run that outlasts the
   hour, or a local loop alongside the routine, never works another run's issue: each
   still works one issue at a time. The cost: a run that dies holds its issue for up to
   three hours before another runner recovers it (a local driver's own next session
