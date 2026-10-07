@@ -79,8 +79,7 @@ gate on.
   ones. So a routine run that outlasts the
   hour, or a local loop alongside the routine, never works another run's issue: each
   still works one issue at a time. The cost: a run that dies holds its issue for up to
-  three hours before another runner recovers it (a local driver's own next session
-  recovers it at once).
+  three hours before another runner recovers it (a later run on the same checkout recovers it at once).
 - **Approve a proposal** by adding `heal:approved`. The next run implements it and
   opens a PR assigned to you. For a fresh proposal instead, edit the issue and remove
   `heal:proposed`.

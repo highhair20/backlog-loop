@@ -133,8 +133,12 @@ whose it is (#57):
 
 - **The run ID:** the time you start plus six random hex characters you choose, e.g.
   `20261006T171119Z-3fa9c1`. Use the same one for every claim this run makes.
-- **The driver ID:** if the arguments include `--driver <id>`, `scripts/backlog-loop.sh`
-  started this session and `<id>` names that driver. Otherwise there is none.
+- **The clone ID:** `<host>:<path>`, this machine's name and this checkout's top
+  level, from exactly these two commands. If either fails, the clone ID is `none`.
+  ```bash
+  hostname
+  git rev-parse --show-toplevel
+  ```
 - **The time now,** whenever a step compares a claim's age, from exactly this command:
   ```bash
   date -u +%Y-%m-%dT%H:%M:%SZ
@@ -241,10 +245,12 @@ account), unless another run's claim was posted less than a minute before it. Th
 the earlier one won its race and holds the issue (the newer one is a loser that backed
 off). Then decide:
 
-- **Its claim has the same driver id as yours,** and both are real driver IDs, not
-  `none` (a routine run or a manual one has none, and two of those are not one
-  driver): an earlier session of your own driver left it, and that driver runs one
-  session at a time, so that run is dead. It is stale: recover it now.
+- **Its claim has the same clone ID as yours,** and both are real clone IDs, not
+  `none`: a run in this same checkout left it, whether an earlier session of this
+  driver, a driver restarted after a closed terminal, `/loop`, or a manual run. Two
+  runs never share one working tree, and the lock check above passed, so no other run
+  is working this clone: that run is dead. It is stale: recover it now. (A cloud
+  routine run gets a new machine each time, so its claims never match.)
 - **Its claim is younger than 3 hours,** judged by the claim comment's `createdAt`
   (GitHub's clock, not the `at=` a runner wrote) against the time now: another run may
   still be working it. It is live: leave it alone, name it in the report as held by
@@ -528,7 +534,7 @@ what still needs attention, then stop. New feedback starts a fresh count.
 Step 3's race check against the time you listed above, then the label, only if you won:
 
 ```bash
-gh issue comment <N> --body "<!-- backlog-loop:claim run=<run-id> at=<time> driver=<driver id, or none> --> Claimed by the backlog loop for a follow-up on its PR."
+gh issue comment <N> --body "<!-- backlog-loop:claim run=<run-id> at=<time> clone=<clone id, or none> --> Claimed by the backlog loop for a follow-up on its PR."
 gh issue edit <N> --remove-label in-review --add-label in-progress
 ```
 
@@ -680,13 +686,13 @@ gh issue view <number> --json title,body
 touch anything.** Post the claim comment:
 
 ```bash
-gh issue comment <number> --body "<!-- backlog-loop:claim run=<run-id> at=<time> driver=<driver id, or none> --> Claimed by the backlog loop."
+gh issue comment <number> --body "<!-- backlog-loop:claim run=<run-id> at=<time> clone=<clone id, or none> --> Claimed by the backlog loop."
 ```
 
 If it fails, nothing is claimed: stop and report it. Then read the issue's comments
 again (`gh issue view <number> --json comments`). **A rival** is a claim comment from
-another runner (a different `run=`, and not your own driver when both are real driver
-IDs, not `none`: a driver runs one session at a time, so its claims are never rivals) posted after you listed the issues in Step
+another runner (a different `run=`, and not your own clone when both are real clone
+IDs, not `none`: one checkout runs one loop at a time, so its claims are never rivals) posted after you listed the issues in Step
 2, or less than a minute before (its label may not have shown in your listing yet). An
 older claim was already visible to you as `in-progress`, so Step 2 would have skipped
 the issue had its run still held it: that run has since let go. Compare by `createdAt`
