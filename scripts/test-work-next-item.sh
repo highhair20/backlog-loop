@@ -344,6 +344,28 @@ check "Step 1.5 lists each PR's merge state" "printf '%s' \"\$follow\" | grep -q
 check "Step 1.5 brings a PR that is only behind up to date, by merge, without a round" "printf '%s' \"\$follow_flat\" | grep -q 'gh pr update-branch <pr>' && printf '%s' \"\$follow_flat\" | grep -q 'never a rebase' && printf '%s' \"\$follow_flat\" | grep -q 'not a follow-up: no claim, no comment, no round'"
 check "a dry run never updates a branch, and reports it as a would-be write" "printf '%s' \"\$dry\" | grep -q 'gh pr update-branch' && printf '%s' \"\$follow_flat\" | grep -q 'In a dry run, note .would: gh pr update-branch <pr>. instead'"
 check "ready-to-merge is a seeded label" "grep -q '\"ready-to-merge|' '$ROOT/scripts/seed-labels.sh'"
+# --- Claims a live run holds are left alone (#57) ---
+# shellcheck disable=SC2034  # read inside check's eval strings
+step0_flat="$(flat "$step0")"
+# shellcheck disable=SC2034  # read inside check's eval strings
+step3_flat="$(flat "$step3")"
+# shellcheck disable=SC2034  # read inside check's eval strings
+pre0_flat="$(flat "$pre0")"
+# shellcheck disable=SC2034  # read inside check's eval strings
+dry_flat="$(flat "$dry")"
+check "a claim is a marked comment naming the run and the time" "printf '%s' \"\$step3_flat\" | grep -q 'backlog-loop:claim run=<run-id> at=<time>'"
+check "a follow-up claims with the same comment" "printf '%s' \"\$follow_flat\" | grep -q 'backlog-loop:claim run=<run-id>'"
+check "the run id and the driver id are set once, before Step 0" "printf '%s' \"\$pre0_flat\" | grep -q 'run ID' && printf '%s' \"\$pre0_flat\" | grep -q -- '--driver <id>'"
+check "the current time comes from one exact command" "printf '%s' \"\$pre0_flat\" | grep -q 'date -u +%Y-%m-%dT%H:%M:%SZ'"
+check "Step 0 leaves a claim younger than 3 hours alone and reports it" "printf '%s' \"\$step0_flat\" | grep -q 'younger than 3 hours' && printf '%s' \"\$step0_flat\" | grep -q 'leave it alone' && printf '%s' \"\$step0_flat\" | grep -q 'name it in the report'"
+check "a PR updated within the lease also keeps a claim live" "printf '%s' \"\$step0_flat\" | grep -q 'its PR was updated within 3 hours'"
+check "a claim from this run's own driver is dead at once" "printf '%s' \"\$step0_flat\" | grep -q 'same driver id as yours' && printf '%s' \"\$step0_flat\" | grep -q 'recover it now'"
+check "a claim with no claim comment is stale, as before" "printf '%s' \"\$step0_flat\" | grep -q 'no claim comment at all.*it is stale'"
+check "Step 0 handles every in-progress issue, not just one" "! printf '%s' \"\$step0_flat\" | grep -q 'There should be at most one' && printf '%s' \"\$step0_flat\" | grep -q 'For each .in-progress. issue'"
+check "a claim race goes to the earliest live claim, and the loser backs off" "printf '%s' \"\$step3_flat\" | grep -q 'earliest live claim' && printf '%s' \"\$step3_flat\" | grep -q 'back off'"
+check "a dry run reports live and stale claims" "printf '%s' \"\$dry_flat\" | grep -q 'Claims: '"
+check "ROUTINE.md no longer requires one runner per repository" "! grep -q 'One runner per repository' '$ROOT/docs/ROUTINE.md' && grep -q 'claim' '$ROOT/docs/ROUTINE.md'"
+
 for row in 'gh pr checks|mcp__github__pull_request_read' 'gh pr view N --json|mcp__github__pull_request_read' 'gh run view|mcp__github__get_job_logs' 'gh pr comment|mcp__github__add_issue_comment' 'gh pr edit|mcp__github__issue_write' 'gh pr update-branch|mcp__github__update_pull_request_branch' 'gh api repos/{owner}/{repo}/pulls|mcp__github__pull_request_read' 'gh api repos/{owner}/{repo}/pulls|get_review_comments'; do
   check "the MCP table maps ${row%%|*} to ${row#*|}" "grep '^| .${row%%|*}' '$CMD' | grep -q -- '${row#*|}'"
 done

@@ -4,6 +4,7 @@
       "Bash(command -v gh)",
       "Bash(gh auth status*)",
       "Bash(scripts/gh-auth-check.sh)",
+      "Bash(date -u +%Y-%m-%dT%H:%M:%SZ)",
       "Bash(gh issue list *)",
       "Bash(gh issue view *)",
       "Bash(gh issue edit *)",

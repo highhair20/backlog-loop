@@ -154,6 +154,11 @@ fi
 "$HERE/loop-lock.sh" acquire $$ || exit 1
 trap '"$HERE/loop-lock.sh" release $$; rm -rf "$HERE"' EXIT
 export BACKLOG_LOOP_PID=$$
+# Every session is told which driver started it (#57). One driver runs one session at
+# a time, so a claim a session finds with this same id was left by an earlier session
+# of this run, which is dead: it recovers that claim at once instead of waiting out
+# the lease another runner's claim gets.
+DRIVER_ID="$(hostname -s 2>/dev/null || hostname):$$"
 
 # Count open issues a session might work. Two kinds count (#77):
 # - prioritized issues Step 2 could select. in-progress counts (Step 0 recovers it).
@@ -228,10 +233,10 @@ run_item() {
   local ceiling_ms=$(( BG_WAIT_SECONDS * 1000 ))
   if [ -n "${MODEL:-}" ]; then
     env -u BACKLOG_LOOP_STAGED -u BACKLOG_LOOP_ROOT CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS="$ceiling_ms" \
-      claude -p "/work-next-item" --permission-mode acceptEdits --model "$MODEL" >&3 2>&3 3>&-
+      claude -p "/work-next-item --driver $DRIVER_ID" --permission-mode acceptEdits --model "$MODEL" >&3 2>&3 3>&-
   else
     env -u BACKLOG_LOOP_STAGED -u BACKLOG_LOOP_ROOT CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS="$ceiling_ms" \
-      claude -p "/work-next-item" --permission-mode acceptEdits >&3 2>&3 3>&-
+      claude -p "/work-next-item --driver $DRIVER_ID" --permission-mode acceptEdits >&3 2>&3 3>&-
   fi
 }
 

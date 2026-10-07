@@ -127,6 +127,19 @@ message and stop. Never remove the lock yourself; the message tells the human ho
 clear a stale one. The check passes when this session was started by the driver that
 holds the lock, and it clears a lock whose owner is no longer running.
 
+**Then set this run's identity, once, before Step 0.** Other runners (a scheduled
+routine, another machine) can work this repo at the same time, so every claim says
+whose it is (#57):
+
+- **The run ID:** the time you start plus six random hex characters you choose, e.g.
+  `20261006T171119Z-3fa9c1`. Use the same one for every claim this run makes.
+- **The driver ID:** if the arguments include `--driver <id>`, `scripts/backlog-loop.sh`
+  started this session and `<id>` names that driver. Otherwise there is none.
+- **The time now,** whenever a step compares a claim's age, from exactly this command:
+  ```bash
+  date -u +%Y-%m-%dT%H:%M:%SZ
+  ```
+
 ## GitHub access: `gh` locally, the GitHub MCP tools in the cloud
 
 The GitHub steps below are written as `gh` commands. Cloud sessions (scheduled
@@ -201,6 +214,7 @@ watch what it would do before it can do it.
 - **Report**, as the last thing you print:
   ```text
   DRY RUN: nothing was written.
+  Claims: <each in-progress issue: live, held by run <id> | stale, recovered | none>
   Selected: #<number> <title>   (or: none, backlog drained)
   Action: <post a proposal | implement and open a PR | resume #N | hand back #N | release #N | follow up PR #N (<why: failing checks, changes requested, conflict>)>
   Would run: <each would: line, in order>
@@ -211,15 +225,32 @@ watch what it would do before it can do it.
 ## Step 0 — Recover any interrupted iteration
 
 A prior run may have died (context/usage limit, closed session) after claiming an
-issue but before opening its PR. Reconcile before starting anything new. There should
-be at most one `in-progress` issue:
+issue but before opening its PR. Reconcile before starting anything new. Another run
+may also be working right now, so first tell a live claim from a dead one. List the
+claimed issues:
 
 ```bash
 gh issue list --state open --label in-progress --limit 1000 --json number,title \
   --jq '.[] | "\(.number)\t\(.title)"'
 ```
 
-For that issue `#N`, find its branch (the convention is `<type>/<N>-<slug>`):
+For each `in-progress` issue `#N`, read its comments
+(`gh issue view ${N} --json comments`) and find its newest claim comment, one that
+contains `<!-- backlog-loop:claim`, posted by the loop's own account. Then decide:
+
+- **Its claim has the same driver id as yours** (`driver=<id>` equals this session's
+  driver ID): an earlier session of your own driver left it, and that driver runs one
+  session at a time, so that run is dead. It is stale: recover it now.
+- **Its claim is younger than 3 hours** (its `at=` time against the time now), **or its
+  PR was updated within 3 hours** (`updatedAt` in the open-PR listing below): another
+  run may still be working it. It is live: leave it alone, name it in the report as
+  held by that run, and go on to the next one. The longest session observed took about
+  90 minutes, with every command capped at ten minutes, so three hours outlasts a slow
+  run; a run that died holds its issue that long before another runner recovers it.
+- **Otherwise,** or with **no claim comment at all** (a label added by hand, or a
+  claim from before claims were recorded), it is stale. Recover it as below.
+
+For each stale `#N`, find its branch (the convention is `<type>/<N>-<slug>`):
 
 ```bash
 # Avoid shell grep/jq pipes so this runs under a tight headless allowlist —
@@ -227,7 +258,7 @@ For that issue `#N`, find its branch (the convention is `<type>/<N>-<slug>`):
 git ls-remote --heads origin
 git branch --list
 git status --porcelain
-gh pr list --state open --json number,headRefName,url
+gh pr list --state open --json number,headRefName,url,updatedAt
 gh pr list --state closed --limit 1000 --json number,headRefName,url,mergedAt \
   --jq '.[] | select(.mergedAt == null)'
 ```
@@ -476,11 +507,16 @@ After 3 follow-ups in a row with no human feedback between them,
 stop following this PR up: hand it back (below) with "follow-up limit reached" and
 what still needs attention, then stop. New feedback starts a fresh count.
 
-**Claim it**, so another runner sees it is being worked:
+**Claim it**, so another runner sees it is being worked: the same claim comment as
+Step 3's (its claim line only), then the label:
 
 ```bash
+gh issue comment <N> --body "<!-- backlog-loop:claim run=<run-id> at=<time> driver=<driver id, or none> --> Claimed by the backlog loop for a follow-up on its PR."
 gh issue edit <N> --remove-label in-review --add-label in-progress
 ```
+
+Then check for a claim race as Step 3 does: if an earlier live claim from another run
+is on the issue, back off, and look at the next PR.
 
 If the edit fails, nothing has been touched yet: stop and report it.
 
@@ -657,13 +693,20 @@ find the saved work: any unmerged PRs from `<type>/<number>-…` in Step 0's clo
 listing that no comment on the issue names yet (check as Step 0's case 2 does), the
 branches you retired, and any `abandoned/<number>-…` branch on the remote that no
 comment names yet (a run interrupted between retiring and commenting leaves one).
-Comment first: a run interrupted between the two then leaves an unclaimed issue, not
-a claim that Step 0 would hand back. With nothing to name, just claim.
+Comment first, in one comment that is also the claim: a run interrupted between the
+two then leaves an unclaimed issue, not a claim that Step 0 would hand back. The claim
+line comes first; add the retry sentence only when there is something to name.
 
 ```bash
-gh issue comment <number> --body "Retrying this issue. Earlier PRs closed without merging: <closed PR urls, or none>. Leftover branches: <name> saved as abandoned/<number>-<short-sha> and deleted (or: deleted, no commits to keep; or none). Saved earlier: <abandoned/… branches no comment names, or none>. This attempt starts fresh."
+gh issue comment <number> --body "<!-- backlog-loop:claim run=<run-id> at=<time> driver=<driver id, or none> --> Claimed by the backlog loop. Retrying this issue. Earlier PRs closed without merging: <closed PR urls, or none>. Leftover branches: <name> saved as abandoned/<number>-<short-sha> and deleted (or: deleted, no commits to keep; or none). Saved earlier: <abandoned/… branches no comment names, or none>. This attempt starts fresh."
 gh issue edit <number> --add-label in-progress
 ```
+
+**Then check no other run claimed it at the same moment.** A label cannot tell, since
+both runs can add it. Read the issue's comments again. If a claim comment from another
+run (a different `run=`) is earlier than yours and still live by Step 0's rule, the
+earliest live claim wins: back off. Leave the label (it is that run's), write nothing
+more, and go back to Step 2 with this issue excluded.
 
 ## Step 3.5 — Verify the issue's premise BEFORE writing code
 
