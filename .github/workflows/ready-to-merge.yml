@@ -17,9 +17,12 @@ on:
   # When main moves, so PRs that fell behind lose the label.
   push:
     branches: [main]
-  # No pull_request trigger: a run there adds its own check to the PR it judges, and
-  # while that check runs GitHub can report the PR as not mergeable yet. A new push
-  # is judged when its CI completes (workflow_run).
+  # When a PR gains changes-requested, so it loses the label at once (#110). This run
+  # only removes labels, judged on labels alone: it adds its own check to the PR, and
+  # while that runs GitHub can report the PR as not mergeable yet. Otherwise a new
+  # push is judged when its CI completes (workflow_run).
+  pull_request:
+    types: [labeled]
 
 permissions:
   contents: read
@@ -34,6 +37,8 @@ concurrency:
 
 jobs:
   label:
+    # A PR label other than changes-requested skips the job, and a skipped job blocks nothing.
+    if: github.event_name != 'pull_request' || github.event.label.name == 'changes-requested'
     runs-on: ubuntu-latest
     steps:
       # The default branch, never the PR's: a PR must not change the script that judges it.
@@ -45,3 +50,4 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
+          READY_REMOVE_ONLY: ${{ github.event_name == 'pull_request' }}
