@@ -32,17 +32,31 @@ failures=0
 fail() { echo "ready-to-merge: $1" >&2; failures=$((failures + 1)); }
 : "${GH_REPO:=$(gh repo view --json nameWithOwner -q .nameWithOwner)}"
 
+# With "checks", the PRs' checks too (statusCheckRollup), which the workflow token can
+# read only with checks: read and statuses: read. A workflow seeded before #110 lacks
+# them, and sync never updates a seeded file, so without them this lists PRs bare.
 list_prs() {
   gh pr list --state open --limit 1000 \
-    --json number,headRefName,headRefOid,baseRefName,mergeStateStatus,isCrossRepository,assignees,labels,statusCheckRollup
+    --json "number,headRefName,headRefOid,baseRefName,mergeStateStatus,isCrossRepository,assignees,labels${1:+,statusCheckRollup}"
 }
+with_checks=1
 # Loop PRs (branch <type>/<N>-<slug>) from this repo, never a fork's: a fork's PR is
 # not the loop's, and the workflow's token could not label it.
 loop_prs='[.[] | select((.isCrossRepository | not) and (.headRefName | test("^[a-z]+/[0-9]+-")))]'
 
 prs=""
 for attempt in $(seq 1 "$RETRIES"); do
-  prs="$(list_prs | jq -c "$loop_prs")" || { echo "ready-to-merge: could not list open PRs" >&2; exit 1; }
+  if [ "$with_checks" -eq 1 ] && raw="$(list_prs checks)"; then
+    :
+  elif raw="$(list_prs)"; then
+    if [ "$with_checks" -eq 1 ]; then
+      with_checks=0
+      echo "ready-to-merge: could not read the PRs' checks, so this run cannot set its own aside and reads such a PR as not ready. Give .github/workflows/ready-to-merge.yml checks: read and statuses: read (the template's copy has them)." >&2
+    fi
+  else
+    echo "ready-to-merge: could not list open PRs" >&2; exit 1
+  fi
+  prs="$(jq -c "$loop_prs" <<<"$raw")" || { echo "ready-to-merge: could not list open PRs" >&2; exit 1; }
   jq -e 'any(.[]; .mergeStateStatus == "UNKNOWN")' <<<"$prs" >/dev/null || break
   [ "$attempt" -eq "$RETRIES" ] || sleep "$RETRY_SECONDS"
 done
@@ -57,11 +71,12 @@ remove_label() { gh api -X DELETE "repos/$GH_REPO/issues/$1/labels/$LABEL" >/dev
 while IFS= read -r pr; do
   [ -n "$pr" ] || continue
   # others_pass: every check but this workflow's own has passed (a commit status
-  # reads SUCCESS; a check run completed as SUCCESS, SKIPPED, or NEUTRAL).
+  # reads SUCCESS; a check run completed as SUCCESS, SKIPPED, or NEUTRAL). Never
+  # true when the checks could not be read.
   if ! fields="$(jq -r --arg self "$SELF_WORKFLOW" '[.number, .headRefName, .headRefOid, .baseRefName, .mergeStateStatus, ([.labels[].name] | join(",")), ([.assignees[].login | "@" + .] | join(" ")),
-      ([.statusCheckRollup[]? | select(.__typename == "StatusContext" or (.workflowName // "") != $self)
+      (if has("statusCheckRollup") | not then "false" else [.statusCheckRollup[]? | select(.__typename == "StatusContext" or (.workflowName // "") != $self)
         | if .__typename == "StatusContext" then .state == "SUCCESS"
-          else .status == "COMPLETED" and (.conclusion == "SUCCESS" or .conclusion == "SKIPPED" or .conclusion == "NEUTRAL") end] | all | tostring)] | join("\u001f")' <<<"$pr")"; then
+          else .status == "COMPLETED" and (.conclusion == "SUCCESS" or .conclusion == "SKIPPED" or .conclusion == "NEUTRAL") end] | all | tostring end)] | join("\u001f")' <<<"$pr")"; then
     fail "could not read a PR's fields"; continue
   fi
   # The unit separator, not a tab: read collapses runs of whitespace separators, so

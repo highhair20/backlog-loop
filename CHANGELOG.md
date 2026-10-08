@@ -77,8 +77,10 @@ removes it from a repo made with "Use this template", and sync never copies it.
 
 - **`.github/workflows/ready-to-merge.yml`** (seeded, #110): for the label to come
   off as soon as a PR gains `changes-requested`, add the template's
-  `pull_request_target` trigger to your copy, and `persist-credentials: false` on its
-  checkout. Keep that checkout on the default branch: under that trigger, checking
+  `pull_request_target` trigger to your copy, `checks: read` and `statuses: read`
+  under `permissions:`, and `persist-credentials: false` on its checkout. Without the
+  two permissions the re-synced script still runs, warns, and cannot set its own
+  check aside, so it reads a PR whose only pending check is its own as not ready. Keep that checkout on the default branch: under that trigger, checking
   out the PR's code would run it with a write token. Without the trigger, the re-synced script still works, and the label comes
   off at the next CI run or push to `main`. The `ready-to-merge` rows in `docs/BACKLOG.md`
   and `docs/ISSUE_GUIDE.md` (seeded) no longer promise "up to date"; copy them if

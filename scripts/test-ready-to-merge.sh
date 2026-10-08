@@ -21,8 +21,11 @@ setup() {
 d="$dir"
 case "\$*" in
   "pr list "*) [ -f "\$d/fail-pr-list" ] && exit 1
+    case "\$*" in *statusCheckRollup*) [ -f "\$d/no-checks-permission" ] && { echo 'GraphQL: Resource not accessible by integration (repository.pullRequests.nodes.0.statusCheckRollup)' >&2; exit 1; } ;; esac
     k=\$(( \$(cat "\$d/lists" 2>/dev/null || echo 0) + 1 )); echo "\$k" >"\$d/lists"
-    if [ -f "\$d/prs-\$k.json" ]; then cat "\$d/prs-\$k.json"; else cat "\$d/prs.json"; fi ;;
+    if [ -f "\$d/prs-\$k.json" ]; then f="\$d/prs-\$k.json"; else f="\$d/prs.json"; fi
+    # Like gh, only the fields asked for: no checks unless statusCheckRollup is named.
+    case "\$*" in *statusCheckRollup*) cat "\$f" ;; *) jq 'map(del(.statusCheckRollup))' "\$f" ;; esac ;;
   "api -X POST "*"/labels "*|"api -X DELETE "*"/labels/"*) echo "\$*" >>"\$d/writes" ;;
   "api repos/"*"/compare/"*) echo "\$2" >>"\$d/compares"; [ -f "\$d/fail-compare" ] && exit 1
     cat "\$d/behind" 2>/dev/null || echo 0 ;;
@@ -206,6 +209,17 @@ echo '{"comments": [], "headRefOid": "fffffff00000000000000000000000000000000", 
 run "$O"; rc=$?
 check "changes-requested added since the listing: no label, no comment" "[ $rc -eq 0 ] && ! grep -q 'issues/20/labels' '$O/writes' && ! grep -q 'pr comment 20' '$O/writes'"
 check "a push since the listing: no label, no comment" "! grep -q 'issues/21/labels' '$O/writes' && ! grep -q 'pr comment 21' '$O/writes'"
+
+# A repo whose seeded workflow predates checks: read (sync never updates it) still
+# works: the listing falls back to one without checks, with a warning (#110).
+P="$(setup nochecks)"
+echo "[$(pr 20 feat/7-x CLEAN), $(ROLLUP="[$own_running]" pr 21 fix/8-y UNSTABLE ready-to-merge)]" >"$P/prs.json"
+echo '[{"number": 7, "labels": [{"name": "in-review"}]}, {"number": 8, "labels": [{"name": "in-review"}]}]' >"$P/issues.json"
+: >"$P/no-checks-permission"
+run "$P"; rc=$?
+check "without checks permission it still labels a CLEAN PR" "[ $rc -eq 0 ] && grep -q 'api -X POST repos/o/r/issues/20/labels' '$P/writes'"
+check "and warns how to fix the workflow" "grep -q 'checks: read' '$P/out'"
+check "and, unable to set its own check aside, reads UNSTABLE as not ready" "grep -q 'api -X DELETE repos/o/r/issues/21/labels/ready-to-merge' '$P/writes'"
 
 # A PR from a fork is never the loop's, and its token could not label it anyway.
 K="$(setup fork)"

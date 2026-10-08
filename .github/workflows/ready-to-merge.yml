@@ -30,6 +30,9 @@ on:
 permissions:
   contents: read
   issues: read
+  # The script reads each PR's checks (statusCheckRollup) to set its own aside.
+  checks: read
+  statuses: read
   pull-requests: write
 
 # Runs queue rather than cancel: each reads fresh state, and a cancelled one could

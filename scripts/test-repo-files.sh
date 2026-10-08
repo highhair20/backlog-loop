@@ -278,7 +278,9 @@ check "README's file list includes the changelog" "grep -qE '^CHANGELOG\\.md[[:s
 # --- the ready-to-merge workflow (#88): least privilege, no schedule, trusted script ---
 RTM="$ROOT/.github/workflows/ready-to-merge.yml"
 check "ready-to-merge.yml exists" "[ -f '$RTM' ]"
-check "it can only read contents and issues and write pull requests" "yaml 'p = YAML.load_file(ARGV[0])[\"permissions\"]; exit(p == {\"contents\" => \"read\", \"issues\" => \"read\", \"pull-requests\" => \"write\"} ? 0 : 1)' '$RTM'"
+# checks and statuses: reading a PR's statusCheckRollup needs both, or the listing
+# fails with "Resource not accessible by integration" (#110, seen in backlog-loop-e2e).
+check "it can only read contents, issues, checks and statuses, and write pull requests" "yaml 'p = YAML.load_file(ARGV[0])[\"permissions\"]; exit(p == {\"contents\" => \"read\", \"issues\" => \"read\", \"checks\" => \"read\", \"statuses\" => \"read\", \"pull-requests\" => \"write\"} ? 0 : 1)' '$RTM'"
 check "it runs on CI completing, issue label changes and pushes to main; no schedule, no pull_request" "yaml 'on = YAML.load_file(ARGV[0])[true] || YAML.load_file(ARGV[0])[\"on\"]; exit(on.key?(\"workflow_run\") && on.key?(\"issues\") && on.key?(\"push\") && !on.key?(\"schedule\") && !on.key?(\"pull_request\") ? 0 : 1)' '$RTM'"
 # #110: a PR's label changes (changes-requested) run it too, through pull_request_target,
 # which runs main's copy of the workflow. Safe only because it never runs the PR's code.
