@@ -281,7 +281,7 @@ check "ready-to-merge.yml exists" "[ -f '$RTM' ]"
 check "it can only read contents and issues and write pull requests" "yaml 'p = YAML.load_file(ARGV[0])[\"permissions\"]; exit(p == {\"contents\" => \"read\", \"issues\" => \"read\", \"pull-requests\" => \"write\"} ? 0 : 1)' '$RTM'"
 check "it runs on CI completing, issue label changes and pushes to main; no schedule, no pull_request" "yaml 'on = YAML.load_file(ARGV[0])[true] || YAML.load_file(ARGV[0])[\"on\"]; exit(on.key?(\"workflow_run\") && on.key?(\"issues\") && on.key?(\"push\") && !on.key?(\"schedule\") && !on.key?(\"pull_request\") ? 0 : 1)' '$RTM'"
 # #110: a PR's label changes (changes-requested) run it too, through pull_request_target,
-# which adds no check to the PR it judges. Safe only because it never runs the PR's code.
+# which runs main's copy of the workflow. Safe only because it never runs the PR's code.
 check "it runs on PR label changes through pull_request_target" "yaml 'on = YAML.load_file(ARGV[0])[true] || YAML.load_file(ARGV[0])[\"on\"]; exit(on[\"pull_request_target\"] == {\"types\" => [\"labeled\", \"unlabeled\"]} ? 0 : 1)' '$RTM'"
 check "it never checks out or refers to the PR's head" "! grep -q 'pull_request.head' '$RTM' && ! grep -q 'github.head_ref' '$RTM' && [ \$(grep -c 'ref:' '$RTM') -eq 1 ]"
 check "its runs queue rather than cancel each other" "yaml 'c = YAML.load_file(ARGV[0])[\"concurrency\"]; exit(c[\"cancel-in-progress\"] == false ? 0 : 1)' '$RTM'"

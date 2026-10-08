@@ -27,7 +27,11 @@ case "\$*" in
   "api repos/"*"/compare/"*) echo "\$2" >>"\$d/compares"; [ -f "\$d/fail-compare" ] && exit 1
     cat "\$d/behind" 2>/dev/null || echo 0 ;;
   "issue list "*) cat "\$d/issues.json" ;;
-  "pr view "*" --json comments"*) n=\$3; [ -f "\$d/fail-view-\$n" ] && exit 1; cat "\$d/comments-\$n.json" 2>/dev/null || echo '{"comments": []}' ;;
+  # The re-read: the listed PR's head and labels, unless comments-<n>.json overrides them.
+  "pr view "*" --json comments"*) n=\$3; [ -f "\$d/fail-view-\$n" ] && exit 1
+    listed=\$(jq -c --argjson n "\$n" '[.[] | select(.number == \$n) | {headRefOid, labels}][0] // {}' "\$d/prs.json")
+    file=\$(cat "\$d/comments-\$n.json" 2>/dev/null || echo '{"comments": []}')
+    jq -n --argjson a "\$listed" --argjson b "\$file" '\$a + \$b' ;;
   "pr edit "*|"pr comment "*) echo "\$*" >>"\$d/writes" ;;
   *) echo "unexpected gh call: \$*" >&2; exit 2 ;;
 esac
@@ -35,12 +39,13 @@ FAKE
   chmod +x "$dir/bin/gh"
   echo "$dir"
 }
-run() { PATH="$1/bin:$PATH" GH_REPO=o/r READY_RETRY_SECONDS=0 "$HERE/ready-to-merge.sh" >"$1/out" 2>&1; }
+# GITHUB_WORKFLOW is emptied: under Actions it names the workflow running these tests.
+run() { PATH="$1/bin:$PATH" GH_REPO=o/r READY_RETRY_SECONDS=0 GITHUB_WORKFLOW='' "$HERE/ready-to-merge.sh" >"$1/out" 2>&1; }
 DEFAULT_ASSIGNEES='[{"login": "maint"}]'
-pr() { # pr <number> <branch> <mergeStateStatus> [labels...]; ASSIGNEES, CROSS and BASE override
+pr() { # pr <number> <branch> <mergeStateStatus> [labels...]; ASSIGNEES, CROSS, BASE and ROLLUP override
   local n="$1" ref="$2" st="$3" who="${ASSIGNEES-$DEFAULT_ASSIGNEES}"; shift 3
-  printf '{"number": %s, "headRefName": "%s", "headRefOid": "abc123%s0000000000000000000000000000000", "baseRefName": "%s", "mergeStateStatus": "%s", "isCrossRepository": %s, "assignees": %s, "labels": [%s]}' \
-    "$n" "$ref" "$n" "${BASE:-main}" "$st" "${CROSS:-false}" "$who" "$(for l in "$@"; do printf '{"name": "%s"},' "$l"; done | sed 's/,$//')"
+  printf '{"number": %s, "headRefName": "%s", "headRefOid": "abc123%s0000000000000000000000000000000", "baseRefName": "%s", "mergeStateStatus": "%s", "isCrossRepository": %s, "assignees": %s, "statusCheckRollup": %s, "labels": [%s]}' \
+    "$n" "$ref" "$n" "${BASE:-main}" "$st" "${CROSS:-false}" "$who" "${ROLLUP:-[]}" "$(for l in "$@"; do printf '{"name": "%s"},' "$l"; done | sed 's/,$//')"
 }
 in_review='[{"number": 7, "labels": [{"name": "in-review"}]}]'
 
@@ -161,6 +166,46 @@ J="$(setup unknownthenclean)"
 echo "[$(pr 20 feat/7-x UNKNOWN)]" >"$J/prs-1.json"; echo "[$(pr 20 feat/7-x CLEAN)]" >"$J/prs.json"; echo "$in_review" >"$J/issues.json"
 run "$J"
 check "an UNKNOWN merge state is read again and a PR that turns CLEAN is announced" "grep -q 'pr comment 20' '$J/writes' && [ \$(cat '$J/lists') -ge 2 ]"
+
+# The workflow's own run puts a check on the PR it judges (#110: a pull_request_target
+# run's check is on the PR's head, seen in backlog-loop-e2e). While it runs, or once
+# a newer run replaced it, GitHub reads the PR UNSTABLE. That check is set aside: the
+# PR is ready when every other check passes.
+ok='{"__typename": "CheckRun", "name": "verify", "workflowName": "CI", "status": "COMPLETED", "conclusion": "SUCCESS"}'
+own_running='{"__typename": "CheckRun", "name": "label", "workflowName": "Ready to merge", "status": "IN_PROGRESS", "conclusion": ""}'
+own_cancelled='{"__typename": "CheckRun", "name": "label", "workflowName": "Ready to merge", "status": "COMPLETED", "conclusion": "CANCELLED"}'
+other_failed='{"__typename": "CheckRun", "name": "lint", "workflowName": "Lint", "status": "COMPLETED", "conclusion": "FAILURE"}'
+status_pending='{"__typename": "StatusContext", "context": "ci/legacy", "state": "PENDING"}'
+L="$(setup ownrunning)"
+echo "[$(ROLLUP="[$ok, $own_running]" pr 20 feat/7-x UNSTABLE), $(ROLLUP="[$ok, $own_cancelled]" pr 21 fix/8-y UNSTABLE)]" >"$L/prs.json"
+echo '[{"number": 7, "labels": [{"name": "in-review"}]}, {"number": 8, "labels": [{"name": "in-review"}]}]' >"$L/issues.json"
+run "$L"; rc=$?
+check "UNSTABLE only from this workflow's own running check is ready" "[ $rc -eq 0 ] && grep -q 'api -X POST repos/o/r/issues/20/labels' '$L/writes' && grep -q 'pr comment 20' '$L/writes'"
+check "UNSTABLE only from this workflow's own cancelled check is ready" "grep -q 'api -X POST repos/o/r/issues/21/labels' '$L/writes'"
+M="$(setup otherfailing)"
+echo "[$(ROLLUP="[$ok, $own_running, $other_failed]" pr 20 feat/7-x UNSTABLE ready-to-merge), $(ROLLUP="[$ok, $status_pending]" pr 21 fix/8-y UNSTABLE ready-to-merge)]" >"$M/prs.json"
+echo '[{"number": 7, "labels": [{"name": "in-review"}]}, {"number": 8, "labels": [{"name": "in-review"}]}]' >"$M/issues.json"
+run "$M"
+check "another workflow's failing check keeps it not ready" "grep -q 'api -X DELETE repos/o/r/issues/20/labels/ready-to-merge' '$M/writes' && ! grep -q 'pr comment 20' '$M/writes'"
+check "a pending commit status keeps it not ready" "grep -q 'api -X DELETE repos/o/r/issues/21/labels/ready-to-merge' '$M/writes'"
+N="$(setup renamed)"
+echo "[$(ROLLUP='[{"__typename": "CheckRun", "name": "label", "workflowName": "Merge gate", "status": "IN_PROGRESS", "conclusion": ""}]' pr 20 feat/7-x UNSTABLE)]" >"$N/prs.json"; echo "$in_review" >"$N/issues.json"
+PATH="$N/bin:$PATH" GH_REPO=o/r READY_RETRY_SECONDS=0 GITHUB_WORKFLOW='Merge gate' "$HERE/ready-to-merge.sh" >"$N/out" 2>&1
+check "its own workflow is the one Actions names, so a renamed workflow still works" "grep -q 'api -X POST repos/o/r/issues/20/labels' '$N/writes'"
+: >"$N/writes"
+run "$N"
+check "and a check from a workflow with another name is never set aside" "! grep -q 'X POST' '$N/writes'"
+
+# The PR is read again just before anything is written: changes-requested added, or a
+# push, since the listing wins, and the run that event queued judges it (#110).
+O="$(setup changedsince)"
+echo "[$(pr 20 feat/7-x CLEAN), $(pr 21 fix/8-y CLEAN)]" >"$O/prs.json"
+echo '[{"number": 7, "labels": [{"name": "in-review"}]}, {"number": 8, "labels": [{"name": "in-review"}]}]' >"$O/issues.json"
+echo '{"comments": [], "headRefOid": "abc123200000000000000000000000000000000", "labels": [{"name": "changes-requested"}]}' >"$O/comments-20.json"
+echo '{"comments": [], "headRefOid": "fffffff00000000000000000000000000000000", "labels": []}' >"$O/comments-21.json"
+run "$O"; rc=$?
+check "changes-requested added since the listing: no label, no comment" "[ $rc -eq 0 ] && ! grep -q 'issues/20/labels' '$O/writes' && ! grep -q 'pr comment 20' '$O/writes'"
+check "a push since the listing: no label, no comment" "! grep -q 'issues/21/labels' '$O/writes' && ! grep -q 'pr comment 21' '$O/writes'"
 
 # A PR from a fork is never the loop's, and its token could not label it anyway.
 K="$(setup fork)"

@@ -18,10 +18,11 @@ on:
   push:
     branches: [main]
   # When a PR's labels change, so changes-requested takes the label off at once
-  # (#110). pull_request_target, never pull_request: it runs main's copy of this file
-  # and adds no check to the PR's head, so the PR it judges cannot read as not
-  # mergeable because of it. It never runs the PR's code (the checkout below is the
-  # default branch), which is what makes this trigger safe. A new push is judged when
+  # (#110), and comes back when it is removed. pull_request_target, never
+  # pull_request: it runs main's copy of this file, never the PR's. It never runs the
+  # PR's code either (the checkout below is the default branch), which is what makes
+  # this trigger safe. Its run still puts a check on the PR's head, as every run here
+  # can; the script sets this workflow's own checks aside. A new push is judged when
   # its CI completes (workflow_run).
   pull_request_target:
     types: [labeled, unlabeled]

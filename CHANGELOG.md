@@ -65,8 +65,10 @@ removes it from a repo made with "Use this template", and sync never copies it.
   was dropped on sync; it is now kept (#98).
 - `ready-to-merge` no longer outlives a PR that stopped being ready (#110). The
   seeded workflow also runs when a PR's labels change (`pull_request_target`, which
-  runs the default branch's workflow and adds no check to the PR), so
-  `changes-requested` takes the label off at once. `scripts/ready-to-merge.sh` takes
+  runs the default branch's workflow, never the PR's code), so `changes-requested`
+  takes the label off at once, and removing it puts the label back. The script sets
+  its own workflow's checks aside, since its run puts one on the PR it judges, and
+  reads each PR again just before labelling or announcing it. `scripts/ready-to-merge.sh` takes
   the label off a PR whose merge state is still `UNKNOWN` after its retries, and its
   comment says "up to date" only when the compare API shows the branch is not
   behind its base; without a strict ruleset GitHub reads a behind branch as `CLEAN`.
