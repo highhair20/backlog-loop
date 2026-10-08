@@ -282,7 +282,10 @@ check "it can only read contents and issues and write pull requests" "yaml 'p = 
 check "it runs on CI completing, issue label changes and pushes to main; no schedule" "yaml 'on = YAML.load_file(ARGV[0])[true] || YAML.load_file(ARGV[0])[\"on\"]; exit(on.key?(\"workflow_run\") && on.key?(\"issues\") && on.key?(\"push\") && !on.key?(\"schedule\") ? 0 : 1)' '$RTM'"
 # #110: a PR label runs it only to take ready-to-merge off, and only for changes-requested.
 check "its pull_request trigger is PR labels only" "yaml 'on = YAML.load_file(ARGV[0])[true] || YAML.load_file(ARGV[0])[\"on\"]; exit(on[\"pull_request\"] == {\"types\" => [\"labeled\"]} ? 0 : 1)' '$RTM'"
-check "a PR label other than changes-requested skips the job" "grep -qF \"if: github.event_name != 'pull_request' || github.event.label.name == 'changes-requested'\" '$RTM'"
+check "a PR label other than changes-requested, or on a fork's PR, skips the job" "grep -qF \"if: github.event_name != 'pull_request' || (github.event.label.name == 'changes-requested' && github.event.pull_request.head.repo.full_name == github.repository)\" '$RTM'"
+# GitHub keeps one pending run per concurrency group, and a newer one replaces it: a
+# PR label's run must never displace a pending full run.
+check "a PR label's run queues in a group of its own, per label" "grep -qF \"group: ready-to-merge-\\\${{ github.event_name == 'pull_request' && format('label-{0}', github.event.label.name) || 'full' }}\" '$RTM'"
 check "a pull_request run only removes labels" "grep -qF \"READY_REMOVE_ONLY: \\\${{ github.event_name == 'pull_request' }}\" '$RTM'"
 check "its runs queue rather than cancel each other" "yaml 'c = YAML.load_file(ARGV[0])[\"concurrency\"]; exit(c[\"cancel-in-progress\"] == false ? 0 : 1)' '$RTM'"
 check "it checks out the default branch, so a PR cannot change the script that judges it" "grep -q 'ref: \${{ github.event.repository.default_branch }}' '$RTM'"

@@ -30,15 +30,18 @@ permissions:
   pull-requests: write
 
 # Runs queue rather than cancel: each reads fresh state, and a cancelled one could
-# leave a PR labelled but not announced.
+# leave a PR labelled but not announced. GitHub keeps one pending run per group and a
+# newer one replaces it, so a PR label's run queues in a group per label: it never
+# displaces a pending full run, nor a skipped run a pending changes-requested one.
 concurrency:
-  group: ready-to-merge
+  group: ready-to-merge-${{ github.event_name == 'pull_request' && format('label-{0}', github.event.label.name) || 'full' }}
   cancel-in-progress: false
 
 jobs:
   label:
-    # A PR label other than changes-requested skips the job, and a skipped job blocks nothing.
-    if: github.event_name != 'pull_request' || github.event.label.name == 'changes-requested'
+    # A PR label other than changes-requested skips the job, and a skipped job blocks
+    # nothing. So does one on a fork's PR: never the loop's, and its token is read-only.
+    if: github.event_name != 'pull_request' || (github.event.label.name == 'changes-requested' && github.event.pull_request.head.repo.full_name == github.repository)
     runs-on: ubuntu-latest
     steps:
       # The default branch, never the PR's: a PR must not change the script that judges it.
