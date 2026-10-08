@@ -33,8 +33,8 @@ fail() { echo "ready-to-merge: $1" >&2; failures=$((failures + 1)); }
 : "${GH_REPO:=$(gh repo view --json nameWithOwner -q .nameWithOwner)}"
 
 # With "checks", the PRs' checks too (statusCheckRollup), which the workflow token can
-# read only with checks: read and statuses: read. A workflow seeded before #110 lacks
-# them, and sync never updates a seeded file, so without them this lists PRs bare.
+# read only with actions: read, checks: read and statuses: read. A workflow seeded
+# before #110 lacks them, and sync never updates a seeded file, so without them this lists PRs bare.
 list_prs() {
   gh pr list --state open --limit 1000 \
     --json "number,headRefName,headRefOid,baseRefName,mergeStateStatus,isCrossRepository,assignees,labels${1:+,statusCheckRollup}"
@@ -51,7 +51,7 @@ for attempt in $(seq 1 "$RETRIES"); do
   elif raw="$(list_prs)"; then
     if [ "$with_checks" -eq 1 ]; then
       with_checks=0
-      echo "ready-to-merge: could not read the PRs' checks, so this run cannot set its own aside and reads such a PR as not ready. Give .github/workflows/ready-to-merge.yml checks: read and statuses: read (the template's copy has them)." >&2
+      echo "ready-to-merge: could not read the PRs' checks, so this run cannot set its own aside and reads such a PR as not ready. Give .github/workflows/ready-to-merge.yml actions: read, checks: read and statuses: read (the template's copy has them)." >&2
     fi
   else
     echo "ready-to-merge: could not list open PRs" >&2; exit 1

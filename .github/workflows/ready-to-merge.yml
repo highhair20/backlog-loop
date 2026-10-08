@@ -28,9 +28,11 @@ on:
     types: [labeled, unlabeled]
 
 permissions:
+  # The script reads each PR's checks (statusCheckRollup) to set its own aside, and
+  # names each check's workflow, which GitHub reads from its workflow run (actions).
+  actions: read
   contents: read
   issues: read
-  # The script reads each PR's checks (statusCheckRollup) to set its own aside.
   checks: read
   statuses: read
   pull-requests: write
