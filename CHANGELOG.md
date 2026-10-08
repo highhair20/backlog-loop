@@ -64,20 +64,21 @@ removes it from a repo made with "Use this template", and sync never copies it.
   merely contains a managed script's name (`my-setup.sh-wrapper`, `scripts/setup.sh`)
   was dropped on sync; it is now kept (#98).
 - `ready-to-merge` no longer outlives a PR that stopped being ready (#110). The
-  seeded workflow also runs when a PR gains `changes-requested`, and that run only
-  removes the label, judged on labels alone. `scripts/ready-to-merge.sh` takes the
-  label off a PR whose merge state is still `UNKNOWN` after its retries, and its
+  seeded workflow also runs when a PR's labels change (`pull_request_target`, which
+  runs the default branch's workflow and adds no check to the PR), so
+  `changes-requested` takes the label off at once. `scripts/ready-to-merge.sh` takes
+  the label off a PR whose merge state is still `UNKNOWN` after its retries, and its
   comment says "up to date" only when the compare API shows the branch is not
   behind its base; without a strict ruleset GitHub reads a behind branch as `CLEAN`.
 
 ### Manual steps for existing repos
 
 - **`.github/workflows/ready-to-merge.yml`** (seeded, #110): for the label to come
-  off as soon as a PR gains `changes-requested`, copy the template's `pull_request`
-  trigger, the `concurrency` group, the job's `if:` line and the step's
-  `READY_REMOVE_ONLY` line into your copy (all four: without the group, any PR
-  label can cancel a pending full run). Without them the re-synced script still works, and the label comes off at
-  the next CI run or push to `main`. The `ready-to-merge` rows in `docs/BACKLOG.md`
+  off as soon as a PR gains `changes-requested`, add the template's
+  `pull_request_target` trigger to your copy. Keep its checkout on the default
+  branch: under that trigger, checking out the PR's code would run it with a write
+  token. Without the trigger, the re-synced script still works, and the label comes
+  off at the next CI run or push to `main`. The `ready-to-merge` rows in `docs/BACKLOG.md`
   and `docs/ISSUE_GUIDE.md` (seeded) no longer promise "up to date"; copy them if
   you want them, and re-run `scripts/seed-labels.sh` to update the label's
   description.

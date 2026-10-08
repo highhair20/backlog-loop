@@ -35,8 +35,7 @@ FAKE
   chmod +x "$dir/bin/gh"
   echo "$dir"
 }
-# REMOVE_ONLY=true runs it as the workflow's pull_request run does.
-run() { PATH="$1/bin:$PATH" GH_REPO=o/r READY_RETRY_SECONDS=0 READY_REMOVE_ONLY="${REMOVE_ONLY:-false}" "$HERE/ready-to-merge.sh" >"$1/out" 2>&1; }
+run() { PATH="$1/bin:$PATH" GH_REPO=o/r READY_RETRY_SECONDS=0 "$HERE/ready-to-merge.sh" >"$1/out" 2>&1; }
 DEFAULT_ASSIGNEES='[{"login": "maint"}]'
 pr() { # pr <number> <branch> <mergeStateStatus> [labels...]; ASSIGNEES, CROSS and BASE override
   local n="$1" ref="$2" st="$3" who="${ASSIGNEES-$DEFAULT_ASSIGNEES}"; shift 3
@@ -93,7 +92,7 @@ check "a CLEAN branch behind its base is announced without 'up to date'" "[ $rc 
 W="$(setup comparefail)"
 echo "[$(pr 20 feat/7-x CLEAN)]" >"$W/prs.json"; echo "$in_review" >"$W/issues.json"; : >"$W/fail-compare"
 run "$W"; rc=$?
-check "a failed compare is reported, and the announcement leaves 'up to date' out" "[ $rc -ne 0 ] && grep -q 'could not compare #20' '$W/out' && grep -q 'pr comment 20' '$W/writes' && ! grep -q 'up to date' '$W/writes'"
+check "a failed compare is reported and holds the announcement back for a later run" "[ $rc -ne 0 ] && grep -q 'could not compare #20' '$W/out' && grep -q 'X POST repos/o/r/issues/20/labels' '$W/writes' && ! grep -q 'pr comment' '$W/writes'"
 Y="$(setup otherbase)"
 echo "[$(BASE=release pr 20 feat/7-x CLEAN)]" >"$Y/prs.json"; echo "$in_review" >"$Y/issues.json"; echo 0 >"$Y/behind"
 run "$Y"
@@ -101,31 +100,19 @@ check "the branch is compared with, and named as up to date with, the PR's own b
 X="$(setup comparejunk)"
 echo "[$(pr 20 feat/7-x CLEAN)]" >"$X/prs.json"; echo "$in_review" >"$X/issues.json"; echo null >"$X/behind"
 run "$X"; rc=$?
-check "a compare that returns no count is treated as unchecked" "[ $rc -ne 0 ] && ! grep -q 'up to date' '$X/writes'"
+check "a compare that returns no count is treated as unchecked" "[ $rc -ne 0 ] && ! grep -q 'pr comment' '$X/writes'"
 
-# The workflow's pull_request run (a PR gained changes-requested) only removes: its own
-# check is running on the PR, so it judges labels alone, never the merge state.
-R="$(setup removeonly)"
-echo "[$(pr 50 feat/7-x BLOCKED ready-to-merge changes-requested), $(pr 51 fix/8-y CLEAN), $(pr 52 feat/9-z BLOCKED ready-to-merge), $(pr 53 feat/11-w UNKNOWN ready-to-merge)]" >"$R/prs.json"
-echo '[{"number": 7, "labels": [{"name": "in-review"}]}, {"number": 8, "labels": [{"name": "in-review"}]}, {"number": 9, "labels": [{"name": "in-review"}]}, {"number": 11, "labels": [{"name": "in-review"}]}]' >"$R/issues.json"
-REMOVE_ONLY=true run "$R"; rc=$?
-check "a remove-only run takes the label off a PR that gained changes-requested" "[ $rc -eq 0 ] && grep -q 'api -X DELETE repos/o/r/issues/50/labels/ready-to-merge' '$R/writes'"
-check "it never labels or announces a ready PR" "! grep -q 'X POST' '$R/writes' && ! grep -q 'pr comment' '$R/writes'"
-check "it keeps the label on a PR whose merge state its own check may have changed" "! grep -q 'issues/52/' '$R/writes' && ! grep -q 'issues/53/' '$R/writes'"
-check "it does not wait out UNKNOWN merge states" "[ \$(cat '$R/lists') -eq 1 ]"
+# An UNKNOWN PR without the label changes nothing, so it is not noted either.
+N="$(setup unknownunlabelled)"
+echo "[$(pr 20 feat/7-x UNKNOWN)]" >"$N/prs.json"; echo "$in_review" >"$N/issues.json"
+run "$N"; rc=$?
+check "an UNKNOWN PR without the label is left alone, with no note" "[ $rc -eq 0 ] && [ ! -s '$N/writes' ] && ! grep -q 'UNKNOWN' '$N/out'"
 
-# A repo still on the old seeded workflow never sets READY_REMOVE_ONLY: the synced
-# script then labels and announces as before.
-O="$(setup oldworkflow)"
-echo "[$(pr 20 feat/7-x CLEAN)]" >"$O/prs.json"; echo "$in_review" >"$O/issues.json"
-PATH="$O/bin:$PATH" GH_REPO=o/r READY_RETRY_SECONDS=0 env -u READY_REMOVE_ONLY "$HERE/ready-to-merge.sh" >"$O/out" 2>&1; rc=$?
-check "with READY_REMOVE_ONLY unset, a ready PR is labelled and announced" "[ $rc -eq 0 ] && grep -q 'X POST repos/o/r/issues/20/labels' '$O/writes' && grep -q 'pr comment 20' '$O/writes'"
-
-# Any other value for READY_REMOVE_ONLY is refused, never read as either mode.
-Z="$(setup badmode)"
-echo "[$(pr 20 feat/7-x CLEAN)]" >"$Z/prs.json"; echo "$in_review" >"$Z/issues.json"
-REMOVE_ONLY=yes run "$Z"; rc=$?
-check "an unreadable READY_REMOVE_ONLY fails the run and writes nothing" "[ $rc -ne 0 ] && grep -q 'READY_REMOVE_ONLY' '$Z/out' && [ ! -s '$Z/writes' ]"
+# A branch number with a leading zero still names its issue.
+L="$(setup leadingzero)"
+echo "[$(pr 20 feat/07-x CLEAN)]" >"$L/prs.json"; echo "$in_review" >"$L/issues.json"
+run "$L"; rc=$?
+check "a branch feat/07-x is matched to issue 7" "[ $rc -eq 0 ] && grep -q 'X POST repos/o/r/issues/20/labels' '$L/writes'"
 
 # Not the loop's to announce: no loop branch, issue not in-review, changes requested.
 E="$(setup skipped)"
