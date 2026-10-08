@@ -17,9 +17,14 @@ on:
   # When main moves, so PRs that fell behind lose the label.
   push:
     branches: [main]
-  # No pull_request trigger: a run there adds its own check to the PR it judges, and
-  # while that check runs GitHub can report the PR as not mergeable yet. A new push
-  # is judged when its CI completes (workflow_run).
+  # When a PR's labels change, so changes-requested takes the label off at once
+  # (#110). pull_request_target, never pull_request: it runs main's copy of this file
+  # and adds no check to the PR's head, so the PR it judges cannot read as not
+  # mergeable because of it. It never runs the PR's code (the checkout below is the
+  # default branch), which is what makes this trigger safe. A new push is judged when
+  # its CI completes (workflow_run).
+  pull_request_target:
+    types: [labeled, unlabeled]
 
 permissions:
   contents: read
@@ -27,7 +32,8 @@ permissions:
   pull-requests: write
 
 # Runs queue rather than cancel: each reads fresh state, and a cancelled one could
-# leave a PR labelled but not announced.
+# leave a PR labelled but not announced. A newer pending run replaces an older one,
+# which is safe for the same reason.
 concurrency:
   group: ready-to-merge
   cancel-in-progress: false
@@ -40,6 +46,8 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ github.event.repository.default_branch }}
+          # The script uses GH_TOKEN; no git command needs the token after checkout.
+          persist-credentials: false
       - name: Label ready PRs
         run: scripts/ready-to-merge.sh
         env:

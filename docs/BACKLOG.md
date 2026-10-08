@@ -119,9 +119,10 @@ involved, see [`ROUTINE.md`](ROUTINE.md). Run one or the other on a repo, never 
 7. **Open the PR** with `Closes #N`, assigned to the maintainer. A review loop then
    runs on the PR until it has no blocking findings, and only then is `in-progress`
    swapped for `in-review`, which means the loop is done with it. The `ready-to-merge`
-   workflow then labels the PR `ready-to-merge` and mentions the maintainer once its
-   required checks pass and it is up to date with `main`; a PR that is only behind
-   `main` gets "Update branch" from the loop's next run (Step 1.5).
+   workflow then labels the PR `ready-to-merge` and mentions the maintainer once
+   GitHub reads it as mergeable: its required checks pass and, under a strict
+   ruleset, it is up to date with `main`. A PR that is only behind `main` gets
+   "Update branch" from the loop's next run (Step 1.5).
 
 The command is [`.claude/commands/work-next-item.md`](../.claude/commands/work-next-item.md).
 It, the hooks, and the loop scripts are **managed** by

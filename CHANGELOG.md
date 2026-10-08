@@ -63,8 +63,25 @@ removes it from a repo made with "Use this template", and sync never copies it.
   command runs a managed hook script by its path. A repo's own hook whose command
   merely contains a managed script's name (`my-setup.sh-wrapper`, `scripts/setup.sh`)
   was dropped on sync; it is now kept (#98).
+- `ready-to-merge` no longer outlives a PR that stopped being ready (#110). The
+  seeded workflow also runs when a PR's labels change (`pull_request_target`, which
+  runs the default branch's workflow and adds no check to the PR), so
+  `changes-requested` takes the label off at once. `scripts/ready-to-merge.sh` takes
+  the label off a PR whose merge state is still `UNKNOWN` after its retries, and its
+  comment says "up to date" only when the compare API shows the branch is not
+  behind its base; without a strict ruleset GitHub reads a behind branch as `CLEAN`.
 
 ### Manual steps for existing repos
+
+- **`.github/workflows/ready-to-merge.yml`** (seeded, #110): for the label to come
+  off as soon as a PR gains `changes-requested`, add the template's
+  `pull_request_target` trigger to your copy, and `persist-credentials: false` on its
+  checkout. Keep that checkout on the default branch: under that trigger, checking
+  out the PR's code would run it with a write token. Without the trigger, the re-synced script still works, and the label comes
+  off at the next CI run or push to `main`. The `ready-to-merge` rows in `docs/BACKLOG.md`
+  and `docs/ISSUE_GUIDE.md` (seeded) no longer promise "up to date"; copy them if
+  you want them, and re-run `scripts/seed-labels.sh` to update the label's
+  description.
 
 - **`docs/ISSUE_GUIDE.md`** (seeded) gained a paragraph pointing to `/file-issue`;
   copy it from the template if you want it. A re-sync brings the command itself.

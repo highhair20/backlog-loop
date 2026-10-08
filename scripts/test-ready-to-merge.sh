@@ -24,6 +24,8 @@ case "\$*" in
     k=\$(( \$(cat "\$d/lists" 2>/dev/null || echo 0) + 1 )); echo "\$k" >"\$d/lists"
     if [ -f "\$d/prs-\$k.json" ]; then cat "\$d/prs-\$k.json"; else cat "\$d/prs.json"; fi ;;
   "api -X POST "*"/labels "*|"api -X DELETE "*"/labels/"*) echo "\$*" >>"\$d/writes" ;;
+  "api repos/"*"/compare/"*) echo "\$2" >>"\$d/compares"; [ -f "\$d/fail-compare" ] && exit 1
+    cat "\$d/behind" 2>/dev/null || echo 0 ;;
   "issue list "*) cat "\$d/issues.json" ;;
   "pr view "*" --json comments"*) n=\$3; [ -f "\$d/fail-view-\$n" ] && exit 1; cat "\$d/comments-\$n.json" 2>/dev/null || echo '{"comments": []}' ;;
   "pr edit "*|"pr comment "*) echo "\$*" >>"\$d/writes" ;;
@@ -35,10 +37,10 @@ FAKE
 }
 run() { PATH="$1/bin:$PATH" GH_REPO=o/r READY_RETRY_SECONDS=0 "$HERE/ready-to-merge.sh" >"$1/out" 2>&1; }
 DEFAULT_ASSIGNEES='[{"login": "maint"}]'
-pr() { # pr <number> <branch> <mergeStateStatus> [labels...]; ASSIGNEES and CROSS override
+pr() { # pr <number> <branch> <mergeStateStatus> [labels...]; ASSIGNEES, CROSS and BASE override
   local n="$1" ref="$2" st="$3" who="${ASSIGNEES-$DEFAULT_ASSIGNEES}"; shift 3
-  printf '{"number": %s, "headRefName": "%s", "headRefOid": "abc123%s0000000000000000000000000000000", "mergeStateStatus": "%s", "isCrossRepository": %s, "assignees": %s, "labels": [%s]}' \
-    "$n" "$ref" "$n" "$st" "${CROSS:-false}" "$who" "$(for l in "$@"; do printf '{"name": "%s"},' "$l"; done | sed 's/,$//')"
+  printf '{"number": %s, "headRefName": "%s", "headRefOid": "abc123%s0000000000000000000000000000000", "baseRefName": "%s", "mergeStateStatus": "%s", "isCrossRepository": %s, "assignees": %s, "labels": [%s]}' \
+    "$n" "$ref" "$n" "${BASE:-main}" "$st" "${CROSS:-false}" "$who" "$(for l in "$@"; do printf '{"name": "%s"},' "$l"; done | sed 's/,$//')"
 }
 in_review='[{"number": 7, "labels": [{"name": "in-review"}]}]'
 
@@ -63,13 +65,54 @@ echo '{"comments": [{"body": "<!-- backlog-loop:ready 00000000000000000000000000
 run "$C"
 check "a new head on a ready PR is announced again" "grep -q 'pr comment 20' '$C/writes' && ! grep -q 'X POST' '$C/writes'"
 
-# A labelled PR that is no longer ready loses the label; UNKNOWN changes nothing.
+# A labelled PR that is no longer ready loses the label, and so does one whose merge
+# state is still UNKNOWN after the retries: it is never kept on a state not read (#110).
 D="$(setup notready)"
 echo "[$(pr 20 feat/7-x BEHIND ready-to-merge), $(pr 21 fix/8-y UNKNOWN ready-to-merge)]" >"$D/prs.json"
 echo '[{"number": 7, "labels": [{"name": "in-review"}]}, {"number": 8, "labels": [{"name": "in-review"}]}]' >"$D/issues.json"
-run "$D"
+run "$D"; rc=$?
 check "a PR that stops being ready loses the label" "grep -q 'api -X DELETE repos/o/r/issues/20/labels/ready-to-merge' '$D/writes'"
-check "an UNKNOWN merge state leaves the label as it is" "! grep -q 'issues/21/labels' '$D/writes'"
+check "a merge state still UNKNOWN after the retries loses the label, with a note" "[ $rc -eq 0 ] && [ \$(cat '$D/lists') -eq 3 ] && grep -q 'api -X DELETE repos/o/r/issues/21/labels/ready-to-merge' '$D/writes' && grep -q '#21.*still UNKNOWN' '$D/out'"
+check "and is never labelled or announced" "! grep -q 'X POST repos/o/r/issues/21' '$D/writes' && ! grep -q 'pr comment 21' '$D/writes'"
+# A later run that reads it CLEAN adds the label back.
+echo "[$(pr 21 fix/8-y CLEAN)]" >"$D/prs.json"; : >"$D/writes"; rm -f "$D/lists"
+run "$D"
+check "a later run adds the label back once the state reads CLEAN" "grep -q 'api -X POST repos/o/r/issues/21/labels' '$D/writes' && grep -q 'pr comment 21' '$D/writes'"
+
+# The announcement says "up to date" only when the compare API shows the branch is not
+# behind its base; GitHub reads CLEAN on a behind branch without a strict ruleset (#110).
+U="$(setup uptodate)"
+echo "[$(pr 20 feat/7-x CLEAN)]" >"$U/prs.json"; echo "$in_review" >"$U/issues.json"; echo 0 >"$U/behind"
+run "$U"; rc=$?
+check "a branch not behind its base is announced as up to date" "[ $rc -eq 0 ] && grep -q 'up to date with main' '$U/writes' && grep -qx 'repos/o/r/compare/main...abc123200000000000000000000000000000000' '$U/compares'"
+V="$(setup behind)"
+echo "[$(pr 20 feat/7-x CLEAN)]" >"$V/prs.json"; echo "$in_review" >"$V/issues.json"; echo 3 >"$V/behind"
+run "$V"; rc=$?
+check "a CLEAN branch behind its base is announced without 'up to date'" "[ $rc -eq 0 ] && grep -q 'pr comment 20' '$V/writes' && grep -q 'required checks pass' '$V/writes' && ! grep -q 'up to date' '$V/writes'"
+W="$(setup comparefail)"
+echo "[$(pr 20 feat/7-x CLEAN)]" >"$W/prs.json"; echo "$in_review" >"$W/issues.json"; : >"$W/fail-compare"
+run "$W"; rc=$?
+check "a failed compare is reported and holds the announcement back for a later run" "[ $rc -ne 0 ] && grep -q 'could not compare #20' '$W/out' && grep -q 'X POST repos/o/r/issues/20/labels' '$W/writes' && ! grep -q 'pr comment' '$W/writes'"
+Y="$(setup otherbase)"
+echo "[$(BASE=release pr 20 feat/7-x CLEAN)]" >"$Y/prs.json"; echo "$in_review" >"$Y/issues.json"; echo 0 >"$Y/behind"
+run "$Y"
+check "the branch is compared with, and named as up to date with, the PR's own base" "grep -q 'up to date with release' '$Y/writes' && grep -q '^repos/o/r/compare/release\\.\\.\\.' '$Y/compares'"
+X="$(setup comparejunk)"
+echo "[$(pr 20 feat/7-x CLEAN)]" >"$X/prs.json"; echo "$in_review" >"$X/issues.json"; echo null >"$X/behind"
+run "$X"; rc=$?
+check "a compare that returns no count is treated as unchecked" "[ $rc -ne 0 ] && ! grep -q 'pr comment' '$X/writes'"
+
+# An UNKNOWN PR without the label changes nothing, so it is not noted either.
+N="$(setup unknownunlabelled)"
+echo "[$(pr 20 feat/7-x UNKNOWN)]" >"$N/prs.json"; echo "$in_review" >"$N/issues.json"
+run "$N"; rc=$?
+check "an UNKNOWN PR without the label is left alone, with no note" "[ $rc -eq 0 ] && [ ! -s '$N/writes' ] && ! grep -q 'UNKNOWN' '$N/out'"
+
+# A branch number with a leading zero still names its issue.
+L="$(setup leadingzero)"
+echo "[$(pr 20 feat/07-x CLEAN)]" >"$L/prs.json"; echo "$in_review" >"$L/issues.json"
+run "$L"; rc=$?
+check "a branch feat/07-x is matched to issue 7" "[ $rc -eq 0 ] && grep -q 'X POST repos/o/r/issues/20/labels' '$L/writes'"
 
 # Not the loop's to announce: no loop branch, issue not in-review, changes requested.
 E="$(setup skipped)"

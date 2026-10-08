@@ -5,8 +5,11 @@
 # required checks pass and, under a strict ruleset, it is up to date with main.
 #
 # A ready PR gets the ready-to-merge label and one comment mentioning its assignees,
-# once per head commit (marked, so a rerun does not repeat it). A labelled PR that is
-# no longer ready loses the label. UNKNOWN (GitHub still computing) changes nothing.
+# once per head commit (marked, so a rerun does not repeat it). The comment says the
+# branch is up to date with its base only when the compare API shows it is: without a
+# strict ruleset GitHub reads a behind branch as CLEAN. A labelled PR that is no
+# longer ready loses the label, and so does one still UNKNOWN (GitHub still
+# computing) after the retries: a missing label costs a run, a false one a bad merge.
 #
 # Run by .github/workflows/ready-to-merge.yml; safe to run by hand.
 # Usage: scripts/ready-to-merge.sh   (gh must be authenticated for the repo)
@@ -15,7 +18,7 @@ set -uo pipefail
 LABEL='ready-to-merge'
 MARK='<!-- backlog-loop:ready'
 # GitHub computes mergeStateStatus lazily, so right after an event a PR can read
-# UNKNOWN: list again, a few times, before leaving it for the next event.
+# UNKNOWN: list again, a few times, before taking it as not ready.
 RETRIES=3
 RETRY_SECONDS="${READY_RETRY_SECONDS:-10}"
 failures=0
@@ -24,7 +27,7 @@ fail() { echo "ready-to-merge: $1" >&2; failures=$((failures + 1)); }
 
 list_prs() {
   gh pr list --state open --limit 1000 \
-    --json number,headRefName,headRefOid,mergeStateStatus,isCrossRepository,assignees,labels
+    --json number,headRefName,headRefOid,baseRefName,mergeStateStatus,isCrossRepository,assignees,labels
 }
 # Loop PRs (branch <type>/<N>-<slug>) from this repo, never a fork's: a fork's PR is
 # not the loop's, and the workflow's token could not label it.
@@ -46,27 +49,30 @@ remove_label() { gh api -X DELETE "repos/$GH_REPO/issues/$1/labels/$LABEL" >/dev
 
 while IFS= read -r pr; do
   [ -n "$pr" ] || continue
-  if ! fields="$(jq -r '[.number, .headRefName, .headRefOid, .mergeStateStatus, ([.labels[].name] | join(",")), ([.assignees[].login | "@" + .] | join(" "))] | join("\u001f")' <<<"$pr")"; then
+  if ! fields="$(jq -r '[.number, .headRefName, .headRefOid, .baseRefName, .mergeStateStatus, ([.labels[].name] | join(",")), ([.assignees[].login | "@" + .] | join(" "))] | join("\u001f")' <<<"$pr")"; then
     fail "could not read a PR's fields"; continue
   fi
   # The unit separator, not a tab: read collapses runs of whitespace separators, so
   # an empty field (no labels) would shift the ones after it.
-  IFS=$'\x1f' read -r n ref sha state labels who <<<"$fields"
+  IFS=$'\x1f' read -r n ref sha base state labels who <<<"$fields"
   issue="$(sed -nE 's#^[a-z]+/([0-9]+)-.*#\1#p' <<<"$ref")"
-  [ "$state" != UNKNOWN ] || continue
   labelled=0; case ",$labels," in *",$LABEL,"*) labelled=1 ;; esac
 
+  # Anything but a mergeable state is not ready, UNKNOWN after the retries included.
   ready=0
   if [ "$state" = CLEAN ] || [ "$state" = HAS_HOOKS ]; then
     case ",$labels," in
       *,changes-requested,*) ;;
       # The issue must be in-review and free of every label Step 1.5 skips:
       # needs-attention also marks a review loop that hit its cap unresolved.
-      *) jq -e --argjson i "$issue" 'any(.[]; .number == $i and ([.labels[].name] | any(. == "in-progress" or . == "needs-attention" or . == "blocked" or . == "no-auto-heal") | not))' <<<"$issues" >/dev/null && ready=1 ;;
+      *) jq -e --arg i "$issue" 'any(.[]; .number == ($i | tonumber) and ([.labels[].name] | any(. == "in-progress" or . == "needs-attention" or . == "blocked" or . == "no-auto-heal") | not))' <<<"$issues" >/dev/null && ready=1 ;;
     esac
   fi
 
   if [ "$ready" -eq 0 ]; then
+    if [ "$state" = UNKNOWN ] && [ "$labelled" -eq 1 ]; then
+      echo "ready-to-merge: #$n's merge state is still UNKNOWN after $RETRIES reads; taking it as not ready" >&2
+    fi
     [ "$labelled" -eq 0 ] || remove_label "$n" || fail "could not remove $LABEL from #$n"
     continue
   fi
@@ -75,8 +81,16 @@ while IFS= read -r pr; do
     fail "could not read #$n's comments"; continue
   fi
   grep -qF "$MARK $sha" <<<"$bodies" && continue
+
+  # Claim "up to date" only when checked: CLEAN alone does not mean it without a
+  # strict ruleset. A failed compare holds the comment back, so a later run retries it.
+  if ! behind="$(gh api "repos/$GH_REPO/compare/$base...$sha" --jq .behind_by)" || ! [[ "$behind" =~ ^[0-9]+$ ]]; then
+    fail "could not compare #$n with $base; not announcing it yet"; continue
+  fi
+  done_with="the loop is done with #$issue and required checks pass"
+  [ "$behind" -ne 0 ] || done_with="the loop is done with #$issue, required checks pass, and the branch is up to date with $base"
   gh pr comment "$n" --body "$MARK $sha -->
-${who:+$who }Ready to merge: the loop is done with #$issue, required checks pass, and the branch is up to date with main (head ${sha:0:7})." >/dev/null \
+${who:+$who }Ready to merge: $done_with (head ${sha:0:7})." >/dev/null \
     || fail "could not comment on #$n"
 done < <(jq -c '.[]' <<<"$prs")
 
