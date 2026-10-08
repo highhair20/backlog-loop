@@ -105,6 +105,13 @@ check "copies protect-main.sh and the allowlist example" "[ -x '$T/scripts/prote
 check "does not make the command file executable" "[ ! -x '$T/.claude/commands/work-next-item.md' ]"
 check "overwrites a drifted managed hook" "! grep -q '# local edit' '$T/.claude/hooks/pr-review-gate.sh'"
 
+# --- the /file-issue command is managed: copied, and restored when edited (#72) ---
+check "copies the /file-issue command" "cmp -s '$HERE/../.claude/commands/file-issue.md' '$T/.claude/commands/file-issue.md'"
+echo "# local edit" >>"$T/.claude/commands/file-issue.md"
+git -C "$T" -c user.name=t -c user.email=t@t commit -qam drift-file-issue
+"$SYNC" "$T" >/dev/null 2>&1
+check "overwrites a drifted /file-issue command" "! grep -q '# local edit' '$T/.claude/commands/file-issue.md'"
+
 # --- refusals ---
 D="$(new_target dirty)"
 echo change >>"$D/CLAUDE.md"

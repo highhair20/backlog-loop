@@ -12,6 +12,10 @@ a `### <Section>` heading in the issue body. They cannot set a priority label, s
 add one after creating the issue. When creating issues via `gh` or the API, write
 the body with the same headings.
 
+In Claude Code, `/file-issue <one-line idea>` writes the issue for you in this
+format. It checks for duplicates, reads the code the idea touches, proposes a
+priority, and shows you the draft. It files nothing until you approve it.
+
 ## Principles
 
 - **Self-contained.** Assume the reader has only the repo and this issue. Put the
