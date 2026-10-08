@@ -18,6 +18,12 @@ removes it from a repo made with "Use this template", and sync never copies it.
 
 ### Added
 
+- `/file-issue <one-line idea>` (the new managed `.claude/commands/file-issue.md`)
+  drafts an issue in the issue forms' format. It checks open and closed issues for
+  duplicates, reads the code the idea touches, proposes one priority with a reason,
+  and shows the draft. It files only after you approve it in a later message, so a
+  headless run prints the draft and files nothing. `gh issue create` stays out of
+  the unattended allowlist on purpose (#72).
 - `scripts/backlog-loop.sh` warns at start-up when the repo is behind the template,
   as `scripts/setup.sh` does, and both now say by how many commits, with a link to
   the changes on GitHub. The check is the new managed `scripts/template-version.sh`.
@@ -60,6 +66,8 @@ removes it from a repo made with "Use this template", and sync never copies it.
 
 ### Manual steps for existing repos
 
+- **`docs/ISSUE_GUIDE.md`** (seeded) gained a paragraph pointing to `/file-issue`;
+  copy it from the template if you want it. A re-sync brings the command itself.
 - **`scripts/ECC_PIN`:** a sync seeds the template's pin. If your reviewer agents
   were vendored from another ECC commit (the commit is in each agent's
   "Vendored from ECC" line), `vendor-agents.sh` now refuses until you either check

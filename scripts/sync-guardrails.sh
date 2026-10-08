@@ -25,6 +25,7 @@ MANAGED=(
   .claude/hooks/pr-created-review.sh
   .claude/hooks/pr-review-gate.sh
   .claude/hooks/pr-review-state.sh
+  .claude/commands/file-issue.md
   .claude/commands/work-next-item.md
   scripts/backlog-loop.sh
   scripts/check-verify-section.sh
