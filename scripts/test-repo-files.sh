@@ -286,6 +286,7 @@ check "it runs on PR label changes through pull_request_target" "yaml 'on = YAML
 check "it never checks out or refers to the PR's head" "! grep -q 'pull_request.head' '$RTM' && ! grep -q 'github.head_ref' '$RTM' && [ \$(grep -c 'ref:' '$RTM') -eq 1 ]"
 check "its runs queue rather than cancel each other" "yaml 'c = YAML.load_file(ARGV[0])[\"concurrency\"]; exit(c[\"cancel-in-progress\"] == false ? 0 : 1)' '$RTM'"
 check "it checks out the default branch, so a PR cannot change the script that judges it" "grep -q 'ref: \${{ github.event.repository.default_branch }}' '$RTM'"
+check "its checkout keeps no token in git config, since pull_request_target runs hold a write token" "grep -q 'persist-credentials: false' '$RTM'"
 check "it runs scripts/ready-to-merge.sh" "grep -q 'run: scripts/ready-to-merge.sh' '$RTM'"
 
 # --- editor and PR defaults ---
