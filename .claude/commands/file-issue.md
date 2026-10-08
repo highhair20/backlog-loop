@@ -44,8 +44,8 @@ around it, and stop.
 
 **Pick the form.** A defect is a bug, anything else a feature. Read the matching
 form in `.github/ISSUE_TEMPLATE/` (`bug.yml` or `feature.yml`): its body's `label:`
-fields, in order, are the sections, each written as a `### <label>` heading, and
-its `labels:` line is the type label (`enhancement` or `bug`). Take the headings
+fields, in order, are the sections, each written as a `### <label>` heading (exactly
+three `#`, as the form itself produces; never `## `), and its `labels:` line is the type label (`enhancement` or `bug`). Take the headings
 from the form every time; never from memory, since the forms are the place of
 record and may differ in this repo.
 
@@ -100,7 +100,11 @@ ISSUE_BODY
 ```
 
 This needs the user's permission: the unattended allowlist leaves it out on
-purpose, so a loop session can never file an issue. If it fails, report the error.
+purpose, so a loop session can never file an issue. If it is refused (a headless
+session, or the user declined the prompt), file nothing else and offer the two ways
+on: approve the prompt in an interactive session, or run the command themselves
+with the approved body. Never suggest adding `gh issue create` to any allow list:
+that would let every unattended session file issues. If it fails, report the error.
 A missing label usually means the repo's labels were never created: suggest
 `scripts/seed-labels.sh`. Then print the new issue's URL, and say what happens next:
 with `no-auto-heal`, the loop never takes it, so it is the user's to work; with the
