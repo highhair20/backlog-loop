@@ -84,6 +84,7 @@ while IFS= read -r pr; do
   fi
 
   # Anything but a mergeable state is not ready, UNKNOWN after the retries included.
+  [ "$state" != UNKNOWN ] || echo "ready-to-merge: #$n's merge state is still UNKNOWN after $RETRIES reads; taking it as not ready" >&2
   ready=0
   if [ "$labels_ok" -eq 1 ] && { [ "$state" = CLEAN ] || [ "$state" = HAS_HOOKS ]; }; then
     ready=1

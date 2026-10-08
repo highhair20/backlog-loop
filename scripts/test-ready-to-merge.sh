@@ -38,10 +38,10 @@ FAKE
 # REMOVE_ONLY=true runs it as the workflow's pull_request run does.
 run() { PATH="$1/bin:$PATH" GH_REPO=o/r READY_RETRY_SECONDS=0 READY_REMOVE_ONLY="${REMOVE_ONLY:-false}" "$HERE/ready-to-merge.sh" >"$1/out" 2>&1; }
 DEFAULT_ASSIGNEES='[{"login": "maint"}]'
-pr() { # pr <number> <branch> <mergeStateStatus> [labels...]; ASSIGNEES and CROSS override
+pr() { # pr <number> <branch> <mergeStateStatus> [labels...]; ASSIGNEES, CROSS and BASE override
   local n="$1" ref="$2" st="$3" who="${ASSIGNEES-$DEFAULT_ASSIGNEES}"; shift 3
-  printf '{"number": %s, "headRefName": "%s", "headRefOid": "abc123%s0000000000000000000000000000000", "baseRefName": "main", "mergeStateStatus": "%s", "isCrossRepository": %s, "assignees": %s, "labels": [%s]}' \
-    "$n" "$ref" "$n" "$st" "${CROSS:-false}" "$who" "$(for l in "$@"; do printf '{"name": "%s"},' "$l"; done | sed 's/,$//')"
+  printf '{"number": %s, "headRefName": "%s", "headRefOid": "abc123%s0000000000000000000000000000000", "baseRefName": "%s", "mergeStateStatus": "%s", "isCrossRepository": %s, "assignees": %s, "labels": [%s]}' \
+    "$n" "$ref" "$n" "${BASE:-main}" "$st" "${CROSS:-false}" "$who" "$(for l in "$@"; do printf '{"name": "%s"},' "$l"; done | sed 's/,$//')"
 }
 in_review='[{"number": 7, "labels": [{"name": "in-review"}]}]'
 
@@ -73,7 +73,7 @@ echo "[$(pr 20 feat/7-x BEHIND ready-to-merge), $(pr 21 fix/8-y UNKNOWN ready-to
 echo '[{"number": 7, "labels": [{"name": "in-review"}]}, {"number": 8, "labels": [{"name": "in-review"}]}]' >"$D/issues.json"
 run "$D"; rc=$?
 check "a PR that stops being ready loses the label" "grep -q 'api -X DELETE repos/o/r/issues/20/labels/ready-to-merge' '$D/writes'"
-check "a merge state still UNKNOWN after the retries loses the label" "[ $rc -eq 0 ] && [ \$(cat '$D/lists') -eq 3 ] && grep -q 'api -X DELETE repos/o/r/issues/21/labels/ready-to-merge' '$D/writes'"
+check "a merge state still UNKNOWN after the retries loses the label, with a note" "[ $rc -eq 0 ] && [ \$(cat '$D/lists') -eq 3 ] && grep -q 'api -X DELETE repos/o/r/issues/21/labels/ready-to-merge' '$D/writes' && grep -q '#21.*still UNKNOWN' '$D/out'"
 check "and is never labelled or announced" "! grep -q 'X POST repos/o/r/issues/21' '$D/writes' && ! grep -q 'pr comment 21' '$D/writes'"
 # A later run that reads it CLEAN adds the label back.
 echo "[$(pr 21 fix/8-y CLEAN)]" >"$D/prs.json"; : >"$D/writes"; rm -f "$D/lists"
@@ -94,6 +94,10 @@ W="$(setup comparefail)"
 echo "[$(pr 20 feat/7-x CLEAN)]" >"$W/prs.json"; echo "$in_review" >"$W/issues.json"; : >"$W/fail-compare"
 run "$W"; rc=$?
 check "a failed compare is reported, and the announcement leaves 'up to date' out" "[ $rc -ne 0 ] && grep -q 'could not compare #20' '$W/out' && grep -q 'pr comment 20' '$W/writes' && ! grep -q 'up to date' '$W/writes'"
+Y="$(setup otherbase)"
+echo "[$(BASE=release pr 20 feat/7-x CLEAN)]" >"$Y/prs.json"; echo "$in_review" >"$Y/issues.json"; echo 0 >"$Y/behind"
+run "$Y"
+check "the branch is compared with, and named as up to date with, the PR's own base" "grep -q 'up to date with release' '$Y/writes' && grep -q '^repos/o/r/compare/release\\.\\.\\.' '$Y/compares'"
 X="$(setup comparejunk)"
 echo "[$(pr 20 feat/7-x CLEAN)]" >"$X/prs.json"; echo "$in_review" >"$X/issues.json"; echo null >"$X/behind"
 run "$X"; rc=$?
@@ -109,6 +113,13 @@ check "a remove-only run takes the label off a PR that gained changes-requested"
 check "it never labels or announces a ready PR" "! grep -q 'X POST' '$R/writes' && ! grep -q 'pr comment' '$R/writes'"
 check "it keeps the label on a PR whose merge state its own check may have changed" "! grep -q 'issues/52/' '$R/writes' && ! grep -q 'issues/53/' '$R/writes'"
 check "it does not wait out UNKNOWN merge states" "[ \$(cat '$R/lists') -eq 1 ]"
+
+# A repo still on the old seeded workflow never sets READY_REMOVE_ONLY: the synced
+# script then labels and announces as before.
+O="$(setup oldworkflow)"
+echo "[$(pr 20 feat/7-x CLEAN)]" >"$O/prs.json"; echo "$in_review" >"$O/issues.json"
+PATH="$O/bin:$PATH" GH_REPO=o/r READY_RETRY_SECONDS=0 env -u READY_REMOVE_ONLY "$HERE/ready-to-merge.sh" >"$O/out" 2>&1; rc=$?
+check "with READY_REMOVE_ONLY unset, a ready PR is labelled and announced" "[ $rc -eq 0 ] && grep -q 'X POST repos/o/r/issues/20/labels' '$O/writes' && grep -q 'pr comment 20' '$O/writes'"
 
 # Any other value for READY_REMOVE_ONLY is refused, never read as either mode.
 Z="$(setup badmode)"
