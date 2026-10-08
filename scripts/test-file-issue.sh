@@ -45,6 +45,8 @@ check "a likely duplicate stops it before drafting" "printf '%s' \"\$flat\" | gr
 check "it shows the draft and ends its turn before any gh issue create" "[ -n '$draft' ] && [ -n '$stop' ] && [ -n '$create' ] && [ '$draft' -lt '$stop' ] && [ '$stop' -lt '$create' ] && printf '%s' \"\$flat\" | grep -q 'end your turn'"
 check "gh issue create appears only once, after approval" "[ \"\$(grep -c 'gh issue create' '$CMD')\" = 1 ]"
 check "it files with --body-file, never an inline --body" "grep 'gh issue create' '$CMD' | grep -q -- '--body-file -' && ! grep -qE 'gh issue create.* --body ' '$CMD'"
+check "the filing command carries no-auto-heal and repo labels when the draft has them" "grep 'gh issue create' '$CMD' | grep -q -- '--label no-auto-heal' && grep 'gh issue create' '$CMD' | grep -q -- '--label <repo label>'"
+check "after filing it says no-auto-heal issues are never taken by the loop" "printf '%s' \"\$flat\" | grep -q 'with .no-auto-heal., the loop never takes it' && printf '%s' \"\$flat\" | grep -q 'heal:approved'"
 check "run headless, it prints the draft and files nothing" "printf '%s' \"\$flat\" | grep -q 'headless' && printf '%s' \"\$flat\" | grep -q 'files nothing'"
 
 # It never starts the work.

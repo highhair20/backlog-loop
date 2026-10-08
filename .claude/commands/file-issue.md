@@ -87,12 +87,14 @@ approve: the turn ends here, so this prints the draft and files nothing.
 Only when the user's reply approves the draft. If they asked for changes, make them,
 show the new draft, and end your turn again (Step 5). If they dropped it, stop.
 
-File the approved text exactly, with one `--label` per label. The body goes through
+File the approved text exactly, with one `--label` for every label the approved
+draft shows, `no-auto-heal` and any repo label included (the brackets below mark
+the optional ones; drop the brackets, not the labels). The body goes through
 standard input, so no temporary file is left behind and nothing in it is expanded
 by the shell:
 
 ```bash
-gh issue create --title "<title>" --label <type> --label <priority> --body-file - <<'ISSUE_BODY'
+gh issue create --title "<title>" --label <type> --label <priority> [--label no-auto-heal] [--label <repo label>] --body-file - <<'ISSUE_BODY'
 <body>
 ISSUE_BODY
 ```
@@ -100,5 +102,7 @@ ISSUE_BODY
 This needs the user's permission: the unattended allowlist leaves it out on
 purpose, so a loop session can never file an issue. If it fails, report the error.
 A missing label usually means the repo's labels were never created: suggest
-`scripts/seed-labels.sh`. Then print the new issue's URL. Stop there: the loop picks
-the issue up on its own, by priority.
+`scripts/seed-labels.sh`. Then print the new issue's URL, and say what happens next:
+with `no-auto-heal`, the loop never takes it, so it is the user's to work; with the
+Proposal gate on in `CLAUDE.md`, the loop first posts a proposal and waits for
+`heal:approved`; otherwise the loop picks it up on its own, by priority. Stop there.
