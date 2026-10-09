@@ -27,8 +27,11 @@ case "\$*" in
     # Like gh, only the fields asked for: no checks unless statusCheckRollup is named.
     case "\$*" in *statusCheckRollup*) cat "\$f" ;; *) jq 'map(del(.statusCheckRollup))' "\$f" ;; esac ;;
   "api -X POST "*"/labels "*|"api -X DELETE "*"/labels/"*) echo "\$*" >>"\$d/writes" ;;
+  # A compare response built from the fixture, run through the script's own --jq
+  # (\$4), raw as gh prints it. A mergebase of null stands for a missing SHA.
   "api repos/"*"/compare/"*) echo "\$2" >>"\$d/compares"; [ -f "\$d/fail-compare" ] && exit 1
-    cat "\$d/behind" 2>/dev/null || echo 0 ;;
+    jq -n --argjson b "\$(cat "\$d/behind" 2>/dev/null || echo 0)" --arg s "\$(cat "\$d/mergebase" 2>/dev/null || echo def4560000000000000000000000000000000000)" \
+      '{behind_by: \$b, merge_base_commit: {sha: (if \$s == "null" then null else \$s end)}}' | jq -r "\$4" ;;
   "issue list "*) cat "\$d/issues.json" ;;
   # The re-read: the listed PR's head and labels, unless comments-<n>.json overrides them.
   "pr view "*" --json comments"*) n=\$3; [ -f "\$d/fail-view-\$n" ] && exit 1
@@ -87,16 +90,23 @@ echo "[$(pr 21 fix/8-y CLEAN)]" >"$D/prs.json"; : >"$D/writes"; rm -f "$D/lists"
 run "$D"
 check "a later run adds the label back once the state reads CLEAN" "grep -q 'api -X POST repos/o/r/issues/21/labels' '$D/writes' && grep -q 'pr comment 21' '$D/writes'"
 
-# The announcement says "up to date" only when the compare API shows the branch is not
-# behind its base; GitHub reads CLEAN on a behind branch without a strict ruleset (#110).
+# The announcement says the branch includes its base only when the compare API shows
+# it is not behind, and names the base commit it was judged against, since nothing
+# revisits the comment when the base moves (#114). GitHub reads CLEAN on a behind
+# branch without a strict ruleset (#110).
 U="$(setup uptodate)"
 echo "[$(pr 20 feat/7-x CLEAN)]" >"$U/prs.json"; echo "$in_review" >"$U/issues.json"; echo 0 >"$U/behind"
 run "$U"; rc=$?
-check "a branch not behind its base is announced as up to date" "[ $rc -eq 0 ] && grep -q 'up to date with main' '$U/writes' && grep -qx 'repos/o/r/compare/main...abc123200000000000000000000000000000000' '$U/compares'"
+check "a branch not behind its base is announced as including the base commit it was judged against" "[ $rc -eq 0 ] && grep -q 'the branch includes main at def4560 (head abc1232)' '$U/writes' && grep -qx 'repos/o/r/compare/main...abc123200000000000000000000000000000000' '$U/compares'"
+check "and makes no open-ended 'up to date' claim" "! grep -q 'up to date' '$U/writes'"
 V="$(setup behind)"
 echo "[$(pr 20 feat/7-x CLEAN)]" >"$V/prs.json"; echo "$in_review" >"$V/issues.json"; echo 3 >"$V/behind"
 run "$V"; rc=$?
-check "a CLEAN branch behind its base is announced without 'up to date'" "[ $rc -eq 0 ] && grep -q 'pr comment 20' '$V/writes' && grep -q 'required checks pass' '$V/writes' && ! grep -q 'up to date' '$V/writes'"
+check "a CLEAN branch behind its base is announced without claiming it includes the base" "[ $rc -eq 0 ] && grep -q 'pr comment 20' '$V/writes' && grep -q 'required checks pass (head abc1232)' '$V/writes' && ! grep -q 'up to date' '$V/writes' && ! grep -q 'includes main' '$V/writes'"
+MB="$(setup nomergebase)"
+echo "[$(pr 20 feat/7-x CLEAN)]" >"$MB/prs.json"; echo "$in_review" >"$MB/issues.json"; echo 0 >"$MB/behind"; echo null >"$MB/mergebase"
+run "$MB"; rc=$?
+check "a compare not behind but with no base commit is treated as unchecked" "[ $rc -ne 0 ] && grep -q 'could not compare #20' '$MB/out' && grep -q 'X POST repos/o/r/issues/20/labels' '$MB/writes' && ! grep -q 'pr comment' '$MB/writes'"
 W="$(setup comparefail)"
 echo "[$(pr 20 feat/7-x CLEAN)]" >"$W/prs.json"; echo "$in_review" >"$W/issues.json"; : >"$W/fail-compare"
 run "$W"; rc=$?
@@ -104,7 +114,7 @@ check "a failed compare is reported and holds the announcement back for a later 
 Y="$(setup otherbase)"
 echo "[$(BASE=release pr 20 feat/7-x CLEAN)]" >"$Y/prs.json"; echo "$in_review" >"$Y/issues.json"; echo 0 >"$Y/behind"
 run "$Y"
-check "the branch is compared with, and named as up to date with, the PR's own base" "grep -q 'up to date with release' '$Y/writes' && grep -q '^repos/o/r/compare/release\\.\\.\\.' '$Y/compares'"
+check "the branch is compared with, and named as including, the PR's own base" "grep -q 'includes release at def4560' '$Y/writes' && grep -q '^repos/o/r/compare/release\\.\\.\\.' '$Y/compares'"
 X="$(setup comparejunk)"
 echo "[$(pr 20 feat/7-x CLEAN)]" >"$X/prs.json"; echo "$in_review" >"$X/issues.json"; echo null >"$X/behind"
 run "$X"; rc=$?

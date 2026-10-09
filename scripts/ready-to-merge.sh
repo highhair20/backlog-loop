@@ -6,9 +6,11 @@
 #
 # A ready PR gets the ready-to-merge label and one comment mentioning its assignees,
 # once per head commit (marked, so a rerun does not repeat it). The comment says the
-# branch is up to date with its base only when the compare API shows it is: without a
-# strict ruleset GitHub reads a behind branch as CLEAN. A labelled PR that is no
-# longer ready loses the label, and so does one still UNKNOWN (GitHub still
+# branch includes its base only when the compare API shows it is not behind (without
+# a strict ruleset GitHub reads a behind branch as CLEAN), and names the base commit
+# it was judged against, "includes main at abc1234": the comment is never revisited,
+# so once main moves on it still says only what was true (#114). A labelled PR that
+# is no longer ready loses the label, and so does one still UNKNOWN (GitHub still
 # computing) after the retries: a missing label costs a run, a false one a bad merge.
 #
 # This workflow's own run puts a check on the PR it judges, so while it runs (or once
@@ -118,13 +120,17 @@ while IFS= read -r pr; do
   [ "$labelled" -eq 1 ] || add_label "$n" || fail "could not add $LABEL to #$n"
   grep -qF "$MARK $sha" <<<"$bodies" && continue
 
-  # Claim "up to date" only when checked: CLEAN alone does not mean it without a
-  # strict ruleset. A failed compare holds the comment back, so a later run retries it.
-  if ! behind="$(gh api "repos/$GH_REPO/compare/$base...$sha" --jq .behind_by)" || ! [[ "$behind" =~ ^[0-9]+$ ]]; then
+  # Say the branch includes its base only when checked: CLEAN alone does not mean it
+  # without a strict ruleset. Not behind, the merge base is the base's head, so name
+  # it: nothing revisits the comment when the base moves on (#114). A failed compare
+  # holds the comment back, so a later run retries it.
+  if ! compared="$(gh api "repos/$GH_REPO/compare/$base...$sha" --jq '"\(.behind_by) \(.merge_base_commit.sha)"')" \
+     || ! read -r behind base_sha <<<"$compared" || ! [[ "$behind" =~ ^[0-9]+$ ]] \
+     || { [ "$behind" -eq 0 ] && ! [[ "$base_sha" =~ ^[0-9a-f]{40}$ ]]; }; then
     fail "could not compare #$n with $base; not announcing it yet"; continue
   fi
   done_with="the loop is done with #$issue and required checks pass"
-  [ "$behind" -ne 0 ] || done_with="the loop is done with #$issue, required checks pass, and the branch is up to date with $base"
+  [ "$behind" -ne 0 ] || done_with="the loop is done with #$issue, required checks pass, and the branch includes $base at ${base_sha:0:7}"
   gh pr comment "$n" --body "$MARK $sha -->
 ${who:+$who }Ready to merge: $done_with (head ${sha:0:7})." >/dev/null \
     || fail "could not comment on #$n"

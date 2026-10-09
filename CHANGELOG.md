@@ -70,8 +70,11 @@ removes it from a repo made with "Use this template", and sync never copies it.
   its own workflow's checks aside, since its run puts one on the PR it judges, and
   reads each PR again just before labelling or announcing it. `scripts/ready-to-merge.sh` takes
   the label off a PR whose merge state is still `UNKNOWN` after its retries, and its
-  comment says "up to date" only when the compare API shows the branch is not
-  behind its base; without a strict ruleset GitHub reads a behind branch as `CLEAN`.
+  comment says the branch includes its base only when the compare API shows it is
+  not behind; without a strict ruleset GitHub reads a behind branch as `CLEAN`.
+- `scripts/ready-to-merge.sh`'s comment names the base commit it judged the branch
+  against ("the branch includes main at `abc1234`") instead of saying "up to date",
+  which went stale once `main` moved on and nothing re-checked it (#114).
 
 ### Manual steps for existing repos
 
