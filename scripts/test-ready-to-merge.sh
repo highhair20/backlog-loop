@@ -27,9 +27,11 @@ case "\$*" in
     # Like gh, only the fields asked for: no checks unless statusCheckRollup is named.
     case "\$*" in *statusCheckRollup*) cat "\$f" ;; *) jq 'map(del(.statusCheckRollup))' "\$f" ;; esac ;;
   "api -X POST "*"/labels "*|"api -X DELETE "*"/labels/"*) echo "\$*" >>"\$d/writes" ;;
-  # The compare's behind count and merge base, as the script's --jq asks for them.
+  # A compare response built from the fixture, run through the script's own --jq
+  # (\$4), raw as gh prints it. A mergebase of null stands for a missing SHA.
   "api repos/"*"/compare/"*) echo "\$2" >>"\$d/compares"; [ -f "\$d/fail-compare" ] && exit 1
-    echo "\$(cat "\$d/behind" 2>/dev/null || echo 0) \$(cat "\$d/mergebase" 2>/dev/null || echo def4560000000000000000000000000000000000)" ;;
+    jq -n --argjson b "\$(cat "\$d/behind" 2>/dev/null || echo 0)" --arg s "\$(cat "\$d/mergebase" 2>/dev/null || echo def4560000000000000000000000000000000000)" \
+      '{behind_by: \$b, merge_base_commit: {sha: (if \$s == "null" then null else \$s end)}}' | jq -r "\$4" ;;
   "issue list "*) cat "\$d/issues.json" ;;
   # The re-read: the listed PR's head and labels, unless comments-<n>.json overrides them.
   "pr view "*" --json comments"*) n=\$3; [ -f "\$d/fail-view-\$n" ] && exit 1
