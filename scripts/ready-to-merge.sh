@@ -9,8 +9,8 @@
 # branch includes its base only when the compare API shows it is not behind (without
 # a strict ruleset GitHub reads a behind branch as CLEAN), and names the base commit
 # it was judged against, "includes main at abc1234": the comment is never revisited,
-# so once main moves on it still says only what was true (#114). A labelled PR that is no
-# longer ready loses the label, and so does one still UNKNOWN (GitHub still
+# so once main moves on it still says only what was true (#114). A labelled PR that
+# is no longer ready loses the label, and so does one still UNKNOWN (GitHub still
 # computing) after the retries: a missing label costs a run, a false one a bad merge.
 #
 # This workflow's own run puts a check on the PR it judges, so while it runs (or once

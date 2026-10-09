@@ -103,10 +103,10 @@ V="$(setup behind)"
 echo "[$(pr 20 feat/7-x CLEAN)]" >"$V/prs.json"; echo "$in_review" >"$V/issues.json"; echo 3 >"$V/behind"
 run "$V"; rc=$?
 check "a CLEAN branch behind its base is announced without claiming it includes the base" "[ $rc -eq 0 ] && grep -q 'pr comment 20' '$V/writes' && grep -q 'required checks pass (head abc1232)' '$V/writes' && ! grep -q 'up to date' '$V/writes' && ! grep -q 'includes main' '$V/writes'"
-M="$(setup nomergebase)"
-echo "[$(pr 20 feat/7-x CLEAN)]" >"$M/prs.json"; echo "$in_review" >"$M/issues.json"; echo 0 >"$M/behind"; echo null >"$M/mergebase"
-run "$M"; rc=$?
-check "a compare not behind but with no base commit is treated as unchecked" "[ $rc -ne 0 ] && grep -q 'could not compare #20' '$M/out' && ! grep -q 'pr comment' '$M/writes'"
+MB="$(setup nomergebase)"
+echo "[$(pr 20 feat/7-x CLEAN)]" >"$MB/prs.json"; echo "$in_review" >"$MB/issues.json"; echo 0 >"$MB/behind"; echo null >"$MB/mergebase"
+run "$MB"; rc=$?
+check "a compare not behind but with no base commit is treated as unchecked" "[ $rc -ne 0 ] && grep -q 'could not compare #20' '$MB/out' && grep -q 'X POST repos/o/r/issues/20/labels' '$MB/writes' && ! grep -q 'pr comment' '$MB/writes'"
 W="$(setup comparefail)"
 echo "[$(pr 20 feat/7-x CLEAN)]" >"$W/prs.json"; echo "$in_review" >"$W/issues.json"; : >"$W/fail-compare"
 run "$W"; rc=$?
