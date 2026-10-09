@@ -72,6 +72,10 @@ removes it from a repo made with "Use this template", and sync never copies it.
   the label off a PR whose merge state is still `UNKNOWN` after its retries, and its
   comment says "up to date" only when the compare API shows the branch is not
   behind its base; without a strict ruleset GitHub reads a behind branch as `CLEAN`.
+- `scripts/ready-to-merge.sh`'s comment no longer says a branch is "up to date",
+  which went stale once `main` moved on and nothing re-checked it. When the branch
+  is not behind, the comment names the base commit it was judged against: "the
+  branch includes main at `abc1234`" (#114).
 
 ### Manual steps for existing repos
 
