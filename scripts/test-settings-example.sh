@@ -101,7 +101,8 @@ done
 
 # The test above skips any loop command the deny list matches, so a deny rule that
 # grew too broad would silently stop the loop. Pin the pushes the loop needs (#41).
-for cmd in "git push -u origin fix/1-x" "git push origin fix/1-x" "git push origin --delete fix/1-x" "git push origin HEAD:refs/heads/abandoned/1-abc1234" "git push origin fix/1-x:refs/heads/abandoned/1-abc1234" "git fetch origin" "git fetch origin main" "git -C . status --short" "git --no-pager log --oneline -3" "git -C . diff --name-only main...HEAD" "git push origin feat/7-heads-up" "git pull --ff-only" "git pull --no-rebase --no-edit origin fix/1-x" "git ls-remote --heads origin" "git ls-remote --heads origin fix/1-x" "git diff --name-only main...HEAD" "git log --oneline origin/main..HEAD" "git commit -m fix: deny --upload-pack, --receive-pack, --exec and --output (#95)" "git commit -m docs: git -c and git config are denied, as is refs/heads/main"; do
+for cmd in "git push -u origin fix/1-x" "git push origin fix/1-x" "git push origin --delete fix/1-x" "git push origin HEAD:refs/heads/abandoned/1-abc1234" "git push origin fix/1-x:refs/heads/abandoned/1-abc1234" "git fetch origin" "git fetch origin main" "git -C . status --short" "git --no-pager log --oneline -3" "git -C . diff --name-only main...HEAD" "git push origin feat/7-heads-up" "git pull --ff-only" "git pull --no-rebase --no-edit origin fix/1-x" "git ls-remote --heads origin" "git ls-remote --heads origin fix/1-x" "git diff --name-only main...HEAD" "git log --oneline origin/main..HEAD" "git commit -m fix: deny --upload-pack, --receive-pack, --exec and --output (#95)" "git commit -m docs: git -c and git config are denied, as is refs/heads/main" \
+  "gh pr edit 1 --body ## Changes - gh pr create --base main, git push origin main, gh pr merge 1"; do
   if matches_any "$cmd" "${DENY[@]}"; then fail "denied, but the loop needs it: $cmd"; else echo "ok   not denied: $cmd"; fi
 done
 
