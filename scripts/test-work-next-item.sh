@@ -11,8 +11,9 @@ CMD="$ROOT/.claude/commands/work-next-item.md"
 failures=0
 check() { if eval "$2"; then echo "ok   $1"; else echo "FAIL $1" >&2; failures=$((failures + 1)); fi; }
 
-# The text of one "## <heading>" section, up to the next "## " heading.
-section() { awk -v h="$1" '/^## /{ on = (index($0, "## " h) == 1); next } on' "$CMD"; }
+# The text of one "## <heading>" section, up to the next "## " heading. A "## " line
+# inside a code fence is a template's heading (a PR body), not a section break.
+section() { awk -v h="$1" '/^[[:space:]]*```/ { f = !f } !f && /^## / { on = (index($0, "## " h) == 1); next } on' "$CMD"; }
 give_up="$(section 'Give up')"
 # shellcheck disable=SC2034  # read inside check's eval strings
 step5="$(section 'Step 5')"
@@ -342,6 +343,15 @@ check "Step 1.5's Verify step points at the same rule" "printf '%s' \"\$follow_f
 step8_flat="$(flat "$(section 'Step 8')")"
 check "Step 8 swaps to in-review only once the review loop has closed" "printf '%s' \"\$step8_flat\" | grep -q 'only once the review loop the hooks opened for this PR has closed'"
 check "a review loop that hit its cap unresolved marks the issue needs-attention, not ready" "printf '%s' \"\$step8_flat\" | grep -q 'hit its round cap with blocking findings still open' && printf '%s' \"\$step8_flat\" | grep -q -- '--add-label needs-attention'"
+# --- Step 8 brings the PR description up to date before handing over (#116) ---
+step8="$(section 'Step 8')"
+edit_at="$(printf '%s\n' "$step8" | grep -n -m1 '^gh pr edit <pr> --body ' | cut -d: -f1)"
+handover_at="$(printf '%s\n' "$step8" | grep -n -m1 'add-label in-review' | cut -d: -f1)"
+check "Step 8 rewrites the PR description before it marks the issue in-review" "[ -n '$edit_at' ] && [ -n '$handover_at' ] && [ '$edit_at' -lt '$handover_at' ]"
+check "Step 8 rewrites it every time, from Step 7's template and the last Verify run" "printf '%s' \"\$step8_flat\" | grep -q 'every time' && printf '%s' \"\$step8_flat\" | grep -q \"Step 7's template\" && printf '%s' \"\$step8_flat\" | grep -q 'last Verify run'"
+check "the rewritten description has a Review section and keeps Closes #" "printf '%s\n' \"\$step8\" | grep -q '^## Review\$' && printf '%s\n' \"\$step8\" | grep -q '^Closes #<number>\$'"
+check "a refused rewrite is reported and posted as a comment, never dropped" "printf '%s' \"\$step8_flat\" | grep -q 'If the rewrite is refused or fails' && printf '%s' \"\$step8_flat\" | grep -q 'post the same text as a PR comment'"
+check "the MCP table maps the description rewrite to update_pull_request" "grep -qF '| \`gh pr edit <pr> --body …\` | \`mcp__github__update_pull_request\`' '$CMD'"
 check "Step 1.5 lists each PR's merge state" "printf '%s' \"\$follow\" | grep -q 'gh pr list --state open --limit 1000 --json number,headRefName,url,mergeable,mergeStateStatus,labels'"
 check "Step 1.5 brings a PR that is only behind up to date, by merge, without a round" "printf '%s' \"\$follow_flat\" | grep -q 'gh pr update-branch <pr>' && printf '%s' \"\$follow_flat\" | grep -q 'never a rebase' && printf '%s' \"\$follow_flat\" | grep -q 'not a follow-up: no claim, no comment, no round'"
 check "a dry run never updates a branch, and reports it as a would-be write" "printf '%s' \"\$dry\" | grep -q 'gh pr update-branch' && printf '%s' \"\$follow_flat\" | grep -q 'In a dry run, note .would: gh pr update-branch <pr>. instead'"
