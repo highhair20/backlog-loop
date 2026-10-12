@@ -1050,16 +1050,26 @@ loop ran, so the fixes that loop pushed can leave its changes, its test count an
 specialist-review notes wrong, and the description is what the maintainer reads to
 decide the merge. Rewrite it every time, even if the review changed nothing: use
 Step 7's template, take the Testing section from your last Verify run, and add a
-Review section. Keep `Closes #<number>`, or merging will not close the issue.
+Review section. Start from the description as it is now, so nothing Step 7 wrote is
+lost:
+
+```bash
+gh pr view <pr> --json body -q .body
+```
+
+Keep every section it has, brought up to date: `## ⚠️ Manual step required` above
+all, since dropping it hides that infrastructure is not applied, and
+`Closes #<number>`, or merging will not close the issue.
 
 ```bash
 gh pr edit <pr> --body "$(cat <<'PRBODY'
-<Step 7's sections, as the branch stands now>
+<every section of the current description, as the branch stands now>
 
 ## Review
 - Rounds: <count>; the last one <recorded 0 blocking | hit the round cap>
 - Fixed: <each finding fixed, one line, or "none">
 - Rejected: <each finding rejected, with its one-line reason, or "none">
+- Still open: <each blocking finding left at the round cap, one line, or "none">
 
 Closes #<number>
 PRBODY
@@ -1067,8 +1077,12 @@ PRBODY
 ```
 
 If the rewrite is refused or fails, post the same text as a PR comment
-(`gh pr comment <pr> --body …`), say so in your report, and carry on: the
-description is stale, but nothing is lost. Then hand the PR over:
+(`gh pr comment <pr> --body …`), starting with
+`<!-- backlog-loop:description --> The PR description could not be updated; this replaces it:`,
+say so in your report, and carry on: the description is stale, but the comment says
+so and nothing is lost.
+
+Then hand the PR over (if the review loop hit its round cap, use the needs-attention block below instead):
 
 ```bash
 gh issue edit <number> --remove-label in-progress --add-label in-review

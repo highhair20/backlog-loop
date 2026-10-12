@@ -78,7 +78,9 @@ if jq -r '.permissions.deny[]' "$ROOT/.claude/settings.json" | grep -E '^Bash\(g
 
 # The git commands whose options can run a program are allowed only in the forms the
 # loop writes (#95): a broad glob would admit --upload-pack and friends.
-for broad in "git fetch *" "git pull *" "git ls-remote *"; do
+# gh pr edit is allowed only for labels and the description (#116): the bare form
+# would also allow retargeting a PR's base with no flag needed.
+for broad in "git fetch *" "git pull *" "git ls-remote *" "gh pr edit *"; do
   if printf '%s\n' "${ALLOW[@]}" | grep -qxF "$broad"; then fail "allows the broad form, which admits options that run a program: $broad"; else echo "ok   not allowed broadly: $broad"; fi
 done
 
