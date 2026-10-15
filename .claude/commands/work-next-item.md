@@ -183,6 +183,7 @@ works the same in both; take `owner`/`repo` from `git remote get-url origin`.
 | `gh run view <run-id> --log-failed` | `mcp__github__get_job_logs` with `run_id`, `failed_only: true`, and `return_content: true` |
 | `gh pr comment <pr> --body …` | `mcp__github__add_issue_comment` with the PR's number |
 | `gh pr edit <pr> --remove-label X` | `mcp__github__issue_write` (update) on the PR's number with the **complete** new label set, as for `gh issue edit N` |
+| `gh pr edit <pr> --body …` | `mcp__github__update_pull_request` with the PR's number and `body` only; never pass `base` |
 | `gh pr update-branch <pr>` | `mcp__github__update_pull_request_branch` with the PR's number |
 
 Never use the MCP tools that merge, enable auto-merge, or write files or branches
@@ -1043,6 +1044,45 @@ Run this only once the review loop the hooks opened for this PR has closed (its
 last round recorded 0 blocking findings, or it hit its round cap). `in-review` tells
 the ready-to-merge workflow, and the maintainer, that the loop is done with the PR;
 set before the review's last fix is pushed, it could announce a PR as ready too soon.
+
+First bring the PR description up to date (#116). Step 7 wrote it before the review
+loop ran, so the fixes that loop pushed can leave its changes, its test count and its
+specialist-review notes wrong, and the description is what the maintainer reads to
+decide the merge. Rewrite it every time, even if the review changed nothing: use
+Step 7's template, take the Testing section from your last Verify run, and add a
+Review section. Start from the description as it is now, so nothing Step 7 wrote is
+lost:
+
+```bash
+gh pr view <pr> --json body -q .body
+```
+
+Keep every section it has, brought up to date: `## ⚠️ Manual step required` above
+all, since dropping it hides that infrastructure is not applied, and
+`Closes #<number>`, or merging will not close the issue.
+
+```bash
+gh pr edit <pr> --body "$(cat <<'PRBODY'
+<every section of the current description, as the branch stands now>
+
+## Review
+- Rounds: <count>; the last one <recorded 0 blocking | hit the round cap>
+- Fixed: <each finding fixed, one line, or "none">
+- Rejected: <each finding rejected, with its one-line reason, or "none">
+- Still open: <each blocking finding left at the round cap, one line, or "none">
+
+Closes #<number>
+PRBODY
+)"
+```
+
+If the rewrite is refused or fails, post the same text as a PR comment
+(`gh pr comment <pr> --body …`), starting with
+`<!-- backlog-loop:description --> The PR description could not be updated; this replaces it:`,
+say so in your report, and carry on: the description is stale, but the comment says
+so and nothing is lost.
+
+Then hand the PR over (if the review loop hit its round cap, use the needs-attention block below instead):
 
 ```bash
 gh issue edit <number> --remove-label in-progress --add-label in-review

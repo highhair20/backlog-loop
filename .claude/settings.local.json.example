@@ -19,6 +19,7 @@
       "Bash(gh pr update-branch *)",
       "Bash(gh pr comment *)",
       "Bash(gh pr edit * --remove-label *)",
+      "Bash(gh pr edit * --body *)",
       "Bash(gh run view *)",
       "Bash(gh api repos/{owner}/{repo}/pulls/*/comments --paginate)",
       "Bash(git fetch origin)",

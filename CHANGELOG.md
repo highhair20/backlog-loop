@@ -75,8 +75,18 @@ removes it from a repo made with "Use this template", and sync never copies it.
 - `scripts/ready-to-merge.sh`'s comment names the base commit it judged the branch
   against ("the branch includes main at `abc1234`") instead of saying "up to date",
   which went stale once `main` moved on and nothing re-checked it (#114).
+- `/work-next-item` rewrites the PR description at handover (Step 8), before it sets
+  `in-review`, so the description matches the branch the review loop left: its
+  changes, its last Verify run, and a new Review section with the rounds and the
+  findings fixed or rejected. Before, the description was the one Step 7 wrote ahead
+  of the review, and a session that tried to update it was refused (#116).
 
 ### Manual steps for existing repos
+
+- **PR description at handover (#116):** add `Bash(gh pr edit * --body *)` to
+  `.claude/settings.local.json`'s allow list (`scripts/missing-allow-rules.sh` names
+  it). Without it, a headless run cannot rewrite the description; it posts the update
+  as a PR comment instead and says so.
 
 - **`.github/workflows/ready-to-merge.yml`** (seeded, #110): for the label to come
   off as soon as a PR gains `changes-requested`, add the template's
