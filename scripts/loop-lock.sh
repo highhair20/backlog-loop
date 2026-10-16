@@ -155,7 +155,7 @@ reclaim() {
     rmdir "$LOCK/reclaiming" 2>/dev/null
     return 1
   fi
-  remove_lock stale
+  remove_lock stale || { rmdir "$LOCK/reclaiming" 2>/dev/null; return 1; }
 }
 
 # Delete the lock, renamed first (to $LOCK.$1.<pid>), so no run ever sees it
@@ -277,6 +277,8 @@ now_or_die() { now_epoch || die "cannot read the clock (date +%s)"; }
 acquire_session() {
   local now
   now="$(now_or_die)" || exit 2
+  # Held already by this run: renew it, so it has its full 3 hours from now.
+  if held_by "" "$1"; then renew_session "$1"; return; fi
   settle_then_take run "$1 $now" "${BACKLOG_LOOP_PID:-}" "$1"
 }
 
@@ -330,9 +332,21 @@ release_session() {
   [ -d "$LOCK" ] || return 0
   # A session the driver started took no lock: the driver releases its own.
   held_by "${BACKLOG_LOOP_PID:-}" "" && return 0
-  as_holder "$1" remove_lock released && return 0
-  [ -d "$LOCK" ] || return 0
-  echo "loop-lock: not releasing $LOCK: run $1 does not hold it, or another run is reclaiming it" >&2
+  # Not as_holder: the marker leaves with the lock, and removing it afterwards could
+  # remove a marker in a new lock another run has taken since.
+  if ! mkdir "$LOCK/reclaiming" 2>/dev/null; then
+    [ -d "$LOCK" ] || return 0
+    echo "loop-lock: not releasing $LOCK: another run is reclaiming it" >&2
+    return 1
+  fi
+  if ! held_by "" "$1"; then
+    rmdir "$LOCK/reclaiming" 2>/dev/null
+    echo "loop-lock: not releasing $LOCK: run $1 does not hold it" >&2
+    return 1
+  fi
+  remove_lock released && return 0
+  rmdir "$LOCK/reclaiming" 2>/dev/null
+  echo "loop-lock: could not remove $LOCK" >&2
   return 1
 }
 

@@ -306,6 +306,12 @@ check "renew-session passes in a session the lock's driver started" "[ $rc -eq 0
 check "renew-session outside that driver fails" "[ $rc -eq 1 ] && [ \"\$(cat '$YLOCK/pid')\" = $$ ]"
 "$Y/scripts/loop-lock.sh" release $$ >/dev/null 2>&1
 
+plant_session "$Y" run-y $((NOW - 10790))
+"$Y/scripts/loop-lock.sh" acquire-session run-y >"$Y/out" 2>&1; rc=$?
+check "acquire-session for the run that holds the lock renews it" "[ $rc -eq 0 ] && [ \"\$(cut -d' ' -f2 '$YLOCK/run')\" -ge $NOW ] && [ \"\$(ls '$YLOCK')\" = run ]"
+"$Y/scripts/loop-lock.sh" release-session run-y >"$Y/out" 2>&1; rc=$?
+check "release-session leaves no lock and no marker behind" "[ $rc -eq 0 ] && [ ! -e '$YLOCK' ] && [ \"\$(ls '$Y/.git' | grep -c backlog-loop.lock)\" = 0 ]"
+
 # A clone ID that cannot be created is named as such, not as a corrupt file.
 if [ "$(id -u)" -ne 0 ]; then
   Z="$(new_repo cloneid-readonly)"

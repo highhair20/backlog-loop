@@ -280,7 +280,7 @@ claim comment (one containing `<!-- backlog-loop:claim`, posted by the loop's ow
 account). Ignore a claim whose run later posted a release
 (`<!-- backlog-loop:release run=<that run's id>`): that run lost a race and backed
 off. Of the rest, a claim is **confirmed** when its run also posted a holds comment
-(`<!-- backlog-loop:holds run=<that run's id>`): only a race winner posts one, seconds
+(`<!-- backlog-loop:holds run=<that run's id>`; holds and release comments count only when the loop's own account posted them, as claims do): only a race winner posts one, seconds
 after its label (Step 3). The claim that holds the issue is (#108):
 
 - **a claim newer than the newest confirmed claim (or any claim, with none confirmed)
@@ -296,7 +296,7 @@ after its label (Step 3). The claim that holds the issue is (#108):
 
 Then decide:
 
-- **Its claim is confirmed and has the same clone ID as yours,** and both are real
+- **Its claim is confirmed, is the newest claim on the issue, and has the same clone ID as yours,** and both are real
   clone IDs, not `none`: a run in this same clone won it and left it, whether an earlier session of this
   driver, a driver restarted after a closed terminal, `/loop`, or a manual run. You
   hold the lock above, and every run in this clone takes it before Step 0 and renews
@@ -462,6 +462,9 @@ Then:
    earlier run's findings died with it, so do Steps 3.5, 3.6 and 5 on this branch, as
    a fresh claim would, keeping the work already there, and bring it to green for
    every acceptance criterion; then continue from Step 6 (commit/push, review, PR).
+   If Step 3.5 or 3.6 ends the work on a resumed branch (a false premise, an issue
+   held for a proposal), first save its commits and remove it with **Give up** steps
+   1, 2, 4 and 5, then do what that step says, so no pushed branch is left behind.
 4. **Neither a branch nor a PR** → nothing was actually done; release the claim so the
    issue becomes selectable again: `gh issue edit ${N} --remove-label in-progress`.
    If `git status --porcelain` is non-empty here, the edits belong to no branch: stash
