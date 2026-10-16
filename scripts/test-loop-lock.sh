@@ -247,6 +247,11 @@ wins=0
 for p in $racers; do wait "$p" && wins=$((wins + 1)); done
 check "of several sessions reclaiming one expired lock, exactly one takes it" "[ $wins -eq 1 ] && grep -qxE 'run-[1-6] [0-9]+' '$K6/.git/backlog-loop.lock/run' && [ \"\$(ls '$K6/.git' | grep -c backlog-loop.lock)\" = 1 ] && [ \"\$(ls '$K6/.git/backlog-loop.lock')\" = run ]"
 
+K7="$(new_repo session-octal)"
+plant_session "$K7" run-old 0999
+"$K7/scripts/loop-lock.sh" acquire-session run-new >"$K7/out" 2>&1; rc=$?
+check "a lock time with a leading zero is read as decimal (long stale), not as octal" "[ $rc -eq 0 ] && ! grep -q 'base' '$K7/out' && grep -q '^run-new ' '$K7/.git/backlog-loop.lock/run'"
+
 # A session the driver started: the driver's lock covers it, and it takes no lock of its own.
 D="$(new_repo session-driver)"
 "$D/scripts/loop-lock.sh" acquire $$ >/dev/null 2>&1

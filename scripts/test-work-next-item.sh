@@ -441,12 +441,16 @@ check "Step 5 renews the lock before each cycle's commit" "r=\$(printf '%s\n' \"
 # Not grep -q: it exits at the first match, and a section over 4 KB then fails printf with SIGPIPE under pipefail.
 check "Step 8 renews the lock first" "printf '%s' \"\$step8\" | grep 'scripts/loop-lock.sh renew-session <run-id>' >/dev/null"
 check "a failed holds comment on a resume posts a release too" "printf '%s' \"\$step0_flat\" | grep -q 'if the holds comment fails, post the release comment'"
-check "the empty-branch rule comes before 'bring it to green'" "e=\$(printf '%s\n' \"\$step0\" | grep -n -m1 'no commits of its own' | cut -d: -f1); g=\$(printf '%s\n' \"\$step0\" | grep -n -m1 'bring it to green' | cut -d: -f1); [ -n \"\$e\" ] && [ -n \"\$g\" ] && [ \"\$e\" -lt \"\$g\" ]"
+check "the empty-branch rule comes before 'bring it to green'" "e=\$(printf '%s\n' \"\$step0\" | grep -n -m1 'commits of its own' | cut -d: -f1); g=\$(printf '%s\n' \"\$step0\" | grep -n -m1 'bring it to green' | cut -d: -f1); [ -n \"\$e\" ] && [ -n \"\$g\" ] && [ \"\$e\" -lt \"\$g\" ]"
 check "Step 6 renews rather than re-takes the lock" "printf '%s' \"\$step6\" | grep -q '^ *scripts/loop-lock.sh renew-session <run-id>' && ! printf '%s' \"\$step6\" | grep -q 'acquire-session'"
 check "the allowlist example permits renew-session" "grep -qF 'Bash(scripts/loop-lock.sh renew-session *)' '$ROOT/.claude/settings.local.json.example'"
 check "a failed holds comment backs off with a release first" "printf '%s' \"\$step3_flat\" | grep -q 'back off as a race loser does: post the release comment'"
 check "Step 6 skips the commit when Step 5 left nothing" "printf '%s' \"\$(flat \"\$step6\")\" | grep -q 'nothing to commit'"
 check "Step 0 no longer says the branch first reaches the remote at Step 6" "! printf '%s' \"\$step0_flat\" | grep -q 'reaches the remote only at Step 6'"
+check "only a confirmed claim from this clone is recovered at once" "printf '%s' \"\$step0_flat\" | grep -q 'Its claim is confirmed and has the same clone ID as yours'"
+check "every resumed branch redoes Steps 3.5, 3.6 and 5, keeping its work, for every criterion" "printf '%s' \"\$step0_flat\" | grep -q 'keeping the work already there' && printf '%s' \"\$step0_flat\" | grep -q 'every acceptance criterion'"
+check "Step 5's snippet says to stop when the renew fails" "printf '%s' \"\$step5_flat\" | grep -q 'one at a time: if the renew fails, stop'"
+check "the lock is renewed at the start of every step" "printf '%s' \"\$pre0_flat\" | grep -q 'at the start of every step'"
 check "a resumed branch with no commits of its own redoes Steps 3.5 and 3.6" "printf '%s' \"\$step0_flat\" | grep -q 'no commits of its own' && printf '%s' \"\$step0_flat\" | grep -q 'Steps 3.5, 3.6 and 5'"
 
 for row in 'gh pr checks|mcp__github__pull_request_read' 'gh pr view N --json|mcp__github__pull_request_read' 'gh run view|mcp__github__get_job_logs' 'gh pr comment|mcp__github__add_issue_comment' 'gh pr edit|mcp__github__issue_write' 'gh pr update-branch|mcp__github__update_pull_request_branch' 'gh api repos/{owner}/{repo}/pulls|mcp__github__pull_request_read' 'gh api repos/{owner}/{repo}/pulls|get_review_comments'; do

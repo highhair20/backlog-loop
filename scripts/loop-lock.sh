@@ -112,6 +112,16 @@ describe() {
 # another user, which would get its lock reclaimed; `ps` sees those.
 is_running() { kill -0 "$1" 2>/dev/null || ps -p "$1" >/dev/null 2>&1; }
 
+# The time now, in epoch seconds; fails if the clock cannot be read.
+now_epoch() {
+  local now
+  now="$(date +%s 2>/dev/null)" && is_pid "$now" && echo "$now"
+}
+
+# Seconds since session holder $1 last renewed its lock, at time $2. Its time is read
+# as decimal (10#): a damaged time with a leading zero would otherwise be octal, or an error.
+age_of() { echo $(( $2 - 10#$(since_of "$1") )); }
+
 # True while holder $1 may still be at work: a driver whose process exists, or a
 # session whose lock is younger than SESSION_TTL. If the clock cannot be read, live.
 # A lock dated more than CLOCK_SLACK seconds ahead is stale, not live forever: the
@@ -122,8 +132,8 @@ is_live() {
   case "$1" in
     pid\ *) is_running "${1#pid }" ;;
     *)
-      now="$(date +%s)" && is_pid "$now" || return 0
-      age=$((now - $(since_of "$1")))
+      now="$(now_epoch)" || return 0
+      age="$(age_of "$1" "$now")"
       [ "$age" -gt "-$CLOCK_SLACK" ] && [ "$age" -lt "$SESSION_TTL" ]
       ;;
   esac
@@ -138,7 +148,6 @@ how_to_clear() { echo "  If no backlog loop is running here, clear it: rm -rf $L
 # holder's (and still stale: a new driver could have been given the same PID).
 # Returns 1, removing nothing, if another run got there first.
 reclaim() {
-  local aside="$LOCK.stale.$$"
   mkdir "$LOCK/reclaiming" 2>/dev/null || return 1
   if [ "$(holder)" != "$1" ] || is_live "$1"; then
     # The marker landed in a lock someone has since taken. If it cannot be removed
@@ -146,7 +155,13 @@ reclaim() {
     rmdir "$LOCK/reclaiming" 2>/dev/null
     return 1
   fi
-  # Renamed first, so no run ever sees a half-deleted lock.
+  remove_lock stale
+}
+
+# Delete the lock, renamed first (to $LOCK.$1.<pid>), so no run ever sees it
+# half-deleted. Called with the reclaim marker held.
+remove_lock() {
+  local aside="$LOCK.$1.$$"
   rm -rf "$aside"
   mv "$LOCK" "$aside" || return 1
   rm -rf "$aside"
@@ -203,8 +218,8 @@ say_held() {
       ;;
     *)
       echo "✗ Another backlog-loop run holds the lock ($LOCK): $(describe "$1")," >&2
-      if now="$(date +%s)" && is_pid "$now"; then
-        age=$(( (now - $(since_of "$1")) / 60 )); [ "$age" -ge 0 ] || age=0
+      if now="$(now_epoch)"; then
+        age=$(( $(age_of "$1" "$now") / 60 )); [ "$age" -ge 0 ] || age=0
         echo "  renewed $age minutes ago. It lapses 3 hours after that." >&2
       else
         echo "  taken at $(since_of "$1") (epoch seconds); the clock cannot be read, so it is treated as live." >&2
@@ -257,11 +272,7 @@ acquire() {
   settle_then_take pid "$1" "" ""
 }
 
-now_or_die() {
-  local now
-  now="$(date +%s)" && is_pid "$now" || die "cannot read the clock (date +%s)"
-  echo "$now"
-}
+now_or_die() { now_epoch || die "cannot read the clock (date +%s)"; }
 
 acquire_session() {
   local now
@@ -304,12 +315,7 @@ renew_session() {
   return 1
 }
 
-# Move the lock aside and delete it (under as_holder's marker).
-drop() {
-  local aside="$LOCK.released.$$"
-  rm -rf "$aside"
-  mv "$LOCK" "$aside" && rm -rf "$aside"
-}
+
 
 release() {
   [ -d "$LOCK" ] || return 0
@@ -324,7 +330,7 @@ release_session() {
   [ -d "$LOCK" ] || return 0
   # A session the driver started took no lock: the driver releases its own.
   held_by "${BACKLOG_LOOP_PID:-}" "" && return 0
-  as_holder "$1" drop && return 0
+  as_holder "$1" remove_lock released && return 0
   [ -d "$LOCK" ] || return 0
   echo "loop-lock: not releasing $LOCK: run $1 does not hold it, or another run is reclaiming it" >&2
   return 1

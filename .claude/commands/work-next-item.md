@@ -166,9 +166,9 @@ scripts/loop-lock.sh release-session <run-id>
 If it fails, say so in the report. A session that dies, or forgets this, holds the lock
 for 3 hours from when it last renewed it; after that any run takes it over.
 
-**Keep the lock while you work.** Before every commit and push from Step 5 on (Step 5's
-cycles, Step 6, Step 6.5's fixes, a follow-up's commits) and at the start of Step 8,
-renew it:
+**Keep the lock while you work.** Renew it at the start of every step from Step 0 on,
+and before every commit and push (Step 5's cycles, Step 6, Step 6.5's fixes, a
+follow-up's commits):
 
 ```bash
 scripts/loop-lock.sh renew-session <run-id>
@@ -177,7 +177,7 @@ scripts/loop-lock.sh renew-session <run-id>
 It passes only while this run still holds the lock, and starts its 3 hours again. If it
 fails, the lock lapsed and another run may be working this clone now: stop at once and
 report it, committing and pushing nothing, and leave the branch and the claim as they
-are. A run that goes 3 hours without renewing (one cycle that long) can lose the lock.
+are. A run that spends 3 hours inside one step without a commit can lose the lock.
 
 ## GitHub access: `gh` locally, the GitHub MCP tools in the cloud
 
@@ -296,14 +296,15 @@ after its label (Step 3). The claim that holds the issue is (#108):
 
 Then decide:
 
-- **Its claim has the same clone ID as yours,** and both are real clone IDs, not
-  `none`: a run in this same clone left it, whether an earlier session of this
+- **Its claim is confirmed and has the same clone ID as yours,** and both are real
+  clone IDs, not `none`: a run in this same clone won it and left it, whether an earlier session of this
   driver, a driver restarted after a closed terminal, `/loop`, or a manual run. You
   hold the lock above, and every run in this clone takes it before Step 0 and renews
   it before each commit, so no other run is working this clone: that run is dead. It is stale: recover it now. (Every
   cloud run starts from a fresh clone with a new ID, so its claims never match, and
   nor does a claim from before #108, which names `<host>:<path>`: those are judged by
-  age, below.)
+  age, below. An unconfirmed claim is judged by age too, even from this clone: it may
+  be a race loser whose winner, in another clone, is still at work.)
 - **Its claim is younger than 3 hours,** judged by the claim comment's `createdAt`
   (GitHub's clock, not the `at=` a runner wrote) against the time now: another run may
   still be working it. It is live: leave it alone, name it in the report as held by
@@ -455,11 +456,12 @@ Then:
    ```bash
    git merge --abort
    ```
-   A branch with no commits of its own (`git log --oneline origin/main..HEAD` prints
-   nothing) and no edits holds no work: Step 4 pushed it, then the run died. The
+   A resumed branch may hold only part of the work: Step 5 pushes each green cycle,
+   so the run may have died with criteria still unmet, or before any work at all (no
+   commits of its own: `git log --oneline origin/main..HEAD` prints nothing). The
    earlier run's findings died with it, so do Steps 3.5, 3.6 and 5 on this branch, as
-   a fresh claim would, then continue from Step 6. Otherwise bring it to green (Step
-   5's gate), then continue from Step 6 (commit/push, review, PR).
+   a fresh claim would, keeping the work already there, and bring it to green for
+   every acceptance criterion; then continue from Step 6 (commit/push, review, PR).
 4. **Neither a branch nor a PR** → nothing was actually done; release the claim so the
    issue becomes selectable again: `gh issue edit ${N} --remove-label in-progress`.
    If `git status --porcelain` is non-empty here, the edits belong to no branch: stash
@@ -1019,7 +1021,8 @@ fails, follow **Give up**, quoting the error.
    any testing notes in CLAUDE.md. Mock external services rather than calling them.
 3. Implement the minimal code to satisfy them (GREEN), then refactor. After each
    cycle that ends green, commit and push it, so a run that dies leaves its work where
-   any runner can resume it (#108). Never commit a red cycle:
+   any runner can resume it (#108). Never commit a red cycle. Run these one at a time:
+   if the renew fails, stop as **Keep the lock** says, before the commit:
    ```bash
    scripts/loop-lock.sh renew-session <run-id>
    git add -A
