@@ -321,6 +321,55 @@ if [ "$(id -u)" -ne 0 ]; then
   check "a clone ID that cannot be written is an error saying so" "[ $rc -eq 2 ] && grep -q 'could not' '$Z/out' && ! grep -q 'remove it' '$Z/out'"
 fi
 
+# --- re-review of #119: a dead driver covers nothing; failed moves; the release race ---
+DD="$(new_repo dead-driver)"
+plant_lock "$DD" "$DEAD"
+BACKLOG_LOOP_PID=$DEAD "$DD/scripts/loop-lock.sh" renew-session run-o >"$DD/out" 2>&1; rc=$?
+check "a dead driver's lock covers no session: renew fails" "[ $rc -eq 1 ] && [ \"\$(cat '$DD/.git/backlog-loop.lock/pid')\" = '$DEAD' ]"
+BACKLOG_LOOP_PID=$DEAD "$DD/scripts/loop-lock.sh" acquire-session run-o >"$DD/out" 2>&1; rc=$?
+check "a session under a dead driver reclaims its lock and takes its own" "[ $rc -eq 0 ] && grep -q '^run-o ' '$DD/.git/backlog-loop.lock/run'"
+
+# Shims for mv, on PATH for one call: one that fails, one that lets another run take
+# the lock the moment the release has moved it away.
+SHIMS="$WORK/shims"
+mkdir -p "$SHIMS/failmv" "$SHIMS/racemv"
+printf '#!/bin/sh\nexit 1\n' >"$SHIMS/failmv/mv"
+# shellcheck disable=SC2016  # expanded by the shim, not here
+printf '#!/bin/sh\n/bin/mv "$@" || exit 1\ncase "$2" in *.released.*) l="${2%%%%.released.*}"; mkdir "$l" && echo "run-other %s" >"$l/run" && mkdir "$l/reclaiming" ;; esac\n' "$NOW" >"$SHIMS/racemv/mv"
+chmod +x "$SHIMS/failmv/mv" "$SHIMS/racemv/mv"
+
+RR="$(new_repo release-race)"
+plant_session "$RR" run-y "$NOW"
+PATH="$SHIMS/racemv:$PATH" "$RR/scripts/loop-lock.sh" release-session run-y >"$RR/out" 2>&1; rc=$?
+check "release-session leaves alone a lock another run took right after the move" "[ $rc -eq 0 ] && grep -q '^run-other ' '$RR/.git/backlog-loop.lock/run' && [ -d '$RR/.git/backlog-loop.lock/reclaiming' ]"
+
+FM="$(new_repo failed-move)"
+plant_session "$FM" run-old $((NOW - 10900))
+PATH="$SHIMS/failmv:$PATH" "$FM/scripts/loop-lock.sh" acquire $$ >"$FM/out" 2>&1; rc=$?
+check "a reclaim whose move fails keeps the lock and leaves no marker" "[ $rc -eq 1 ] && grep -q '^run-old ' '$FM/.git/backlog-loop.lock/run' && [ ! -e '$FM/.git/backlog-loop.lock/reclaiming' ]"
+FR="$(new_repo failed-release)"
+plant_session "$FR" run-y "$NOW"
+PATH="$SHIMS/failmv:$PATH" "$FR/scripts/loop-lock.sh" release-session run-y >"$FR/out" 2>&1; rc=$?
+check "a release whose move fails says so, keeps the lock and leaves no marker" "[ $rc -eq 1 ] && grep -q 'could not remove' '$FR/out' && grep -q '^run-y ' '$FR/.git/backlog-loop.lock/run' && [ ! -e '$FR/.git/backlog-loop.lock/reclaiming' ]"
+
+HA="$(new_repo holder-acquire)"
+plant_session "$HA" run-h $((NOW - 10900))
+"$HA/scripts/loop-lock.sh" acquire-session run-h >"$HA/out" 2>&1; rc=$?
+check "acquire-session by the holder of a lock past 3 hours renews it, not reclaims it" "[ $rc -eq 0 ] && [ \"\$(cut -d' ' -f2 '$HA/.git/backlog-loop.lock/run')\" -ge $NOW ] && ! grep -qi stale '$HA/out'"
+mkdir "$HA/.git/backlog-loop.lock/reclaiming"
+before="$(cat "$HA/.git/backlog-loop.lock/run")"
+"$HA/scripts/loop-lock.sh" acquire-session run-h >"$HA/out" 2>&1; rc=$?
+check "acquire-session by the holder fails while another run is reclaiming" "[ $rc -eq 1 ] && [ \"\$(cat '$HA/.git/backlog-loop.lock/run')\" = '$before' ]"
+
+if [ "$(id -u)" -ne 0 ]; then
+  WF="$(new_repo write-fail)"
+  plant_session "$WF" run-w "$NOW"
+  chmod a-w "$WF/.git/backlog-loop.lock"
+  "$WF/scripts/loop-lock.sh" renew-session run-w >"$WF/out" 2>&1; rc=$?
+  chmod u+w "$WF/.git/backlog-loop.lock"
+  check "a renew that cannot write says so, not that the lock was lost" "[ $rc -eq 1 ] && grep -q 'could not write' '$WF/out' && ! grep -q 'no longer holds' '$WF/out' && [ ! -e '$WF/.git/backlog-loop.lock/run.new' ]"
+fi
+
 # --- errors are not reported as "held", and never pass ---
 N="$WORK/not-a-repo"
 mkdir -p "$N/scripts" && cp "$HERE/loop-lock.sh" "$N/scripts/"

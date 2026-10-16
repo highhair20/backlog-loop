@@ -449,11 +449,16 @@ check "Step 6 skips the commit when Step 5 left nothing" "printf '%s' \"\$(flat 
 check "Step 0 no longer says the branch first reaches the remote at Step 6" "! printf '%s' \"\$step0_flat\" | grep -q 'reaches the remote only at Step 6'"
 check "only a confirmed claim from this clone is recovered at once" "printf '%s' \"\$step0_flat\" | grep -q 'Its claim is confirmed, is the newest claim on the issue, and has the same clone ID as yours'"
 check "holds and release comments count only from the loop's own account" "printf '%s' \"\$step0_flat\" | grep -q 'holds and release comments count only when the loop.s own account posted them'"
-check "a resume whose Steps 3.5 or 3.6 end the work saves and removes the branch first" "printf '%s' \"\$step0_flat\" | grep -q 'If Step 3.5 or 3.6 ends the work on a resumed branch'"
+check "a resume whose Steps 3.5 to 3.7 end the work saves and removes the branch first" "printf '%s' \"\$step0_flat\" | grep -q 'If Step 3.5, 3.6 or 3.7 ends the work on a resumed branch.*Give up\*\* steps 1, 2, 4 and 5.*no pushed branch is left behind'"
+check "Step 6 stops when its push fails" "printf '%s' \"\$(flat \"\$step6\")\" | grep -q 'If the push fails, stop'"
+check "a run releases only a lock it took" "printf '%s' \"\$pre0_flat\" | grep -q 'once this run has taken it'"
+check "the review loop's fixes and a follow-up's commits renew the lock" "printf '%s' \"\$pre0_flat\" | grep -q 'the review loop.s fixes after Step 7' && printf '%s' \"\$follow\" | grep -q 'scripts/loop-lock.sh renew-session <run-id>'"
+check "a dry run never takes the same-clone shortcut" "printf '%s' \"\$step0_flat\" | grep -q 'A dry run holds no lock'"
+check "a clone-id failure is reported" "printf '%s' \"\$pre0_flat\" | grep -q 'clone ID is .none., and say why in the report'"
 check "every resumed branch redoes Steps 3.5, 3.6 and 5, keeping its work, for every criterion" "printf '%s' \"\$step0_flat\" | grep -q 'keeping the work already there' && printf '%s' \"\$step0_flat\" | grep -q 'every acceptance criterion'"
 check "Step 5's snippet says to stop when the renew fails" "printf '%s' \"\$step5_flat\" | grep -q 'one at a time: if the renew fails, stop'"
 check "the lock is renewed at the start of every step" "printf '%s' \"\$pre0_flat\" | grep -q 'at the start of every step'"
-check "a resumed branch with no commits of its own redoes Steps 3.5 and 3.6" "printf '%s' \"\$step0_flat\" | grep -q 'no commits of its own' && printf '%s' \"\$step0_flat\" | grep -q 'Steps 3.5, 3.6 and 5'"
+check "a resumed branch with no commits of its own redoes Steps 3.5 and 3.6" "printf '%s' \"\$step0_flat\" | grep -q 'no commits of its own' && printf '%s' \"\$step0_flat\" | grep -q 'Steps 3.5 to 3.7 and 5'"
 
 for row in 'gh pr checks|mcp__github__pull_request_read' 'gh pr view N --json|mcp__github__pull_request_read' 'gh run view|mcp__github__get_job_logs' 'gh pr comment|mcp__github__add_issue_comment' 'gh pr edit|mcp__github__issue_write' 'gh pr update-branch|mcp__github__update_pull_request_branch' 'gh api repos/{owner}/{repo}/pulls|mcp__github__pull_request_read' 'gh api repos/{owner}/{repo}/pulls|get_review_comments'; do
   check "the MCP table maps ${row%%|*} to ${row#*|}" "grep '^| .${row%%|*}' '$CMD' | grep -q -- '${row#*|}'"

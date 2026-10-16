@@ -150,8 +150,8 @@ how_to_clear() { echo "  If no backlog loop is running here, clear it: rm -rf $L
 reclaim() {
   mkdir "$LOCK/reclaiming" 2>/dev/null || return 1
   if [ "$(holder)" != "$1" ] || is_live "$1"; then
-    # The marker landed in a lock someone has since taken. If it cannot be removed
-    # it is harmless there: that run's release deletes the whole lock.
+    # The marker landed in a lock someone has since taken: remove it, or that run's
+    # renew and release would take it for a reclaim under way and stop.
     rmdir "$LOCK/reclaiming" 2>/dev/null
     return 1
   fi
@@ -164,15 +164,19 @@ remove_lock() {
   local aside="$LOCK.$1.$$"
   rm -rf "$aside"
   mv "$LOCK" "$aside" || return 1
-  rm -rf "$aside"
+  # The lock is gone once moved; a leftover copy only needs tidying.
+  rm -rf "$aside" || echo "loop-lock: could not delete $aside; remove it by hand" >&2
+  return 0
 }
 
-# True if the lock is held by $1 (a driver PID) or $2 (a session's run ID), either of
-# which may be empty: the holders a caller may go on under.
+# True if the lock is held by $1 (a driver PID, and only while that driver is running:
+# a dead driver's lock covers no session) or $2 (a session's run ID), either of which
+# may be empty: the holders a caller may go on under.
 held_by() {
   local h
   h="$(holder)"
-  { [ -n "${1:-}" ] && [ "$h" = "pid $1" ]; } || { [ -n "${2:-}" ] && [ "$(run_of "$h")" = "$2" ]; }
+  { [ -n "${1:-}" ] && [ "$h" = "pid $1" ] && is_running "$1"; } ||
+    { [ -n "${2:-}" ] && [ "$(run_of "$h")" = "$2" ]; }
 }
 
 # Deal with an existing lock. Returns 0 when it is gone, or held_by $1 or $2, so the
@@ -289,7 +293,12 @@ acquire_session() {
 as_holder() {
   local run="$1" rc
   shift
-  mkdir "$LOCK/reclaiming" 2>/dev/null || return 1
+  if ! mkdir "$LOCK/reclaiming" 2>/dev/null; then
+    # No lock to put it in, or another run's marker: not ours. Our own lock with no
+    # marker, that still refuses one, cannot be written.
+    { [ -d "$LOCK" ] && [ ! -e "$LOCK/reclaiming" ] && held_by "" "$run"; } && return 3
+    return 1
+  fi
   if ! held_by "" "$run"; then rmdir "$LOCK/reclaiming" 2>/dev/null; return 1; fi
   "$@"; rc=$?
   rmdir "$LOCK/reclaiming" 2>/dev/null
@@ -303,8 +312,11 @@ lost_lock() {
 }
 
 # Write a fresh time into run $1's lock. Replaced by a rename, so no reader sees it half-written.
+# Returns 3 if it cannot write.
 refresh() {
-  echo "$1 $2" >"$LOCK/run.new" && mv "$LOCK/run.new" "$LOCK/run"
+  { echo "$1 $2" >"$LOCK/run.new" && mv "$LOCK/run.new" "$LOCK/run"; } 2>/dev/null && return 0
+  rm -f "$LOCK/run.new"
+  return 3
 }
 
 renew_session() {
@@ -312,8 +324,12 @@ renew_session() {
   # A session the driver started holds nothing to renew: the driver's lock covers it.
   held_by "${BACKLOG_LOOP_PID:-}" "" && return 0
   now="$(now_or_die)" || exit 2
-  as_holder "$1" refresh "$1" "$now" && return 0
-  lost_lock "$1"
+  as_holder "$1" refresh "$1" "$now"
+  case $? in
+    0) return 0 ;;
+    3) echo "✗ Run $1 holds the backlog-loop lock but could not write $LOCK to renew it. Stop." >&2 ;;
+    *) lost_lock "$1" ;;
+  esac
   return 1
 }
 
