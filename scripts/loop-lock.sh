@@ -9,8 +9,9 @@
 #   is stale once that process has gone.
 # - a /work-next-item session started any other way (by hand, /loop). A Claude
 #   session has no stable PID, so the lock records its run ID and the time it took
-#   it. The session releases it when the run ends; one that dies without releasing
-#   holds it for SESSION_TTL seconds (3 hours), then any run may reclaim it.
+#   it. The session renews it before each commit, so a run still at work never lapses,
+#   and releases it when the run ends; one that dies without releasing holds it for
+#   SESSION_TTL seconds (3 hours) from its last renewal, then any run may reclaim it.
 # A session the driver started takes nothing: the driver exports its PID as
 # BACKLOG_LOOP_PID, and its lock covers the session.
 #
@@ -22,6 +23,7 @@
 #   scripts/loop-lock.sh acquire <pid>              take the lock for the driver <pid>
 #   scripts/loop-lock.sh release <pid>              drop the lock, if <pid> holds it
 #   scripts/loop-lock.sh acquire-session <run-id>   take the lock for a session's run
+#   scripts/loop-lock.sh renew-session <run-id>     refresh <run-id>'s lock; fail if it lost it
 #   scripts/loop-lock.sh release-session <run-id>   drop the lock, if <run-id> holds it
 #   scripts/loop-lock.sh check                      may a run start here? (a dry run asks)
 #   scripts/loop-lock.sh clone-id                   print this clone's ID
@@ -39,7 +41,7 @@ set -uo pipefail
 SESSION_TTL=10800
 
 usage() {
-  echo "usage: $0 {acquire <pid>|release <pid>|acquire-session <run-id>|release-session <run-id>|check|clone-id|path}" >&2
+  echo "usage: $0 {acquire <pid>|release <pid>|acquire-session <run-id>|renew-session <run-id>|release-session <run-id>|check|clone-id|path}" >&2
   exit 2
 }
 die() { echo "loop-lock: $*" >&2; exit 2; }
@@ -53,7 +55,7 @@ is_clone_id() {
 
 case "${1:-}" in
   acquire|release) { [ $# -eq 2 ] && is_pid "$2"; } || usage ;;
-  acquire-session|release-session) { [ $# -eq 2 ] && is_run "$2"; } || usage ;;
+  acquire-session|renew-session|release-session) { [ $# -eq 2 ] && is_run "$2"; } || usage ;;
   check|clone-id|path) [ $# -eq 1 ] || usage ;;
   *) usage ;;
 esac
@@ -192,7 +194,7 @@ settle() {
 
 # Say who holds the live lock $1, and how to clear it if that is wrong.
 say_held() {
-  local now
+  local now age
   case "$1" in
     pid\ *)
       echo "✗ Another backlog-loop run holds the lock ($LOCK): $(describe "$1") is running." >&2
@@ -202,7 +204,8 @@ say_held() {
     *)
       echo "✗ Another backlog-loop run holds the lock ($LOCK): $(describe "$1")," >&2
       if now="$(date +%s)" && is_pid "$now"; then
-        echo "  taken $(( (now - $(since_of "$1")) / 60 )) minutes ago. It lapses 3 hours after it was taken." >&2
+        age=$(( (now - $(since_of "$1")) / 60 )); [ "$age" -ge 0 ] || age=0
+        echo "  renewed $age minutes ago. It lapses 3 hours after that." >&2
       else
         echo "  taken at $(since_of "$1") (epoch seconds); the clock cannot be read, so it is treated as live." >&2
       fi
@@ -254,11 +257,58 @@ acquire() {
   settle_then_take pid "$1" "" ""
 }
 
-acquire_session() {
+now_or_die() {
   local now
   now="$(date +%s)" && is_pid "$now" || die "cannot read the clock (date +%s)"
-  take run "$1 $now" && return 0
+  echo "$now"
+}
+
+acquire_session() {
+  local now
+  now="$(now_or_die)" || exit 2
   settle_then_take run "$1 $now" "${BACKLOG_LOOP_PID:-}" "$1"
+}
+
+# Run "$2..." with the reclaim marker held, if the lock is still run $1's; reclaim()
+# takes the same marker, so the lock cannot be reclaimed (or taken) part-way through.
+# Returns 1, changing nothing, when the lock is gone, is another run's, or another run
+# is reclaiming it.
+as_holder() {
+  local run="$1" rc
+  shift
+  mkdir "$LOCK/reclaiming" 2>/dev/null || return 1
+  if ! held_by "" "$run"; then rmdir "$LOCK/reclaiming" 2>/dev/null; return 1; fi
+  "$@"; rc=$?
+  rmdir "$LOCK/reclaiming" 2>/dev/null
+  return "$rc"
+}
+
+lost_lock() {
+  echo "✗ Run $1 no longer holds the backlog-loop lock ($LOCK): it lapsed and another run" >&2
+  echo "  took it, was released, or another run is reclaiming it. Stop: another run may be" >&2
+  echo "  working this clone." >&2
+}
+
+# Write a fresh time into run $1's lock. Replaced by a rename, so no reader sees it half-written.
+refresh() {
+  echo "$1 $2" >"$LOCK/run.new" && mv "$LOCK/run.new" "$LOCK/run"
+}
+
+renew_session() {
+  local now
+  # A session the driver started holds nothing to renew: the driver's lock covers it.
+  held_by "${BACKLOG_LOOP_PID:-}" "" && return 0
+  now="$(now_or_die)" || exit 2
+  as_holder "$1" refresh "$1" "$now" && return 0
+  lost_lock "$1"
+  return 1
+}
+
+# Move the lock aside and delete it (under as_holder's marker).
+drop() {
+  local aside="$LOCK.released.$$"
+  rm -rf "$aside"
+  mv "$LOCK" "$aside" && rm -rf "$aside"
 }
 
 release() {
@@ -272,10 +322,11 @@ release() {
 
 release_session() {
   [ -d "$LOCK" ] || return 0
-  if held_by "" "$1"; then rm -rf "$LOCK"; return; fi
   # A session the driver started took no lock: the driver releases its own.
   held_by "${BACKLOG_LOOP_PID:-}" "" && return 0
-  echo "loop-lock: not releasing $LOCK: run $1 does not hold it" >&2
+  as_holder "$1" drop && return 0
+  [ -d "$LOCK" ] || return 0
+  echo "loop-lock: not releasing $LOCK: run $1 does not hold it, or another run is reclaiming it" >&2
   return 1
 }
 
@@ -288,7 +339,11 @@ clone_id() {
     id="$(od -An -N8 -tx1 /dev/urandom 2>/dev/null | tr -d ' \n')"
     is_clone_id "$id" || die "could not generate a clone ID from /dev/urandom"
     echo "$id" >"$tmp" 2>/dev/null || die "could not write $tmp (is the git directory writable?)"
-    ln "$tmp" "$CLONE_ID" 2>/dev/null
+    # Fails when another run made it first, which is fine; any other failure is not.
+    if ! ln "$tmp" "$CLONE_ID" 2>/dev/null && [ ! -e "$CLONE_ID" ]; then
+      rm -f "$tmp"
+      die "could not create $CLONE_ID (does the git directory's filesystem allow hard links?)"
+    fi
     rm -f "$tmp"
   fi
   id=""
@@ -301,6 +356,7 @@ case "$1" in
   acquire) acquire "$2" ;;
   release) release "$2" ;;
   acquire-session) acquire_session "$2" ;;
+  renew-session) renew_session "$2" ;;
   release-session) release_session "$2" ;;
   check) settle "${BACKLOG_LOOP_PID:-}" "" ;;
   clone-id) clone_id ;;

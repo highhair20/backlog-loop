@@ -269,10 +269,11 @@ warns if other users can get into it.
 **One loop run at a time.** `backlog-loop.sh` holds a lock in the git directory
 (`.git/backlog-loop.lock`) while it runs, so a second driver in the same clone
 refuses to start, whatever its `LOG_DIR`. A `/work-next-item` run started by hand or
-by `/loop` takes the same lock for its run and releases it when it ends, so it cannot
+by `/loop` takes the same lock for its run, renews it before each commit, and releases
+it when it ends, so it cannot
 overlap a driver or another session in that clone either. A lock left by a crashed
 driver is reclaimed automatically, because it records its owner's PID; one left by a
-session that died lapses after three hours. If a run is refused and you know no loop
+session that died lapses three hours after its last renewal. If a run is refused and you know no loop
 is running, the message gives the `rm -rf` that clears the lock.
 
 The loop manages these status labels: `in-progress`, `in-review`, `blocked`,

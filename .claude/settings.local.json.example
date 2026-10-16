@@ -43,6 +43,7 @@
       "Bash(scripts/loop-lock.sh check)",
       "Bash(scripts/loop-lock.sh clone-id)",
       "Bash(scripts/loop-lock.sh acquire-session *)",
+      "Bash(scripts/loop-lock.sh renew-session *)",
       "Bash(scripts/loop-lock.sh release-session *)",
       "Bash(scripts/report-drained.sh)",
       "Bash(*/.claude/hooks/pr-review-state.sh *)",

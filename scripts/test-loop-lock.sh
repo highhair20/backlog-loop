@@ -274,6 +274,42 @@ wins=0
 for p in $racers; do wait "$p" && wins=$((wins + 1)); done
 check "of several sessions starting at once, exactly one takes the lock" "[ $wins -eq 1 ] && grep -qxE 'run-[1-6] [0-9]+' '$V/.git/backlog-loop.lock/run'"
 
+# --- renew-session keeps a working session's lock; it fails once the lock is lost (#108 review) ---
+Y="$(new_repo renew)"
+YLOCK="$Y/.git/backlog-loop.lock"
+plant_session "$Y" run-y $((NOW - 10900))
+"$Y/scripts/loop-lock.sh" renew-session run-y >"$Y/out" 2>&1; rc=$?
+check "renew-session refreshes the time of the run's own lock, even past 3 hours" "[ $rc -eq 0 ] && [ \"\$(cut -d' ' -f1 '$YLOCK/run')\" = run-y ] && [ \"\$(cut -d' ' -f2 '$YLOCK/run')\" -ge $NOW ] && [ \"\$(ls '$YLOCK')\" = run ]"
+"$Y/scripts/loop-lock.sh" acquire-session run-z >"$Y/out" 2>&1; rc=$?
+check "so a renewed lock is not reclaimed" "[ $rc -eq 1 ] && grep -q 'run-y' '$YLOCK/run'"
+"$Y/scripts/loop-lock.sh" renew-session run-z >"$Y/out" 2>&1; rc=$?
+check "renew-session fails for a run that does not hold the lock, and keeps it" "[ $rc -eq 1 ] && grep -q 'run-z' '$Y/out' && grep -q 'run-y' '$YLOCK/run'"
+rm -rf "$YLOCK"
+"$Y/scripts/loop-lock.sh" renew-session run-y >"$Y/out" 2>&1; rc=$?
+check "renew-session fails on a free lock, and takes none (the lock was lost)" "[ $rc -eq 1 ] && [ ! -e '$YLOCK' ]"
+plant_session "$Y" run-y $((NOW - 10900))
+mkdir "$YLOCK/reclaiming"
+"$Y/scripts/loop-lock.sh" renew-session run-y >"$Y/out" 2>&1; rc=$?
+check "renew-session fails while another run is reclaiming the lock" "[ $rc -eq 1 ] && [ \"\$(cut -d' ' -f2 '$YLOCK/run')\" = $((NOW - 10900)) ]"
+"$Y/scripts/loop-lock.sh" release-session run-y >"$Y/out" 2>&1; rc=$?
+check "release-session never deletes a lock another run is reclaiming" "[ $rc -eq 1 ] && [ -d '$YLOCK/reclaiming' ] && grep -q 'run-y' '$YLOCK/run'"
+rm -rf "$YLOCK"
+"$Y/scripts/loop-lock.sh" acquire $$ >/dev/null 2>&1
+BACKLOG_LOOP_PID=$$ "$Y/scripts/loop-lock.sh" renew-session run-y >"$Y/out" 2>&1; rc=$?
+check "renew-session passes in a session the lock's driver started" "[ $rc -eq 0 ] && [ \"\$(cat '$YLOCK/pid')\" = $$ ] && [ ! -s '$Y/out' ]"
+"$Y/scripts/loop-lock.sh" renew-session run-y >"$Y/out" 2>&1; rc=$?
+check "renew-session outside that driver fails" "[ $rc -eq 1 ] && [ \"\$(cat '$YLOCK/pid')\" = $$ ]"
+"$Y/scripts/loop-lock.sh" release $$ >/dev/null 2>&1
+
+# A clone ID that cannot be created is named as such, not as a corrupt file.
+if [ "$(id -u)" -ne 0 ]; then
+  Z="$(new_repo cloneid-readonly)"
+  chmod a-w "$Z/.git"
+  "$Z/scripts/loop-lock.sh" clone-id >"$Z/out" 2>&1; rc=$?
+  chmod u+w "$Z/.git"
+  check "a clone ID that cannot be written is an error saying so" "[ $rc -eq 2 ] && grep -q 'could not' '$Z/out' && ! grep -q 'remove it' '$Z/out'"
+fi
+
 # --- errors are not reported as "held", and never pass ---
 N="$WORK/not-a-repo"
 mkdir -p "$N/scripts" && cp "$HERE/loop-lock.sh" "$N/scripts/"
@@ -294,7 +330,7 @@ fi
 
 for args in "" "bogus" "acquire" "acquire abc" "release" "release 1x" "check extra" \
     "acquire-session" "acquire-session bad/run" "acquire-session a b" "release-session" \
-    "release-session bad;run" "clone-id extra"; do
+    "release-session bad;run" "clone-id extra" "renew-session" "renew-session a/b"; do
   # shellcheck disable=SC2086  # $args is zero or more words
   "$R/scripts/loop-lock.sh" $args >"$R/out" 2>&1; rc=$?
   check "rejects bad usage: '${args}'" "[ $rc -eq 2 ] && grep -q 'usage' '$R/out'"

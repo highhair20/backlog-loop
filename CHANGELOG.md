@@ -47,9 +47,10 @@ removes it from a repo made with "Use this template", and sync never copies it.
   issue posts a release and backs off. One runner per repository is still the rule
   (`docs/ROUTINE.md`); claims are a backstop for when it slips (#57).
 - Closer to safe overlapping runners (#108). Every `/work-next-item` run takes the
-  clone's lock, not only the driver: a session records its run ID, releases the lock
-  when it ends, and a dead session's lock lapses after three hours
-  (`scripts/loop-lock.sh acquire-session` / `release-session`). Claims name a random
+  clone's lock, not only the driver: a session records its run ID, renews the lock
+  before each commit, releases it when it ends, and a dead session's lock lapses three
+  hours after its last renewal (`scripts/loop-lock.sh acquire-session` /
+  `renew-session` / `release-session`). A run that finds it lost the lock stops. Claims name a random
   per-clone ID (`scripts/loop-lock.sh clone-id`, kept in the git directory) instead of
   `<host>:<path>`, which cloud containers could share. A run pushes its branch as soon
   as Step 4 makes it and after each green test cycle, so a runner elsewhere can resume
@@ -95,7 +96,8 @@ removes it from a repo made with "Use this template", and sync never copies it.
 ### Manual steps for existing repos
 
 - **Session lock and clone ID (#108):** add `Bash(scripts/loop-lock.sh clone-id)`,
-  `Bash(scripts/loop-lock.sh acquire-session *)` and
+  `Bash(scripts/loop-lock.sh acquire-session *)`,
+  `Bash(scripts/loop-lock.sh renew-session *)` and
   `Bash(scripts/loop-lock.sh release-session *)` to `.claude/settings.local.json`'s
   allow list (`scripts/missing-allow-rules.sh` names them); `Bash(hostname)` and
   `Bash(git rev-parse --show-toplevel)` are no longer needed. Without them a headless

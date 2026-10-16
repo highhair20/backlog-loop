@@ -164,7 +164,20 @@ scripts/loop-lock.sh release-session <run-id>
 ```
 
 If it fails, say so in the report. A session that dies, or forgets this, holds the lock
-for 3 hours from when it took it; after that any run takes it over.
+for 3 hours from when it last renewed it; after that any run takes it over.
+
+**Keep the lock while you work.** Before every commit and push from Step 5 on (Step 5's
+cycles, Step 6, Step 6.5's fixes, a follow-up's commits) and at the start of Step 8,
+renew it:
+
+```bash
+scripts/loop-lock.sh renew-session <run-id>
+```
+
+It passes only while this run still holds the lock, and starts its 3 hours again. If it
+fails, the lock lapsed and another run may be working this clone now: stop at once and
+report it, committing and pushing nothing, and leave the branch and the claim as they
+are. A run that goes 3 hours without renewing (one cycle that long) can lose the lock.
 
 ## GitHub access: `gh` locally, the GitHub MCP tools in the cloud
 
@@ -286,8 +299,8 @@ Then decide:
 - **Its claim has the same clone ID as yours,** and both are real clone IDs, not
   `none`: a run in this same clone left it, whether an earlier session of this
   driver, a driver restarted after a closed terminal, `/loop`, or a manual run. You
-  hold the lock above, and every run in this clone takes it before Step 0, so no other
-  run is working this clone: that run is dead. It is stale: recover it now. (Every
+  hold the lock above, and every run in this clone takes it before Step 0 and renews
+  it before each commit, so no other run is working this clone: that run is dead. It is stale: recover it now. (Every
   cloud run starts from a fresh clone with a new ID, so its claims never match, and
   nor does a claim from before #108, which names `<host>:<path>`: those are judged by
   age, below.)
@@ -398,8 +411,9 @@ Then:
    with Step 3's claim comment and run its race check against the time you listed the
    claimed issues above: another runner may have judged the same old claim stale at
    the same moment, and only the winner resumes. If you win, post Step 3's holds
-   comment at once (the issue is already labelled); if the holds comment fails, stop
-   and report it, leaving the issue as it is for a later run. If you lose, leave the
+   comment at once (the issue is already labelled); if the holds comment fails, post the release comment
+   (`<!-- backlog-loop:release run=<run-id> -->`), then stop and report it, leaving the
+   label for a later run. If you lose, leave the
    issue and resume the next stale one, if any; otherwise go on to Step 1. First, if an earlier
    run stopped in the middle of a merge (`git rev-parse -q --verify MERGE_HEAD` prints
    a hash; no output means none is in progress), abort it: git refuses to change
@@ -441,11 +455,11 @@ Then:
    ```bash
    git merge --abort
    ```
-   Then bring it to green (Step 5's gate), then continue from Step 6 (commit/push,
-   review, PR). A branch with no commits of its own (`git log --oneline
-   origin/main..HEAD` prints nothing) and no edits holds no work: Step 4 pushed it,
-   then the run died. The earlier run's findings died with it, so do Steps 3.5, 3.6
-   and 5 on this branch before Step 6, as a fresh claim would.
+   A branch with no commits of its own (`git log --oneline origin/main..HEAD` prints
+   nothing) and no edits holds no work: Step 4 pushed it, then the run died. The
+   earlier run's findings died with it, so do Steps 3.5, 3.6 and 5 on this branch, as
+   a fresh claim would, then continue from Step 6. Otherwise bring it to green (Step
+   5's gate), then continue from Step 6 (commit/push, review, PR).
 4. **Neither a branch nor a PR** → nothing was actually done; release the claim so the
    issue becomes selectable again: `gh issue edit ${N} --remove-label in-progress`.
    If `git status --porcelain` is non-empty here, the edits belong to no branch: stash
@@ -1007,6 +1021,7 @@ fails, follow **Give up**, quoting the error.
    cycle that ends green, commit and push it, so a run that dies leaves its work where
    any runner can resume it (#108). Never commit a red cycle:
    ```bash
+   scripts/loop-lock.sh renew-session <run-id>
    git add -A
    git commit -m "<type>: <what this cycle did> (#<number>)"
    git push origin <type>/<number>-<slug>
@@ -1032,12 +1047,11 @@ already be on the remote. Then report what blocked you and STOP.
 
 ## Step 6 — Commit & push
 
-First make sure this run still holds the lock: a run past 3 hours can have lost it to
-another run, which may be working this clone now. Run the lock command again (it
-passes for the run that holds it):
+First renew the lock (see **Keep the lock** above): if this run lost it, another run
+may be working this clone now.
 
 ```bash
-scripts/loop-lock.sh acquire-session <run-id>
+scripts/loop-lock.sh renew-session <run-id>
 ```
 
 If it fails, stop and report it, leaving the branch and the claim as they are: do not
@@ -1123,6 +1137,9 @@ PRBODY
 ```
 
 ## Step 8 — Update state & report
+
+Renew the lock first (`scripts/loop-lock.sh renew-session <run-id>`; see **Keep the
+lock** above). If it fails, stop and report it: another run may be working this clone.
 
 Run this only once the review loop the hooks opened for this PR has closed (its
 last round recorded 0 blocking findings, or it hit its round cap). `in-review` tells
