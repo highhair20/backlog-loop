@@ -46,6 +46,17 @@ removes it from a repo made with "Use this template", and sync never copies it.
   every `in-progress` issue as a dead run's. A run that loses a race to claim an
   issue posts a release and backs off. One runner per repository is still the rule
   (`docs/ROUTINE.md`); claims are a backstop for when it slips (#57).
+- Closer to safe overlapping runners (#108). Every `/work-next-item` run takes the
+  clone's lock, not only the driver: a session records its run ID, releases the lock
+  when it ends, and a dead session's lock lapses after three hours
+  (`scripts/loop-lock.sh acquire-session` / `release-session`). Claims name a random
+  per-clone ID (`scripts/loop-lock.sh clone-id`, kept in the git directory) instead of
+  `<host>:<path>`, which cloud containers could share. A run pushes its branch as soon
+  as Step 4 makes it and after each green test cycle, so a runner elsewhere can resume
+  it. A race winner confirms its claim with a `holds` comment, so a loser that died
+  before releasing is never taken for the holder. Each push runs CI on the branch, so
+  an issue now costs a few more CI runs. One runner per repository stays the rule
+  until a live walkthrough shows a local driver and the routine never work one issue.
 
 ### Fixed
 
@@ -82,6 +93,13 @@ removes it from a repo made with "Use this template", and sync never copies it.
   of the review, and a session that tried to update it was refused (#116).
 
 ### Manual steps for existing repos
+
+- **Session lock and clone ID (#108):** add `Bash(scripts/loop-lock.sh clone-id)`,
+  `Bash(scripts/loop-lock.sh acquire-session *)` and
+  `Bash(scripts/loop-lock.sh release-session *)` to `.claude/settings.local.json`'s
+  allow list (`scripts/missing-allow-rules.sh` names them); `Bash(hostname)` and
+  `Bash(git rev-parse --show-toplevel)` are no longer needed. Without them a headless
+  run stops at the lock step and reports the missing rule.
 
 - **PR description at handover (#116):** add `Bash(gh pr edit * --body *)` to
   `.claude/settings.local.json`'s allow list (`scripts/missing-allow-rules.sh` names
