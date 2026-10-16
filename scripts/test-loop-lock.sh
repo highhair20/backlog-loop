@@ -218,6 +218,35 @@ plant_session "$J" run-old not-a-time
 "$J/scripts/loop-lock.sh" acquire-session run-new >"$J/out" 2>&1; rc=$?
 check "a session lock with no readable time is refused, never reclaimed" "[ $rc -eq 1 ] && grep -qF 'rm -rf $J/.git/backlog-loop.lock' '$J/out' && grep -q 'run-old' '$J/.git/backlog-loop.lock/run'"
 
+K2="$(new_repo session-future)"
+plant_session "$K2" run-future $((NOW + 3600))
+"$K2/scripts/loop-lock.sh" acquire-session run-new >"$K2/out" 2>&1; rc=$?
+check "a session lock dated an hour ahead is stale, not live forever" "[ $rc -eq 0 ] && grep -q '^run-new ' '$K2/.git/backlog-loop.lock/run'"
+K3="$(new_repo session-skew)"
+plant_session "$K3" run-skew $((NOW + 60))
+"$K3/scripts/loop-lock.sh" acquire-session run-new >"$K3/out" 2>&1; rc=$?
+check "a session lock a minute ahead (clock correction) is still live" "[ $rc -eq 1 ] && grep -q 'run-skew' '$K3/.git/backlog-loop.lock/run'"
+K4="$(new_repo session-extra)"
+plant_session "$K4" run-old "$NOW extra"
+"$K4/scripts/loop-lock.sh" acquire-session run-new >"$K4/out" 2>&1; rc=$?
+check "a session lock with extra fields is refused, never reclaimed" "[ $rc -eq 1 ] && grep -qF 'rm -rf $K4/.git/backlog-loop.lock' '$K4/out' && grep -q 'run-old' '$K4/.git/backlog-loop.lock/run'"
+K5="$(new_repo session-over-dead-driver)"
+plant_lock "$K5" "$DEAD"
+"$K5/scripts/loop-lock.sh" acquire-session run-new >"$K5/out" 2>&1; rc=$?
+check "a session reclaims a lock whose driver is dead" "[ $rc -eq 0 ] && grep -q '^run-new ' '$K5/.git/backlog-loop.lock/run' && [ ! -e '$K5/.git/backlog-loop.lock/pid' ] && grep -q 'PID $DEAD' '$K5/out'"
+
+# Several sessions reclaiming one expired session lock at once: one takes it.
+K6="$(new_repo session-stale-race)"
+plant_session "$K6" run-old $((NOW - 10900))
+racers=""
+for i in 1 2 3 4 5 6; do
+  "$K6/scripts/loop-lock.sh" acquire-session "run-$i" >"$K6/race-$i" 2>&1 &
+  racers="$racers $!"
+done
+wins=0
+for p in $racers; do wait "$p" && wins=$((wins + 1)); done
+check "of several sessions reclaiming one expired lock, exactly one takes it" "[ $wins -eq 1 ] && grep -qxE 'run-[1-6] [0-9]+' '$K6/.git/backlog-loop.lock/run' && [ \"\$(ls '$K6/.git' | grep -c backlog-loop.lock)\" = 1 ] && [ \"\$(ls '$K6/.git/backlog-loop.lock')\" = run ]"
+
 # A session the driver started: the driver's lock covers it, and it takes no lock of its own.
 D="$(new_repo session-driver)"
 "$D/scripts/loop-lock.sh" acquire $$ >/dev/null 2>&1
@@ -229,6 +258,10 @@ check "release-session leaves the driver's lock alone, quietly" "[ $rc -eq 0 ] &
 check "acquire-session outside the driver is refused" "[ $rc -eq 1 ] && grep -q 'PID $$' '$D/out'"
 BACKLOG_LOOP_PID=$LIVE "$D/scripts/loop-lock.sh" acquire-session run-d >"$D/out" 2>&1; rc=$?
 check "acquire-session started by another driver is refused" "[ $rc -eq 1 ]"
+"$D/scripts/loop-lock.sh" release-session run-d >"$D/out" 2>&1; rc=$?
+check "release-session outside the driver leaves the driver's lock" "[ $rc -eq 1 ] && [ \"\$(cat '$D/.git/backlog-loop.lock/pid')\" = $$ ]"
+BACKLOG_LOOP_PID=$LIVE "$D/scripts/loop-lock.sh" release-session run-d >"$D/out" 2>&1; rc=$?
+check "release-session under another driver leaves the lock" "[ $rc -eq 1 ] && [ \"\$(cat '$D/.git/backlog-loop.lock/pid')\" = $$ ]"
 
 # Several sessions starting at once: exactly one takes the lock.
 V="$(new_repo session-race)"

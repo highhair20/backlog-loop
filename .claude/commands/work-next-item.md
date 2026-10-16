@@ -148,7 +148,8 @@ yourself; the message tells the human how to clear a stale one. It passes when t
 session was started by the driver that holds the lock (the driver's lock covers it),
 and it clears a lock whose owner is no longer running.
 
-A dry run only checks the lock, and releases nothing:
+A dry run only checks the lock: it takes none and releases nothing (the check still
+clears a stale lock, as above):
 
 ```bash
 scripts/loop-lock.sh check
@@ -590,9 +591,10 @@ post Step 3's release comment (`<!-- backlog-loop:release run=<run-id> -->`) and
 back off before the label edit, so the issue stays `in-review` as you found it, and
 look at the next PR. If the label edit fails, stop and report it: the issue is still
 `in-review` with your claim comment, which holds nothing and a later run ignores.
-If the holds comment fails, put the label back
+If the holds comment fails, post the release comment, put the label back
 (`gh issue edit <N> --remove-label in-progress --add-label in-review`), then stop and
-report it: Step 0 might not find your claim as the one holding the issue.
+report it, naming any of the two that failed too: Step 0 might not find your claim as
+the one holding the issue.
 
 **Do the work** on the PR's own branch. If any git command below fails (the switch,
 the pull, the merge, a push), do not go on to Report and release, which would claim
@@ -776,10 +778,11 @@ otherwise be taken for the issue's holder:
 gh issue comment <number> --body "<!-- backlog-loop:holds run=<run-id> --> Won the claim; working on it."
 ```
 
-If the holds comment fails, release the label
-(`gh issue edit <number> --remove-label in-progress`), then stop and report it: a later
-run might not find your claim as the one holding the issue, and recover it underneath
-you. Nothing else has been touched.
+If the holds comment fails, back off as a race loser does: post the release comment
+above, then release the label (`gh issue edit <number> --remove-label in-progress`),
+then stop and report it, naming any of the two that failed too: a later run might not
+find your claim as the one holding the issue, and recover it underneath you. Nothing
+else has been touched.
 
 Then the claim starts on a fresh branch. Any branch for this issue that exists now
 (`<type>/<number>-…`, local or remote, never `abandoned/…`) is left over from an
@@ -1008,7 +1011,8 @@ fails, follow **Give up**, quoting the error.
    git commit -m "<type>: <what this cycle did> (#<number>)"
    git push origin <type>/<number>-<slug>
    ```
-   If the push fails, keep working, and push again at Step 6.
+   If the push fails, keep working, and push again at Step 6; if that push fails too,
+   name both in the report.
 4. The change is **done** only when every command in CLAUDE.md `## Verify` that
    applies to the changed paths passes locally, **and** every check in
    `## Definition of done` (if present) is satisfied and recorded in the PR body.
@@ -1028,7 +1032,16 @@ already be on the remote. Then report what blocked you and STOP.
 
 ## Step 6 — Commit & push
 
-Conventional commit referencing the issue:
+First make sure this run still holds the lock: a run past 3 hours can have lost it to
+another run, which may be working this clone now. Run the lock command again (it
+passes for the run that holds it):
+
+```bash
+scripts/loop-lock.sh acquire-session <run-id>
+```
+
+If it fails, stop and report it, leaving the branch and the claim as they are: do not
+commit or push over the other run's work. Then commit, referencing the issue:
 
 ```bash
 git add -A

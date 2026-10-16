@@ -112,13 +112,17 @@ is_running() { kill -0 "$1" 2>/dev/null || ps -p "$1" >/dev/null 2>&1; }
 
 # True while holder $1 may still be at work: a driver whose process exists, or a
 # session whose lock is younger than SESSION_TTL. If the clock cannot be read, live.
+# A lock dated more than CLOCK_SLACK seconds ahead is stale, not live forever: the
+# clock was wrong when it was taken, or the file was damaged.
+CLOCK_SLACK=300
 is_live() {
-  local now
+  local now age
   case "$1" in
     pid\ *) is_running "${1#pid }" ;;
     *)
       now="$(date +%s)" && is_pid "$now" || return 0
-      [ $((now - $(since_of "$1"))) -lt "$SESSION_TTL" ]
+      age=$((now - $(since_of "$1")))
+      [ "$age" -gt "-$CLOCK_SLACK" ] && [ "$age" -lt "$SESSION_TTL" ]
       ;;
   esac
 }
@@ -196,9 +200,12 @@ say_held() {
       echo "  the lock is stale; clear it: rm -rf $LOCK" >&2
       ;;
     *)
-      now="$(date +%s)"
       echo "✗ Another backlog-loop run holds the lock ($LOCK): $(describe "$1")," >&2
-      echo "  taken $(( (now - $(since_of "$1")) / 60 )) minutes ago. It lapses 3 hours after it was taken." >&2
+      if now="$(date +%s)" && is_pid "$now"; then
+        echo "  taken $(( (now - $(since_of "$1")) / 60 )) minutes ago. It lapses 3 hours after it was taken." >&2
+      else
+        echo "  taken at $(since_of "$1") (epoch seconds); the clock cannot be read, so it is treated as live." >&2
+      fi
       how_to_clear
       ;;
   esac

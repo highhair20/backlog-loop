@@ -56,6 +56,8 @@ setup() {
     # As /work-next-item does: take the lock for this run, then release it (#108).
     printf 'scripts/loop-lock.sh acquire-session fake-run >>check-out 2>&1; echo $? >>check-rc\n'
     printf 'scripts/loop-lock.sh release-session fake-run >>check-out 2>&1; echo $? >>check-rc\n'
+    # What the lock holds after both calls: still the driver's, never a session's.
+    printf 'ls .git/backlog-loop.lock >>lock-seen 2>&1\n'
     if [ "$2" = block ]; then
       # Gives up after 30s so a failed test cannot leave it running.
       printf ': >started\ni=0; while [ ! -e go ] && [ $i -lt 300 ]; do sleep 0.1; i=$((i + 1)); done\n'
@@ -97,7 +99,7 @@ P="$(setup progress progress)"
 run "$P"; rc=$?
 check "drains the backlog and exits 0" "[ $rc -eq 0 ]"
 check "runs one item per remaining issue" "[ \$(wc -l <'$P/calls') -eq 3 ]"
-check "the driver's own sessions pass the lock and take none of their own" "[ \"\$(sort -u '$P/check-rc')\" = 0 ] && [ ! -e '$P/.git/backlog-loop.lock/run' ]"
+check "the driver's own sessions pass the lock and take none of their own" "[ \"\$(sort -u '$P/check-rc')\" = 0 ] && [ \"\$(sort -u '$P/lock-seen')\" = pid ] && [ \$(wc -l <'$P/lock-seen') -eq 3 ]"
 check "releases the lock when it exits" "[ ! -e '$P/.git/backlog-loop.lock' ]"
 
 S="$(setup stall stall)"
@@ -338,7 +340,7 @@ committed_repo() { # committed_repo <name> <step-1 script>
   local dir; dir="$(setup "$1" steps)"
   echo 0 >"$dir/count"; echo "$IN_REVIEW" >"$dir/extra.json"
   printf '%s\n' "$2" >"$dir/step-1"
-  printf '%s\n' calls prompts bgwait staging-env gh-repo-env umask-seen check-out check-rc finished started out >>"$dir/.git/info/exclude"
+  printf '%s\n' calls prompts bgwait staging-env gh-repo-env umask-seen check-out check-rc lock-seen finished started out >>"$dir/.git/info/exclude"
   git -C "$dir" add -A
   git -C "$dir" -c user.name=t -c user.email=t@t commit -qm fixture
   git -C "$dir" update-ref refs/remotes/origin/main HEAD
