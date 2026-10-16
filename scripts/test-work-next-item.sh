@@ -434,8 +434,8 @@ check "a follow-up confirms its claim after its label" "printf '%s' \"\$follow_f
 check "a resume confirms its claim after winning" "printf '%s' \"\$step0_flat\" | grep -q 'holds comment'"
 check "Step 0's holder is the newest confirmed claim" "printf '%s' \"\$step0_flat\" | grep -q 'backlog-loop:holds run=' && printf '%s' \"\$step0_flat\" | grep -q 'newest confirmed claim'"
 check "an unconfirmed newer claim holds only for its first 10 minutes" "printf '%s' \"\$step0_flat\" | grep -q 'under 10 minutes old'"
-check "Step 4 pushes the branch as soon as it exists" "s=\$(printf '%s\n' \"\$step4\" | grep -n -m1 'git switch -c' | cut -d: -f1); p=\$(printf '%s\n' \"\$step4\" | grep -n -m1 '^ *git push -u origin <type>/<number>-<slug>' | cut -d: -f1); [ -n \"\$s\" ] && [ -n \"\$p\" ] && [ \"\$s\" -lt \"\$p\" ]"
-check "Step 5 commits and pushes each green cycle" "printf '%s' \"\$step5_flat\" | grep -q 'each cycle that ends green' && printf '%s' \"\$step5\" | grep -q '^ *git push origin <type>/<number>-<slug>'"
+check "Step 4 pushes nothing: the first push is the first green cycle" "printf '%s' \"\$step4\" | grep -q 'git switch -c' && ! printf '%s' \"\$step4\" | grep -q 'git push'"
+check "Step 5 commits and pushes each green cycle" "printf '%s' \"\$step5_flat\" | grep -q 'each cycle that ends green' && printf '%s' \"\$step5\" | grep -q '^ *git push -u origin <type>/<number>-<slug>'"
 check "the lock is renewed before every commit from Step 5 on, and a failed renew stops the run" "printf '%s' \"\$pre0\" | grep -q '^ *scripts/loop-lock.sh renew-session <run-id>\$' && printf '%s' \"\$pre0_flat\" | grep -q 'Keep the lock' && printf '%s' \"\$pre0_flat\" | grep -q 'committing and pushing nothing'"
 check "Step 5 renews the lock before each cycle's commit" "r=\$(printf '%s\n' \"\$step5\" | grep -n -m1 'scripts/loop-lock.sh renew-session <run-id>' | cut -d: -f1); a=\$(printf '%s\n' \"\$step5\" | grep -n -m1 'git add -A' | cut -d: -f1); [ -n \"\$r\" ] && [ -n \"\$a\" ] && [ \"\$r\" -lt \"\$a\" ]"
 # Not grep -q: it exits at the first match, and a section over 4 KB then fails printf with SIGPIPE under pipefail.

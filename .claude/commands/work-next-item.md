@@ -338,9 +338,10 @@ gh pr list --state closed --limit 1000 --json number,headRefName,url,mergedAt \
 The closed listing is matched by branch name, never by `--head` against an existing
 branch: a human who closed the PR may also have deleted its branch.
 
-Step 4 pushes the branch as soon as it exists, and Step 5 pushes each green cycle
-(#108), so a run interrupted in Steps 4–5 leaves its branch on the remote, missing at
-most its unfinished cycle, which stays in this checkout as uncommitted edits. A run
+Step 5 pushes each green cycle (#108), so a run interrupted in Step 5 leaves its
+branch on the remote, missing at most its unfinished cycle, which stays in this
+checkout as uncommitted edits. A run interrupted before its first green cycle leaves a
+local-only branch with nothing committed, which a runner elsewhere starts over. A run
 from before #108 can still leave a **local-only** branch. Check local branches too.
 
 Branches named `abandoned/<N>-<sha>` are work a give-up preserved for a human (see
@@ -1011,12 +1012,7 @@ and a short kebab-case slug from the title (drop the prefix, ~5 words max):
 ```bash
 git switch -c <type>/<number>-<slug>
 # e.g. fix/19-audit-burger-restaurant-exclusion
-git push -u origin <type>/<number>-<slug>
 ```
-
-Push it at once, before any work: a runner on another machine sees only what is on the
-remote, so Step 0 can resume this branch there if this run dies (#108). If the push
-fails, follow **Give up**, quoting the error.
 
 ## Step 5 — Implement with TDD
 
@@ -1033,7 +1029,7 @@ fails, follow **Give up**, quoting the error.
    scripts/loop-lock.sh renew-session <run-id>
    git add -A
    git commit -m "<type>: <what this cycle did> (#<number>)"
-   git push origin <type>/<number>-<slug>
+   git push -u origin <type>/<number>-<slug>
    ```
    If the push fails, keep working, and push again at Step 6; if that push fails too,
    name both in the report.
