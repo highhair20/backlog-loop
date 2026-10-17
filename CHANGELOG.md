@@ -18,6 +18,12 @@ removes it from a repo made with "Use this template", and sync never copies it.
 
 ### Added
 
+- A seeded workflow, `clear-closed-labels.yml`, and the managed
+  `scripts/clear-closed-labels.sh` take the loop's status labels (`in-progress`,
+  `in-review`, `blocked`, `needs-attention`, `heal:proposed`, `heal:approved`) off an
+  issue when it closes, completed or not planned. Before, a merged loop PR left its
+  closed issue reading `in-review`. A failed label edit fails the run (#118).
+
 - `/file-issue <one-line idea>` (the new managed `.claude/commands/file-issue.md`)
   drafts an issue in the issue forms' format. It checks open and closed issues for
   duplicates, reads the code the idea touches, proposes one priority with a reason,
@@ -93,6 +99,12 @@ removes it from a repo made with "Use this template", and sync never copies it.
   of the review, and a session that tried to update it was refused (#116).
 
 ### Manual steps for existing repos
+
+- **Closed-issue labels (#118):** a re-sync adds the new workflow and script. To clear
+  issues closed before it, run once from the repo root:
+  `gh issue list --state closed --limit 1000 --json number --jq '.[].number' | xargs -n1 scripts/clear-closed-labels.sh`.
+  `docs/ISSUE_GUIDE.md` is seeded, so its Lifecycle section keeps the old wording;
+  copy the new sentence from the template if you want it.
 
 - **Session lock and clone ID (#108):** add `Bash(scripts/loop-lock.sh clone-id)`,
   `Bash(scripts/loop-lock.sh acquire-session *)`,

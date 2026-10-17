@@ -29,6 +29,7 @@ MANAGED=(
   .claude/commands/work-next-item.md
   scripts/backlog-loop.sh
   scripts/check-verify-section.sh
+  scripts/clear-closed-labels.sh
   scripts/gh-auth-check.sh
   scripts/gh-repo.sh
   scripts/loop-lock.sh
@@ -49,6 +50,7 @@ SEEDED=(
   docs/ISSUE_GUIDE.md
   .github/workflows/ci.yml
   .github/workflows/ready-to-merge.yml
+  .github/workflows/clear-closed-labels.yml
   .github/ISSUE_TEMPLATE/bug.yml
   .github/ISSUE_TEMPLATE/feature.yml
   .github/ISSUE_TEMPLATE/config.yml

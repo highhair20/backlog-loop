@@ -75,6 +75,8 @@ check "copies loop-lock.sh, executable" "[ -x '$T/scripts/loop-lock.sh' ]"
 check "copies report-drained.sh, executable" "[ -x '$T/scripts/report-drained.sh' ]"
 check "copies ready-to-merge.sh, executable" "[ -x '$T/scripts/ready-to-merge.sh' ]"
 check "seeds the ready-to-merge workflow" "[ -f '$T/.github/workflows/ready-to-merge.yml' ]"
+check "copies clear-closed-labels.sh, executable" "[ -x '$T/scripts/clear-closed-labels.sh' ]"
+check "seeds the clear-closed-labels workflow" "[ -f '$T/.github/workflows/clear-closed-labels.yml' ]"
 # The driver and setup.sh call it to check gh auth.
 check "copies gh-auth-check.sh, executable" "[ -x '$T/scripts/gh-auth-check.sh' ]"
 # The driver and setup.sh call it to pick the repo they act on (#17).
