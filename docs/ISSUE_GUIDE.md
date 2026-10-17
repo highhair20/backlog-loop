@@ -124,4 +124,7 @@ The loop takes the highest-priority actionable issue → claims it (`in-progress
 commands in `CLAUDE.md` pass → opens a PR with `Closes #NN` **assigned** to the
 maintainer (a sole maintainer cannot be review-requested on their own PR) →
 swaps to `in-review`. It **never merges and never pushes to `main`**. Merge is
-the maintainer's manual step.
+the maintainer's manual step. Closing an issue, for any reason, clears its status
+labels (`in-progress`, `in-review`, `blocked`, `needs-attention`, `heal:proposed`,
+`heal:approved`): the `clear-closed-labels.yml` workflow removes them, and keeps
+priority, type, `needs-infra` and `no-auto-heal`.
