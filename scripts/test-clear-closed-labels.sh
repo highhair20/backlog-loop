@@ -87,7 +87,7 @@ done
 # The workflow: every close, whatever its reason, with the least permission it needs.
 WF="$ROOT/.github/workflows/clear-closed-labels.yml"
 check "the workflow runs when an issue closes" "[ -f '$WF' ] && grep -qE '^  issues:' '$WF' && grep -qE 'types: \\[closed\\]' '$WF'"
-check "it runs for every close reason, not planned included (no state_reason filter)" "! grep -q 'state_reason' '$WF'"
+check "it runs for every close reason, not planned included (no state_reason or if: filter)" "! grep -q 'state_reason' '$WF' && ! grep -qE '^ +if:' '$WF'"
 check "it can write issues and read contents, nothing more" "[ \"\$(sed -n '/^permissions:/,/^[a-z]/p' '$WF' | grep -cE '^  [a-z-]+:')\" -eq 2 ] && grep -qE '^  issues: write' '$WF' && grep -qE '^  contents: read' '$WF'"
 check "it checks out the default branch, pinned by SHA, without persisting credentials" "grep -qE 'actions/checkout@[0-9a-f]{40}' '$WF' && grep -q 'default_branch' '$WF' && grep -q 'persist-credentials: false' '$WF'"
 check "the issue number reaches the script through the environment, not the run line" "grep -q 'ISSUE: \${{ github.event.issue.number }}' '$WF' && grep -q 'scripts/clear-closed-labels.sh \"\$ISSUE\"' '$WF'"

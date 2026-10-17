@@ -32,7 +32,8 @@ fi
 # Matched whole, so a label that merely contains a status name stays.
 remove=""
 for l in $STATUS_LABELS; do
-  if printf '%s\n' "$labels" | grep -qxF -- "$l"; then remove="${remove:+$remove,}$l"; fi
+  # A here-string, not a pipe: grep -q exiting early cannot fail a printf under pipefail.
+  if grep -qxF -- "$l" <<<"$labels"; then remove="${remove:+$remove,}$l"; fi
 done
 
 if [ -z "$remove" ]; then
