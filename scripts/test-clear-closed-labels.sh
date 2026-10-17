@@ -95,7 +95,7 @@ check "--all-closed fails when it cannot list the closed issues" "[ $rc -eq 1 ] 
 N="$(setup backfill-limit)"
 printf '3\n5\n7\n' >"$N/list-in-review"; printf 'in-review\n' >"$N/labels-3"; printf 'in-review\n' >"$N/labels-5"; printf 'in-review\n' >"$N/labels-7"
 PATH="$N/bin:$PATH" GH_REPO=o/r CLEAR_CLOSED_LIMIT=2 "$HERE/clear-closed-labels.sh" --all-closed >"$N/out" 2>&1; rc=$?
-check "--all-closed fails, saying so, when a listing has more than its limit" "[ $rc -eq 1 ] && grep -q 'may have more' '$N/out'"
+check "--all-closed fails, saying so, when a listing has more than its limit" "[ $rc -eq 1 ] && grep -q 'more than its limit' '$N/out'"
 check "it asks for one more than the limit, to tell 'exactly the limit' from 'more'" "grep -q -- '--limit 3 ' '$N/calls'"
 P="$(setup backfill-exact)"
 printf '3\n5\n' >"$P/list-in-review"; printf 'in-review\n' >"$P/labels-3"; printf 'in-review\n' >"$P/labels-5"
@@ -103,6 +103,11 @@ PATH="$P/bin:$PATH" GH_REPO=o/r CLEAR_CLOSED_LIMIT=2 "$HERE/clear-closed-labels.
 check "a listing of exactly the limit is complete, not a failure" "[ $rc -eq 0 ] && ! grep -q 'may have more' '$P/out' && [ \$(edits '$P') -eq 2 ]"
 PATH="$N/bin:$PATH" GH_REPO=o/r CLEAR_CLOSED_LIMIT=abc "$HERE/clear-closed-labels.sh" --all-closed >"$N/out" 2>&1; rc=$?
 check "a CLEAR_CLOSED_LIMIT that is not a number is a usage error" "[ $rc -eq 2 ] && grep -q 'CLEAR_CLOSED_LIMIT' '$N/out'"
+PATH="$N/bin:$PATH" GH_REPO=o/r CLEAR_CLOSED_LIMIT=00 "$HERE/clear-closed-labels.sh" --all-closed >"$N/out" 2>&1; rc=$?
+check "a zero CLEAR_CLOSED_LIMIT, however padded, is a usage error" "[ $rc -eq 2 ]"
+: >"$N/calls"
+PATH="$N/bin:$PATH" GH_REPO=o/r CLEAR_CLOSED_LIMIT=08 "$HERE/clear-closed-labels.sh" --all-closed >"$N/out" 2>&1; rc=$?
+check "a zero-padded CLEAR_CLOSED_LIMIT is read as decimal, not octal" "grep -q -- '--limit 9 ' '$N/calls' && ! grep -q 'value too great' '$N/out'"
 O="$(setup backfill-none)"
 run "$O" --all-closed; rc=$?
 check "--all-closed with nothing to clear succeeds and edits nothing" "[ $rc -eq 0 ] && [ \$(edits '$O') -eq 0 ] && grep -q 'looked at 0 closed issue' '$O/out'"

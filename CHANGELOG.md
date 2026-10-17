@@ -25,8 +25,12 @@ removes it from a repo made with "Use this template", and sync never copies it.
   claim lost its race, and the 10-minute rule never names it the holder (#123).
 - Give up, a follow-up's hand-back and Step 3's retiring of a leftover branch renew the
   lock first, like every other commit and push (#123).
-- `clear-closed-labels.sh --all-closed` exits non-zero when a listing reaches its
-  limit, so the manual workflow run does not go green while issues stay labelled (#123).
+- `clear-closed-labels.sh --all-closed` exits non-zero when a listing has more issues
+  than its limit, so the manual workflow run does not go green while issues stay
+  labelled. A zero-padded `CLEAR_CLOSED_LIMIT` is read as decimal (#123).
+- `scripts/loop-lock.sh`: a driver taking over its own stale lock (`adopt`) now marks
+  the reclaim marker it holds, so a run killed meanwhile removes it, and warns if it
+  cannot (#123).
 
 ### Manual steps for existing repos
 

@@ -267,12 +267,13 @@ reclaim_blocked() {
 adopt() {
   mkdir "$LOCK/reclaiming" 2>/dev/null || { reclaim_blocked "PID $1"; return 1; }
   MARKER_HELD=1
-  if ! rmdir "$LOCK/reclaiming" 2>/dev/null; then
-    echo "✗ Could not remove $LOCK/reclaiming after taking over the lock left under PID $1." >&2
-    how_to_clear
-    return 1
+  # The lock is this run's either way. A marker it cannot remove (the EXIT trap tries
+  # again) would only stop a later reclaim, so say so rather than refuse to start.
+  if rmdir "$LOCK/reclaiming" 2>/dev/null; then
+    MARKER_HELD=0
+  else
+    echo "loop-lock: could not remove $LOCK/reclaiming; if it outlives this run, remove it by hand" >&2
   fi
-  MARKER_HELD=0
   echo "↻ Reclaimed a stale backlog-loop lock: an earlier run left it under this PID ($1)." >&2
 }
 

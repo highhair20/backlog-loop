@@ -491,7 +491,9 @@ check "a resumed branch with no commits of its own redoes Steps 3.5 to 3.7 and 5
 # --- v0.2.0 fixes (#123) ---
 check "a dry run, which holds no lock, skips every renew" "printf '%s' \"\$pre0_flat\" | grep -q 'A dry run, which holds no lock, skips every renew'"
 check "the renew list covers Give up, a hand-back and Step 3's branch retirement" "printf '%s' \"\$pre0_flat\" | grep -q 'Give up (its commit, its pushes and its branch deletion), a hand-back, and Step 3.s retiring of a leftover branch'"
-check "Step 0's 10-minute rule skips every race loser it can tell from the comments" "printf '%s' \"\$step0_flat\" | grep -q 'posted after a confirmed claim less than 3 hours old' && printf '%s' \"\$step0_flat\" | grep -q 'the same second as one with a larger .run=.' && printf '%s' \"\$step0_flat\" | grep -q 'same clone as that claim.s run'"
+check "Step 0's 10-minute rule skips every race loser it can tell from the comments" "printf '%s' \"\$step0_flat\" | grep -q 'posted after a confirmed claim less than 3 hours old' && printf '%s' \"\$step0_flat\" | grep -q 'the same second as one with a smaller .run=.' && printf '%s' \"\$step0_flat\" | grep -q 'same clone as that claim.s run'"
+check "the no-confirmed-claim rule uses the same rival and tie-break as the 10-minute rule" "printf '%s' \"\$step0_flat\" | grep -q 'unless it is a race loser, as defined above'"
+check "the in-step renews point to Keep the lock and stop at once on failure" "[ \$(grep -c 'renew the lock as \*\*Keep the lock\*\* says, and if the renew fails, stop at once' '$CMD') -eq 3 ] && ! grep -q 'change nothing, and report it' '$CMD'"
 check "Step 0 judges a rival's clone against the claim, never against the run judging" "! printf '%s' \"\$step0_flat\" | grep -q 'not your own clone when both are real clone IDs). That one lost'"
 check "a dry run never runs renew-session" "printf '%s' \"\$dry_flat\" | grep -q 'Never run .scripts/loop-lock.sh renew-session.'"
 check "Keep the lock says Give up, a hand-back and Step 3's retirement renew once, at their start" "printf '%s' \"\$pre0_flat\" | grep -q 'renew once, at their start'"

@@ -434,7 +434,7 @@ mkdir -p "$SHIMS/failrmdir"
 printf '#!/bin/sh\nexit 1\n' >"$SHIMS/failrmdir/rmdir"
 chmod +x "$SHIMS/failrmdir/rmdir"
 PATH="$SHIMS/failrmdir:$PATH" "$AD/scripts/loop-lock.sh" acquire $$ >"$AD/out" 2>&1; rc=$?
-check "adopt fails, saying so, when it cannot remove the reclaim marker" "[ $rc -ne 0 ] && grep -q 'Could not remove' '$AD/out' && ! grep -q 'Reclaimed' '$AD/out'"
+check "adopt still takes over its own stale lock when it cannot remove the marker, and warns" "[ $rc -eq 0 ] && grep -q 'could not remove' '$AD/out' && [ \"\$(cat '$AD/.git/backlog-loop.lock/pid')\" = $$ ]"
 
 # --- errors are not reported as "held", and never pass ---
 N="$WORK/not-a-repo"
