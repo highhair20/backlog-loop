@@ -287,29 +287,34 @@ acquire_session() {
   settle_then_take run "$1 $now" "${BACKLOG_LOOP_PID:-}" "$1"
 }
 
-# Run "$2..." with the reclaim marker held, if the lock is still run $1's; reclaim()
-# takes the same marker, so the lock cannot be reclaimed (or taken) part-way through.
-# Returns 1, changing nothing, when the lock is gone, is another run's, or another run
-# is reclaiming it.
-# Take the reclaim marker in run $1's own lock. Another run's marker sits there only
-# for a moment (a reclaim, or a renew or release by a run that then finds the lock is
-# not its own), so try again before deciding. Returns 0 when taken; 1 when the lock is
-# gone or a marker stays (another run is reclaiming it); 3 when our own lock, with no
-# marker in it, still refuses one: it cannot be written.
+# Take the reclaim marker in run $1's own lock. Only a run the lock names takes it, so
+# a run that lost its lock never puts a marker in another run's. A reclaimer's marker
+# sits there only for a moment, so try again before deciding. Returns 0 when taken;
+# 1 when the lock is gone, is not run $1's, or a marker stays (another run is
+# reclaiming it); 3 when run $1's own lock, with no marker in it before or after,
+# refuses one: it cannot be written.
 MARKER_TRIES=3
 take_marker() {
   local i=1
-  while ! mkdir "$LOCK/reclaiming" 2>/dev/null; do
-    [ -d "$LOCK" ] || return 1
-    if [ "$i" -ge "$MARKER_TRIES" ]; then
-      { [ ! -e "$LOCK/reclaiming" ] && held_by "" "$1"; } && return 3
-      return 1
+  while :; do
+    held_by "" "$1" || return 1
+    if [ ! -e "$LOCK/reclaiming" ]; then
+      mkdir "$LOCK/reclaiming" 2>/dev/null && return 0
+      if [ ! -e "$LOCK/reclaiming" ]; then
+        held_by "" "$1" && return 3
+        return 1
+      fi
     fi
+    [ "$i" -ge "$MARKER_TRIES" ] && return 1
     i=$((i + 1))
     sleep 1
   done
 }
 
+# Run "$2..." with the reclaim marker held, if the lock is still run $1's; reclaim()
+# takes the same marker, so the lock cannot be reclaimed (or taken) part-way through.
+# Returns take_marker's 1 or 3, changing nothing, when it cannot take the marker;
+# otherwise what "$2..." returns.
 as_holder() {
   local run="$1" rc
   shift
@@ -328,10 +333,12 @@ lost_lock() {
 }
 
 # Write a fresh time into run $1's lock. Replaced by a rename, so no reader sees it half-written.
-# Returns 3 if it cannot write.
+# Returns 3 if it cannot write, after printing why.
 refresh() {
-  { echo "$1 $2" >"$LOCK/run.new" && mv "$LOCK/run.new" "$LOCK/run"; } 2>/dev/null && return 0
+  local err
+  err="$({ echo "$1 $2" >"$LOCK/run.new" && mv "$LOCK/run.new" "$LOCK/run"; } 2>&1)" && return 0
   rm -f "$LOCK/run.new"
+  [ -z "$err" ] || echo "loop-lock: $err" >&2
   return 3
 }
 
@@ -372,7 +379,11 @@ release_session() {
     3) echo "loop-lock: not releasing $LOCK: could not write it" >&2; return 1 ;;
     *)
       [ -d "$LOCK" ] || return 0
-      echo "loop-lock: not releasing $LOCK: another run is reclaiming it" >&2
+      if held_by "" "$1"; then
+        echo "loop-lock: not releasing $LOCK: another run is reclaiming it" >&2
+      else
+        echo "loop-lock: not releasing $LOCK: run $1 does not hold it" >&2
+      fi
       return 1
       ;;
   esac

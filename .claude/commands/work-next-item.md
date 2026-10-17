@@ -1033,7 +1033,8 @@ git switch -c <type>/<number>-<slug>
    git commit -m "<type>: <what this cycle did> (#<number>)"
    git push -u origin <type>/<number>-<slug>
    ```
-   If the branch's first push fails, run it once more; if that fails too, follow
+   If the branch's first push fails (the one that creates it on the remote; a branch
+   Step 0 resumed from the remote is past it), run it once more; if that fails too, follow
    **Give up**: a runner that cannot push would only waste the rest of the work, and
    Step 4 no longer pushes to find that out early. A later cycle's push that fails:
    keep working, and Step 6 pushes again (and stops the run if that fails twice).
@@ -1146,6 +1147,10 @@ Closes #<number>
 PRBODY
 )"
 ```
+
+The review loop the hooks open once the PR exists pushes its fixes to this branch:
+renew the lock before each of those commits too (**Keep the lock**), and stop if the
+renew fails.
 
 ## Step 8 — Update state & report
 

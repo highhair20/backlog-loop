@@ -316,13 +316,30 @@ check "release-session leaves no lock and no marker behind" "[ $rc -eq 0 ] && [ 
 # the lock only after taking the marker): the holder waits it out instead of stopping.
 plant_session "$Y" run-y "$NOW"
 mkdir "$YLOCK/reclaiming"
-( sleep 0.5; rmdir "$YLOCK/reclaiming" ) &
+( sleep 0.2; rmdir "$YLOCK/reclaiming" ) &
+bg=$!
 "$Y/scripts/loop-lock.sh" renew-session run-y >"$Y/out" 2>&1; rc=$?
+wait "$bg"
 check "renew-session waits out another run's passing marker" "[ $rc -eq 0 ] && [ \"\$(ls '$YLOCK')\" = run ]"
 mkdir "$YLOCK/reclaiming"
-( sleep 0.5; rmdir "$YLOCK/reclaiming" ) &
+( sleep 0.2; rmdir "$YLOCK/reclaiming" ) &
+bg=$!
 "$Y/scripts/loop-lock.sh" release-session run-y >"$Y/out" 2>&1; rc=$?
+wait "$bg"
 check "release-session waits out another run's passing marker" "[ $rc -eq 0 ] && [ ! -e '$YLOCK' ]"
+
+# A run that does not hold the lock never puts a marker in it: another run's renew or
+# release would then find a marker that is not a reclaim, and stop.
+MK="$WORK/shims/mkdirlog"
+mkdir -p "$MK"
+# shellcheck disable=SC2016  # expanded by the shim, not here
+printf '#!/bin/sh\necho "$@" >>"%s/calls"\nexec /bin/mkdir "$@"\n' "$MK" >"$MK/mkdir"
+chmod +x "$MK/mkdir"
+plant_session "$Y" run-y "$NOW"
+PATH="$MK:$PATH" "$Y/scripts/loop-lock.sh" renew-session run-z >/dev/null 2>&1
+PATH="$MK:$PATH" "$Y/scripts/loop-lock.sh" release-session run-z >/dev/null 2>&1
+check "renew and release by a run that does not hold the lock never take its marker" "! grep -q reclaiming '$MK/calls' 2>/dev/null && grep -q '^run-y ' '$YLOCK/run'"
+rm -rf "$YLOCK"
 
 # A clone ID that cannot be created is named as such, not as a corrupt file.
 if [ "$(id -u)" -ne 0 ]; then
