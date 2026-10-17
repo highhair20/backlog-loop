@@ -451,8 +451,10 @@ Releases are tagged by the maintainer, by hand. The committed deny rules block t
 loop from pushing a `v*` tag, on purpose.
 
 1. In a PR, rename `## [Unreleased]` in `CHANGELOG.md` to `## [X.Y.Z] - YYYY-MM-DD`,
-   add a fresh empty `## [Unreleased]` section above it, and update the compare
-   links at the bottom. Pick the version by [Semantic Versioning](https://semver.org/);
+   dated the day you will tag it. Add a fresh `## [Unreleased]` section above it,
+   holding only `### Manual steps for existing repos` and `None.` (the tests want one
+   in every section). Update the links at the bottom: `[Unreleased]` compares from
+   `vX.Y.Z`, and `[X.Y.Z]` from the release before it. Pick the version by [Semantic Versioning](https://semver.org/);
    before 1.0.0, a change to the deny rules or the `CLAUDE.md` contract is a minor bump.
 2. Merge the PR.
 3. Tag the merge commit on `main` and push the tag:
