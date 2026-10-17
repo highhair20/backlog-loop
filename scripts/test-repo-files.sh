@@ -271,18 +271,28 @@ every_section_has_manual_steps() {
   ' "$CHANGELOG"
 }
 check "every CHANGELOG.md section has manual steps for existing repos" "every_section_has_manual_steps"
-# Every version heading has a link, and Unreleased compares from the newest version.
+# Every release heading is `## [X.Y.Z] - YYYY-MM-DD`, and each has its exact link: the
+# oldest to its tag, every later one compared from the release before it, and
+# Unreleased compared from the newest. Links are matched as fixed strings.
 every_version_is_linked() {
-  local v newest
-  newest="$(sed -n 's/^## \[\([0-9][0-9.]*\)\] - .*/\1/p' "$CHANGELOG" | head -1)"
-  [ -n "$newest" ] || return 1
-  grep -qF "[Unreleased]: https://github.com/highhair20/backlog-loop/compare/v$newest...HEAD" "$CHANGELOG" || return 1
-  for v in $(sed -n 's/^## \[\([0-9][0-9.]*\)\] - .*/\1/p' "$CHANGELOG"); do
-    grep -qE "^\[$v\]: https://github.com/highhair20/backlog-loop/(releases/tag/v$v|compare/v[0-9.]+\.\.\.v$v)\$" "$CHANGELOG" || return 1
+  local base=https://github.com/highhair20/backlog-loop versions v prev=""
+  # Any other `## [` heading but Unreleased (undated, a pre-release) is malformed.
+  [ -z "$(grep '^## \[' "$CHANGELOG" | grep -vx '## \[Unreleased\]' |
+    grep -vE '^## \[[0-9]+\.[0-9]+\.[0-9]+\] - [0-9]{4}-[0-9]{2}-[0-9]{2}$')" ] || return 1
+  versions="$(sed -n 's/^## \[\([0-9][0-9.]*\)\] - .*/\1/p' "$CHANGELOG")"
+  [ -n "$versions" ] || return 1
+  grep -qxF "[Unreleased]: $base/compare/v${versions%%$'\n'*}...HEAD" "$CHANGELOG" || return 1
+  # Oldest first (the file lists newest first).
+  for v in $(printf '%s\n' "$versions" | sed '1!G;h;$!d'); do
+    if [ -z "$prev" ]; then
+      grep -qxF "[$v]: $base/releases/tag/v$v" "$CHANGELOG" || return 1
+    else
+      grep -qxF "[$v]: $base/compare/v$prev...v$v" "$CHANGELOG" || return 1
+    fi
+    prev="$v"
   done
 }
-check "CHANGELOG.md links each version heading" "every_version_is_linked"
-check "the first release links to its tag" "grep -qF '[0.1.0]: https://github.com/highhair20/backlog-loop/releases/tag/v0.1.0' '$CHANGELOG'"
+check "CHANGELOG.md's release headings are well formed and each links to its exact range" "every_version_is_linked"
 check "README says how to cut a release" "grep -qx '### Cutting a release' '$ROOT/README.md' && grep -qF 'git tag -a vX.Y.Z' '$ROOT/README.md'"
 check "README's file list includes the changelog" "grep -qE '^CHANGELOG\\.md[[:space:]]' '$ROOT/README.md'"
 
