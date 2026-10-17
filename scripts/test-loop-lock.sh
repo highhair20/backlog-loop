@@ -192,7 +192,7 @@ check "a driver is refused while a session holds the lock" "[ $rc -eq 1 ] && gre
 "$E/scripts/loop-lock.sh" check >"$E/out" 2>&1; rc=$?
 check "check fails while a session holds the lock" "[ $rc -eq 1 ] && grep -q 'holds the lock' '$E/out'"
 "$E/scripts/loop-lock.sh" release-session run-b >"$E/out" 2>&1; rc=$?
-check "release-session by another run fails and keeps the lock" "[ $rc -eq 1 ] && [ \"\$(cut -d' ' -f1 '$ELOCK/run')\" = run-a ]"
+check "release-session by another run fails, says so, and keeps the lock" "[ $rc -eq 1 ] && grep -q 'run run-b does not hold it' '$E/out' && [ \"\$(cut -d' ' -f1 '$ELOCK/run')\" = run-a ]"
 "$E/scripts/loop-lock.sh" release-session run-a >"$E/out" 2>&1; rc=$?
 check "release-session by its run removes the lock" "[ $rc -eq 0 ] && [ ! -e '$ELOCK' ]"
 "$E/scripts/loop-lock.sh" release-session run-a >"$E/out" 2>&1; rc=$?
@@ -297,7 +297,7 @@ mkdir "$YLOCK/reclaiming"
 "$Y/scripts/loop-lock.sh" renew-session run-y >"$Y/out" 2>&1; rc=$?
 check "renew-session fails while another run is reclaiming the lock" "[ $rc -eq 1 ] && [ \"\$(cut -d' ' -f2 '$YLOCK/run')\" = $((NOW - 10900)) ]"
 "$Y/scripts/loop-lock.sh" release-session run-y >"$Y/out" 2>&1; rc=$?
-check "release-session never deletes a lock another run is reclaiming" "[ $rc -eq 1 ] && [ -d '$YLOCK/reclaiming' ] && grep -q 'run-y' '$YLOCK/run'"
+check "release-session never deletes a lock another run is reclaiming, and says so" "[ $rc -eq 1 ] && grep -q 'another run is reclaiming it' '$Y/out' && [ -d '$YLOCK/reclaiming' ] && grep -q 'run-y' '$YLOCK/run'"
 rm -rf "$YLOCK"
 "$Y/scripts/loop-lock.sh" acquire $$ >/dev/null 2>&1
 BACKLOG_LOOP_PID=$$ "$Y/scripts/loop-lock.sh" renew-session run-y >"$Y/out" 2>&1; rc=$?
@@ -336,9 +336,12 @@ mkdir -p "$MK"
 printf '#!/bin/sh\necho "$@" >>"%s/calls"\nexec /bin/mkdir "$@"\n' "$MK" >"$MK/mkdir"
 chmod +x "$MK/mkdir"
 plant_session "$Y" run-y "$NOW"
-PATH="$MK:$PATH" "$Y/scripts/loop-lock.sh" renew-session run-z >/dev/null 2>&1
-PATH="$MK:$PATH" "$Y/scripts/loop-lock.sh" release-session run-z >/dev/null 2>&1
-check "renew and release by a run that does not hold the lock never take its marker" "! grep -q reclaiming '$MK/calls' 2>/dev/null && grep -q '^run-y ' '$YLOCK/run'"
+: >"$MK/calls"
+PATH="$MK:$PATH" "$Y/scripts/loop-lock.sh" renew-session run-z >"$Y/out" 2>&1; rc1=$?
+PATH="$MK:$PATH" "$Y/scripts/loop-lock.sh" release-session run-z >>"$Y/out" 2>&1; rc2=$?
+check "renew and release by a run that does not hold the lock never take its marker" "[ $rc1 -eq 1 ] && [ $rc2 -eq 1 ] && ! grep -q reclaiming '$MK/calls' && grep -q '^run-y ' '$YLOCK/run'"
+PATH="$MK:$PATH" "$Y/scripts/loop-lock.sh" renew-session run-y >/dev/null 2>&1; rc=$?
+check "while the holder's own renew does take it (the shim sees mkdir)" "[ $rc -eq 0 ] && grep -q reclaiming '$MK/calls'"
 rm -rf "$YLOCK"
 
 # A clone ID that cannot be created is named as such, not as a corrupt file.
@@ -384,7 +387,7 @@ check "a reclaim whose move fails keeps the lock and leaves no marker" "[ $rc -e
 FR="$(new_repo failed-release)"
 plant_session "$FR" run-y "$NOW"
 PATH="$SHIMS/failmv:$PATH" "$FR/scripts/loop-lock.sh" release-session run-y >"$FR/out" 2>&1; rc=$?
-check "a release whose move fails says so, keeps the lock and leaves no marker" "[ $rc -eq 1 ] && grep -q 'could not remove' '$FR/out' && grep -q '^run-y ' '$FR/.git/backlog-loop.lock/run' && [ ! -e '$FR/.git/backlog-loop.lock/reclaiming' ]"
+check "a release whose move fails exits 2, says so, keeps the lock and leaves no marker" "[ $rc -eq 2 ] && grep -q 'could not remove' '$FR/out' && grep -q '^run-y ' '$FR/.git/backlog-loop.lock/run' && [ ! -e '$FR/.git/backlog-loop.lock/reclaiming' ]"
 
 HA="$(new_repo holder-acquire)"
 plant_session "$HA" run-h $((NOW - 10900))
@@ -401,13 +404,28 @@ if [ "$(id -u)" -ne 0 ]; then
   chmod a-w "$WF/.git/backlog-loop.lock"
   "$WF/scripts/loop-lock.sh" renew-session run-w >"$WF/out" 2>&1; rc=$?
   chmod u+w "$WF/.git/backlog-loop.lock"
-  check "a renew that cannot write says so, not that the lock was lost" "[ $rc -eq 1 ] && grep -q 'could not write' '$WF/out' && ! grep -q 'no longer holds' '$WF/out' && [ ! -e '$WF/.git/backlog-loop.lock/run.new' ]"
+  check "a renew that cannot write exits 2 with the OS reason, not that the lock was lost" "[ $rc -eq 2 ] && grep -q 'could not write' '$WF/out' && grep -qi 'permission denied' '$WF/out' && ! grep -q 'no longer holds' '$WF/out' && [ ! -e '$WF/.git/backlog-loop.lock/run.new' ]"
+  chmod a-w "$WF/.git/backlog-loop.lock"
+  "$WF/scripts/loop-lock.sh" release-session run-w >"$WF/out" 2>&1; rc=$?
+  chmod u+w "$WF/.git/backlog-loop.lock"
+  check "a release that cannot write exits 2, says so, and keeps the lock" "[ $rc -eq 2 ] && grep -q 'could not write it' '$WF/out' && grep -q '^run-w ' '$WF/.git/backlog-loop.lock/run'"
 fi
 
 RW="$(new_repo refresh-fail)"
 plant_session "$RW" run-r "$NOW"
 PATH="$SHIMS/failmv:$PATH" "$RW/scripts/loop-lock.sh" renew-session run-r >"$RW/out" 2>&1; rc=$?
-check "a renew whose rename fails says it could not write, and leaves no temp file or marker" "[ $rc -eq 1 ] && grep -q 'could not write' '$RW/out' && [ \"\$(ls '$RW/.git/backlog-loop.lock')\" = run ]"
+check "a renew whose rename fails exits 2, and leaves no temp file or marker" "[ $rc -eq 2 ] && grep -q 'could not write' '$RW/out' && [ \"\$(ls '$RW/.git/backlog-loop.lock')\" = run ]"
+mkdir -p "$SHIMS/boommv"
+printf '#!/bin/sh\necho "mv: boom" >&2\nexit 1\n' >"$SHIMS/boommv/mv"
+chmod +x "$SHIMS/boommv/mv"
+PATH="$SHIMS/boommv:$PATH" "$RW/scripts/loop-lock.sh" renew-session run-r >"$RW/out" 2>&1; rc=$?
+check "a renew whose rename fails prints the OS reason" "[ $rc -eq 2 ] && grep -q 'mv: boom' '$RW/out' && [ \"\$(ls '$RW/.git/backlog-loop.lock')\" = run ]"
+
+LV="$(new_repo reclaim-precheck)"
+plant_session "$LV" run-live "$NOW"
+: >"$MK/calls"
+PATH="$MK:$PATH" "$LV/scripts/loop-lock.sh" acquire-session run-new >"$LV/out" 2>&1; rc=$?
+check "a run refused by a live lock puts no marker in it" "[ $rc -eq 1 ] && ! grep -q reclaiming '$MK/calls'"
 
 # --- errors are not reported as "held", and never pass ---
 N="$WORK/not-a-repo"

@@ -1034,9 +1034,11 @@ git switch -c <type>/<number>-<slug>
    git push -u origin <type>/<number>-<slug>
    ```
    If the branch's first push fails (the one that creates it on the remote; a branch
-   Step 0 resumed from the remote is past it), run it once more; if that fails too, follow
-   **Give up**: a runner that cannot push would only waste the rest of the work, and
-   Step 4 no longer pushes to find that out early. A later cycle's push that fails:
+   Step 0 resumed from the remote is past it), run it once more; if that fails too, stop and report it, keeping the claim and the branch:
+   a runner that cannot push would only waste the rest of the work, and Step 4 no
+   longer pushes to find that out early. Not Give up: its save is a push too, and would
+   fail the same way. A later run in this clone resumes the branch (Step 0); a push
+   that keeps failing is a setup problem (see the guardrails), not this issue's. A later cycle's push that fails:
    keep working, and Step 6 pushes again (and stops the run if that fails twice).
 4. The change is **done** only when every command in CLAUDE.md `## Verify` that
    applies to the changed paths passes locally, **and** every check in
@@ -1075,9 +1077,11 @@ git push -u origin <type>/<number>-<slug>
 
 If `git status --porcelain` lists nothing, Step 5 already committed everything: there
 is nothing to commit, so skip the commit and only push. Push now, before review: Step 0
-can only recover what exists on the remote. If the push fails, run it once more; if that fails too, stop: open no PR, which
-would leave the work only in this checkout. Follow **Give up**, which saves it under
-`abandoned/` if it can and says where it is if it cannot.
+can only recover what exists on the remote. If the push fails, run it once more; if that fails too, stop: open no PR.
+Report it, keeping the claim and the branch with its commits: Give up's save is a push
+too and would fail the same way, and a later run in this clone resumes the branch
+(Step 0). In a cloud session, say the work exists only in this checkout, which is
+discarded when the session ends.
 
 ## Step 6.5 — Specialist review before the PR
 
@@ -1219,7 +1223,7 @@ actionable issues remain, the loop will continue to the next one.
 
 ## Give up — keep the work, then release the issue
 
-Steps 5, 6 and 6.5 all end here, and so does Step 0 for a rejected PR whose branch remains, and a refused tool call specific to the issue after the claim (a setup problem never comes here; see the guardrails). Step 3 borrows steps 2, 4 and 5 to retire a leftover branch. The branch may be in any state: fresh, resumed by
+Steps 5 and 6.5 both end here, and so does Step 0 for a rejected PR whose branch remains, and a refused tool call specific to the issue after the claim (a setup problem never comes here; see the guardrails). Step 3 borrows steps 2, 4 and 5 to retire a leftover branch. The branch may be in any state: fresh, resumed by
 Step 0 with commits, local-only, or already pushed. Giving up must never destroy
 work silently, and must not leave the issue's branch on the remote. So: save the
 work, then release the issue, then delete branches. An interruption after the

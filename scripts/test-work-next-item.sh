@@ -15,17 +15,24 @@ check() { if eval "$2"; then echo "ok   $1"; else echo "FAIL $1" >&2; failures=$
 # -q reads all its input and discards the output instead, so pipefail stays on and a
 # failing producer still fails its check.
 grep() {
-  local a quiet=0 args=()
+  local a quiet=0 opts=1 args=()
   for a in "$@"; do
-    case "$a" in
-      -q) quiet=1 ;;
-      -q?*) quiet=1; args+=("-${a#-q}") ;;
-      *) args+=("$a") ;;
-    esac
+    if [ "$opts" = 1 ]; then
+      case "$a" in
+        --) opts=0 ;;
+        --quiet|--silent) quiet=1; continue ;;
+        --*) ;;
+        -*q*) quiet=1; a="${a//q/}"; [ "$a" = - ] && continue ;;
+        -*) ;;
+        *) opts=0 ;;
+      esac
+    fi
+    args+=("$a")
   done
   if [ "$quiet" = 1 ]; then command grep "${args[@]}" >/dev/null; else command grep "$@"; fi
 }
-check "grep -q combined with other flags still works" "printf 'Ab\\n' | grep -qiE 'a(b|c)' && ! printf 'Ab\\n' | grep -qx 'a'"
+check "grep -q combined with other flags still works" "printf 'Ab\\n' | grep -qiE 'a(b|c)' && ! printf 'Ab\\n' | grep -qx 'a' && printf 'Ab\\n' | grep -iq 'ab' && printf 'Ab\\n' | grep --quiet 'A' && ! printf 'Ab\\n' | grep -q -- '-q'"
+check "the grep wrapper drops -q wherever it sits, so grep reads all its input" "[ \"\$(printf 'a\\nb\\n' | grep -iq a; echo \$?)\" = 0 ] && [ -z \"\$(printf 'a\\n' | grep -xq a)\" ]"
 check "a failing producer fails a grep -q check even when the text matches" "! ( { printf 'x'; false; } | grep -q x )"
 check "a large section matched early by grep -q still passes" "s=\$(printf 'x%.0s' \$(seq 1 200000)); printf '%s' \"x\$s\" | grep -q x"
 
@@ -469,9 +476,10 @@ check "holds and release comments count only from the loop's own account" "print
 check "a resume whose Steps 3.5 to 3.7 end the work saves and removes the branch first" "printf '%s' \"\$step0_flat\" | grep -q 'If Step 3.5, 3.6 or 3.7 ends the work on a resumed branch.*Give up\*\* steps 1, 2, 4 and 5.*no pushed branch is left behind'"
 check "Step 6 retries a failed push once, then stops" "printf '%s' \"\$(flat \"\$step6\")\" | grep -q 'If the push fails, run it once more; if that fails too, stop'"
 check "a run releases only a lock it took, and still releases after a failed renew" "printf '%s' \"\$pre0_flat\" | grep -q 'once this run has taken it' && printf '%s' \"\$pre0_flat\" | grep -q 'a run stopped by a failed renew still runs it'"
-check "a branch whose first push fails twice gives up at once; a resumed remote branch is past it" "printf '%s' \"\$step5_flat\" | grep -q 'If the branch.s first push fails (.*), run it once more; if that fails too, follow .*Give up' && printf '%s' \"\$step5_flat\" | grep -q 'a branch Step 0 resumed from the remote is past it'"
+check "a branch whose first push fails twice stops, keeping the claim and the branch; a resumed remote branch is past it" "printf '%s' \"\$step5_flat\" | grep -q 'If the branch.s first push fails (.*), run it once more; if that fails too, stop and report it, keeping the claim and the branch' && printf '%s' \"\$step5_flat\" | grep -q 'a branch Step 0 resumed from the remote is past it'"
+check "Step 6's push that fails twice keeps the claim and the branch instead of giving up" "printf '%s' \"\$(flat \"\$step6\")\" | grep -q 'keeping the claim and the branch with its commits' && ! printf '%s' \"\$(flat \"\$step6\")\" | grep -q 'Follow .*Give up'"
 check "Step 7 says the review loop's fix commits renew the lock" "printf '%s' \"\$(flat \"\$(section 'Step 7')\")\" | grep -q 'renew the lock before each of those commits too'"
-check "Give up lists Step 6 among the steps that end there" "printf '%s' \"\$give_up\" | grep -q 'Steps 5, 6 and 6.5 all end here'"
+check "Give up's entry points are Steps 5 and 6.5, not a failed push" "printf '%s' \"\$give_up\" | grep -q 'Steps 5 and 6.5 both end here'"
 check "the review loop's fixes and a follow-up's commits renew the lock" "printf '%s' \"\$pre0_flat\" | grep -q 'the review loop.s fixes after Step 7' && printf '%s' \"\$follow\" | grep -q 'scripts/loop-lock.sh renew-session <run-id>'"
 check "a dry run never takes the same-clone shortcut" "printf '%s' \"\$step0_flat\" | grep -q 'A dry run holds no lock'"
 check "a clone-id failure is reported" "printf '%s' \"\$pre0_flat\" | grep -q 'clone ID is .none., and say why in the report'"
