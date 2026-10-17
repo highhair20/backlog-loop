@@ -427,7 +427,8 @@ plant_session "$LV" run-live "$NOW"
 PATH="$MK:$PATH" "$LV/scripts/loop-lock.sh" acquire-session run-new >"$LV/out" 2>&1; rc=$?
 check "a run refused by a live lock puts no marker in it" "[ $rc -eq 1 ] && ! grep -q reclaiming '$MK/calls'"
 
-# adopt cannot take over a lock whose reclaim marker it cannot remove.
+# adopt still takes over its own stale lock when it cannot remove the reclaim marker:
+# it warns, and leaves the marker to the EXIT trap and a human.
 AD="$(new_repo adopt-stuck)"
 plant_lock "$AD" $$
 mkdir -p "$SHIMS/failrmdir"

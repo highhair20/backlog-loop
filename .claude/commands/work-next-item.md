@@ -293,12 +293,13 @@ after its label (Step 3). The claim that holds the issue is (#108):
 - **a claim newer than the newest confirmed claim (or any claim, with none confirmed)
   that is under 10 minutes old, and not a race loser** (#123): its run may be a winner
   between its label and its holds comment. Take the newest such claim. A claim is a
-  race loser, whatever its age, when it was posted after a confirmed claim less than
-  3 hours old (that run still held the issue, so no later claim could win it), or less
-  than a minute after another runner's claim, or in the same second as one with a
-  smaller `run=`. Another runner's claim has a different `run=` and is not from the
-  same clone as that claim's run (both real clone IDs): one clone's own claims never
-  race each other;
+  race loser, whatever its age, when it was posted less than 3 hours after another
+  runner's confirmed claim (that run still held the issue then, so no later claim
+  could win it), less than a minute after another runner's claim, or in the same
+  second as one with a smaller `run=`. Another runner's claim, here, has a different
+  `run=` and is not from the same clone as the claim being judged (both real clone
+  IDs): one clone's own claims never race each other. These are the losers the
+  comments show; a loser that listed before a rival's claim cannot be told apart;
 - **otherwise, the newest confirmed claim.** A newer unconfirmed claim past 10 minutes
   lost its race (a loser that died before posting its release), or won and died before
   confirming; either way it holds nothing;
@@ -707,7 +708,8 @@ only when `git branch --show-current` prints the PR's branch. Otherwise skip to 
 whatever stopped the follow-up (the round cap before the claim, a failed switch):
 steps 2 and 3 run on `main` would save `main`'s own commits.
 
-First, whichever step you start at, renew the lock as **Keep the lock** says, and if the renew fails, stop at once, as it says.
+First, whichever step you start at, renew the lock as **Keep the lock** says, and if
+the renew fails, stop at once, as it says.
 
 1. Keep any work: abort a half-done merge
    (`git rev-parse -q --verify MERGE_HEAD` prints a hash only when one is in
@@ -836,8 +838,10 @@ to Step 2 for another issue.
 
 **Retire a leftover branch before labelling.** Do this for every leftover branch
 name (a title edit can change the type or slug, so there may be more than one); a
-local and a remote branch with the same name are one. Before the first one, renew the lock as **Keep the lock** says, and if the renew fails, stop at once, as it says. Check it out (the local copy if
-there is one, otherwise fetch the remote one), then run **Give up** steps 2, 4 and 5:
+local and a remote branch with the same name are one. Before the first one, renew the
+lock as **Keep the lock** says, and if the renew fails, stop at once, as it says.
+Check it out (the local copy if there is one, otherwise fetch the remote one), then
+run **Give up** steps 2, 4 and 5:
 save its commits under `abandoned/<number>-<short-sha>`, delete the remote copy only
 once it is proven to hold nothing unsaved, then delete the local branch and return to
 `main`. Skip Give up's step 1 (Step 1 left nothing uncommitted) and step 3 (this
@@ -1250,8 +1254,11 @@ would look claimed, or unexplained, with its work gone. Stop and report it. If
 step 4 or 5 fails, the work is already saved: add a comment naming what is left,
 so a human removes it. Never get past a failure with `--no-verify` or `--force`.
 
-Run these on the issue's branch, `<type>/<number>-<slug>`. Before step 1, renew the lock as **Keep the lock** says, and if the renew fails, stop at once, as it says. The steps then
-run in seconds, so this one renew covers them all (see **Keep the lock**).
+Run these on the issue's branch, `<type>/<number>-<slug>`. Before step 1, renew the
+lock as **Keep the lock** says; the steps then run in seconds, so this one renew covers
+them all. If it says another run holds the lock (exit 1), stop at once, as Keep the
+lock says: that run may be working this branch. If the lock only cannot be written
+(exit 2), go on: no other run holds it, and saving the work is what Give up is for.
 
 1. **Commit anything uncommitted**, so it travels with the branch. A stash would stay
    on this machine, and a cloud session's clone is discarded. First make sure a merge

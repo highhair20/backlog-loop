@@ -70,7 +70,11 @@ all_closed() {
   for l in $STATUS_LABELS; do
     got="$(gh issue list --state closed --label "$l" --limit "$((LIMIT + 1))" --json number --jq '.[].number')" ||
       { err "could not list closed issues labelled $l"; exit 1; }
-    [ "$(printf '%s\n' "$got" | grep -c .)" -le "$LIMIT" ] || full=1
+    # One more than LIMIT means more are waiting: clear the first LIMIT, flag the rest.
+    if [ "$(printf '%s\n' "$got" | grep -c .)" -gt "$LIMIT" ]; then
+      full=1
+      got="$(printf '%s\n' "$got" | head -n "$LIMIT")"
+    fi
     nums="$nums $got"
   done
   # shellcheck disable=SC2086  # $nums is a list of issue numbers
@@ -86,7 +90,7 @@ all_closed() {
 }
 
 [ $# -eq 1 ] || usage
-case "$LIMIT" in ''|*[!0-9]*) echo "clear-closed-labels: CLEAR_CLOSED_LIMIT must be a positive number, not '$LIMIT'" >&2; exit 2 ;; esac
+case "$LIMIT" in ''|*[!0-9]*|????????*) echo "clear-closed-labels: CLEAR_CLOSED_LIMIT must be a positive number of at most 7 digits, not '$LIMIT'" >&2; exit 2 ;; esac
 # Read as decimal: a leading zero would otherwise be octal (08 an error, 010 eight).
 LIMIT=$((10#$LIMIT))
 [ "$LIMIT" -gt 0 ] || { echo "clear-closed-labels: CLEAR_CLOSED_LIMIT must be a positive number, not 0" >&2; exit 2; }
