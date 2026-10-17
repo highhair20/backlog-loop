@@ -1070,7 +1070,7 @@ git push -u origin <type>/<number>-<slug>
 
 If `git status --porcelain` lists nothing, Step 5 already committed everything: there
 is nothing to commit, so skip the commit and only push. Push now, before review: Step 0
-can only recover what exists on the remote. If the push fails, stop: open no PR, which
+can only recover what exists on the remote. If the push fails, run it once more; if that fails too, stop: open no PR, which
 would leave the work only in this checkout. Follow **Give up**, which saves it under
 `abandoned/` if it can and says where it is if it cannot.
 

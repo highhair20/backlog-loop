@@ -321,13 +321,18 @@ if [ "$(id -u)" -ne 0 ]; then
   check "a clone ID that cannot be written is an error saying so" "[ $rc -eq 2 ] && grep -q 'could not' '$Z/out' && ! grep -q 'remove it' '$Z/out'"
 fi
 
-# --- re-review of #119: a dead driver covers nothing; failed moves; the release race ---
+# --- re-review of #119/#120: the driver's lock covers its session by identity; failed moves; the release race ---
+# A session the driver started never judges the driver alive or dead: inside a sandbox
+# that hides other processes, a live driver would look dead and its lock be removed.
+# It goes by what the lock records: once another run has taken it, renew fails.
 DD="$(new_repo dead-driver)"
 plant_lock "$DD" "$DEAD"
-BACKLOG_LOOP_PID=$DEAD "$DD/scripts/loop-lock.sh" renew-session run-o >"$DD/out" 2>&1; rc=$?
-check "a dead driver's lock covers no session: renew fails" "[ $rc -eq 1 ] && [ \"\$(cat '$DD/.git/backlog-loop.lock/pid')\" = '$DEAD' ]"
 BACKLOG_LOOP_PID=$DEAD "$DD/scripts/loop-lock.sh" acquire-session run-o >"$DD/out" 2>&1; rc=$?
-check "a session under a dead driver reclaims its lock and takes its own" "[ $rc -eq 0 ] && grep -q '^run-o ' '$DD/.git/backlog-loop.lock/run'"
+check "a driver's session never removes its driver's lock, whatever it can see of the driver" "[ $rc -eq 0 ] && [ \"\$(cat '$DD/.git/backlog-loop.lock/pid')\" = '$DEAD' ] && [ ! -e '$DD/.git/backlog-loop.lock/run' ]"
+rm -rf "$DD/.git/backlog-loop.lock"
+plant_session "$DD" run-other "$NOW"
+BACKLOG_LOOP_PID=$DEAD "$DD/scripts/loop-lock.sh" renew-session run-o >"$DD/out" 2>&1; rc=$?
+check "once another run has taken its driver's lock, a session's renew fails" "[ $rc -eq 1 ] && grep -q '^run-other ' '$DD/.git/backlog-loop.lock/run'"
 
 # Shims for mv, on PATH for one call: one that fails, one that lets another run take
 # the lock the moment the release has moved it away.

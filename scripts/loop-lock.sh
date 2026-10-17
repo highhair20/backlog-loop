@@ -169,14 +169,15 @@ remove_lock() {
   return 0
 }
 
-# True if the lock is held by $1 (a driver PID, and only while that driver is running:
-# a dead driver's lock covers no session) or $2 (a session's run ID), either of which
-# may be empty: the holders a caller may go on under.
+# True if the lock is held by $1 (a driver PID) or $2 (a session's run ID), either of
+# which may be empty: the holders a caller may go on under. By identity only, never by
+# whether the driver is running: a session sandboxed from other processes would see a
+# live driver as dead and remove its lock. Once another run takes the lock, it no
+# longer records the driver, so the session's next renew fails and it stops.
 held_by() {
   local h
   h="$(holder)"
-  { [ -n "${1:-}" ] && [ "$h" = "pid $1" ] && is_running "$1"; } ||
-    { [ -n "${2:-}" ] && [ "$(run_of "$h")" = "$2" ]; }
+  { [ -n "${1:-}" ] && [ "$h" = "pid $1" ]; } || { [ -n "${2:-}" ] && [ "$(run_of "$h")" = "$2" ]; }
 }
 
 # Deal with an existing lock. Returns 0 when it is gone, or held_by $1 or $2, so the
