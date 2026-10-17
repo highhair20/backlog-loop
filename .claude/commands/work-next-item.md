@@ -288,10 +288,12 @@ off. Of the rest, a claim is **confirmed** when its run also posted a holds comm
 after its label (Step 3). The claim that holds the issue is (#108):
 
 - **a claim newer than the newest confirmed claim (or any claim, with none confirmed)
-  that is under 10 minutes old, and not posted less than a minute after another run's
-  claim** (that one lost its race, as the last rule below says, whatever its age): its
+  that is under 10 minutes old, and not a race loser by Step 3's rule** (#123): one
+  posted less than a minute after a rival's claim, or in the same second with a larger
+  `run=`, a rival being another runner's claim (a different `run=`, and not your own
+  clone when both are real clone IDs). That one lost its race, whatever its age. Its
   run may be a winner between its label and its holds comment. Take the newest such
-  claim (#123);
+  claim;
 - **otherwise, the newest confirmed claim.** A newer unconfirmed claim past 10 minutes
   lost its race (a loser that died before posting its release), or won and died before
   confirming; either way it holds nothing;
@@ -699,6 +701,8 @@ only when `git branch --show-current` prints the PR's branch. Otherwise skip to 
 whatever stopped the follow-up (the round cap before the claim, a failed switch):
 steps 2 and 3 run on `main` would save `main`'s own commits.
 
+Before step 1, renew the lock (`scripts/loop-lock.sh renew-session <run-id>`; see **Keep the lock**). If it fails, another run may hold this branch: change nothing, and report it.
+
 1. Keep any work: abort a half-done merge
    (`git rev-parse -q --verify MERGE_HEAD` prints a hash only when one is in
    progress; then `git merge --abort`), and commit anything left
@@ -826,7 +830,7 @@ to Step 2 for another issue.
 
 **Retire a leftover branch before labelling.** Do this for every leftover branch
 name (a title edit can change the type or slug, so there may be more than one); a
-local and a remote branch with the same name are one. Check it out (the local copy if
+local and a remote branch with the same name are one. Before the first one, renew the lock (`scripts/loop-lock.sh renew-session <run-id>`; see **Keep the lock**). If it fails, another run may hold this branch: change nothing, and report it. Check it out (the local copy if
 there is one, otherwise fetch the remote one), then run **Give up** steps 2, 4 and 5:
 save its commits under `abandoned/<number>-<short-sha>`, delete the remote copy only
 once it is proven to hold nothing unsaved, then delete the local branch and return to
@@ -1039,8 +1043,7 @@ git switch -c <type>/<number>-<slug>
    ```
    If the branch's first push fails (the one that creates it on the remote; a branch
    Step 0 resumed from the remote is past it), run it once more; if that fails too, stop and report it, keeping the claim and the branch:
-   a runner that cannot push would only waste the rest of the work, and no earlier
-   step pushes to find that out. Not Give up: its save is a push too, and would
+   a runner that cannot push would only waste the rest of the work. Not Give up: its save is a push too, and would
    fail the same way. A later run in this clone resumes the branch (Step 0); a push
    that keeps failing is a setup problem (see the guardrails), not this issue's. A later cycle's push that fails:
    keep working, and Step 6 pushes again (and stops the run if that fails twice).
@@ -1241,7 +1244,8 @@ would look claimed, or unexplained, with its work gone. Stop and report it. If
 step 4 or 5 fails, the work is already saved: add a comment naming what is left,
 so a human removes it. Never get past a failure with `--no-verify` or `--force`.
 
-Run these on the issue's branch, `<type>/<number>-<slug>`.
+Run these on the issue's branch, `<type>/<number>-<slug>`. Before step 1, renew the lock (`scripts/loop-lock.sh renew-session <run-id>`; see **Keep the lock**). If it fails, another run may hold this branch: change nothing, and report it. The steps then
+run in seconds, so one renew covers them all.
 
 1. **Commit anything uncommitted**, so it travels with the branch. A stash would stay
    on this machine, and a cloud session's clone is discarded. First make sure a merge

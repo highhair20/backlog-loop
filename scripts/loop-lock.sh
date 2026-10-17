@@ -266,7 +266,8 @@ reclaim_blocked() {
 # stale before this process started cannot remove it afterwards.
 adopt() {
   mkdir "$LOCK/reclaiming" 2>/dev/null || { reclaim_blocked "PID $1"; return 1; }
-  rmdir "$LOCK/reclaiming"
+  MARKER_HELD=1
+  rmdir "$LOCK/reclaiming" && MARKER_HELD=0
   echo "↻ Reclaimed a stale backlog-loop lock: an earlier run left it under this PID ($1)." >&2
 }
 

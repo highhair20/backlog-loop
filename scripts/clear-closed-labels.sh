@@ -16,8 +16,8 @@
 #        scripts/clear-closed-labels.sh --all-closed     every closed issue at once
 # Run from a terminal, each removal is an `unlabeled` event that starts a
 # ready-to-merge run; the workflow's manual run (workflow_dispatch) starts none.
-# Exit: 0 cleared, or nothing to clear · 1 a gh call failed, or an unexpected state ·
-# 2 usage.
+# Exit: 0 cleared, or nothing to clear · 1 a gh call failed, an unexpected state, or
+# (--all-closed) a listing with more issues than its limit · 2 usage.
 set -uo pipefail
 
 # The labels this clears: the open-issue states in docs/ISSUE_GUIDE.md. The script's
@@ -63,13 +63,14 @@ clear_one() {
 
 # Every closed issue that still carries a status label: listed one label at a time (a
 # search on several labels would have to spell heal:proposed's colon), each issue once.
-# Goes on past a failure, then exits 1 if there was one.
+# Goes on past a failure, then exits 1 if there was one, or if a listing had more
+# issues than LIMIT (it asks for one more, to tell "exactly LIMIT" from "more").
 all_closed() {
   local l nums="" got n count=0 failed=0 full=0
   for l in $STATUS_LABELS; do
-    got="$(gh issue list --state closed --label "$l" --limit "$LIMIT" --json number --jq '.[].number')" ||
+    got="$(gh issue list --state closed --label "$l" --limit "$((LIMIT + 1))" --json number --jq '.[].number')" ||
       { err "could not list closed issues labelled $l"; exit 1; }
-    [ "$(printf '%s\n' "$got" | grep -c .)" -lt "$LIMIT" ] || full=1
+    [ "$(printf '%s\n' "$got" | grep -c .)" -le "$LIMIT" ] || full=1
     nums="$nums $got"
   done
   # shellcheck disable=SC2086  # $nums is a list of issue numbers
