@@ -127,4 +127,5 @@ swaps to `in-review`. It **never merges and never pushes to `main`**. Merge is
 the maintainer's manual step. Closing an issue, for any reason, clears its status
 labels (`in-progress`, `in-review`, `blocked`, `needs-attention`, `heal:proposed`,
 `heal:approved`): the `clear-closed-labels.yml` workflow removes them, and keeps
-priority, type, `needs-infra` and `no-auto-heal`.
+priority, type, `needs-infra` and `no-auto-heal`. One exception: an issue another
+workflow closes with its `GITHUB_TOKEN` starts no workflow, so it keeps its labels.

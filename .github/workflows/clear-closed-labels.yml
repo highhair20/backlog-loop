@@ -5,9 +5,11 @@ name: Clear closed-issue labels
 # its issue, and nothing else removes them, so closed issues kept reading as still in
 # review. Priority, type, needs-infra and no-auto-heal stay.
 on:
-  # Every close, completed or not planned alike: no filter on the close reason.
+  # Every close, completed or not planned alike: no filter on the close reason. And
+  # a label added to an issue that is already closed: a loop run that finishes after
+  # a human closed its issue still swaps its labels.
   issues:
-    types: [closed]
+    types: [closed, labeled]
 
 permissions:
   # contents: read for the checkout, which a private repo needs; issues: write to
@@ -15,8 +17,16 @@ permissions:
   contents: read
   issues: write
 
+# One run at a time per issue, in order: each reads the issue fresh.
+concurrency:
+  group: clear-closed-labels-${{ github.event.issue.number }}
+  cancel-in-progress: false
+
 jobs:
   clear:
+    # A label on an open issue is no business of this workflow; the script checks the
+    # state again, since the issue can be reopened before the run starts.
+    if: github.event.issue.state == 'closed'
     runs-on: ubuntu-latest
     steps:
       # The default branch's copy of the script.

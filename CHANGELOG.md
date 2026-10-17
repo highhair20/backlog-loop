@@ -102,7 +102,9 @@ removes it from a repo made with "Use this template", and sync never copies it.
 
 - **Closed-issue labels (#118):** a re-sync adds the new workflow and script. To clear
   issues closed before it, run once from the repo root:
-  `gh issue list --state closed --limit 1000 --json number --jq '.[].number' | xargs -n1 scripts/clear-closed-labels.sh`.
+  `gh issue list --state closed --search 'label:in-progress,in-review,blocked,needs-attention,heal:proposed,heal:approved' --limit 1000 --json number --jq '.[].number' | xargs -n1 scripts/clear-closed-labels.sh`
+  (it reads only closed issues that still carry a status label; rerun it if it
+  reports 1000).
   `docs/ISSUE_GUIDE.md` is seeded, so its Lifecycle section keeps the old wording;
   copy the new sentence from the template if you want it.
 
