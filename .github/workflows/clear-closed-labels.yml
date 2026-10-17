@@ -1,0 +1,53 @@
+name: Clear closed-issue labels
+
+# Takes the loop's status labels (in-review, heal:proposed, ...) off an issue once it
+# closes, by running scripts/clear-closed-labels.sh (#118). Merging a loop PR closes
+# its issue, and nothing else removes them, so closed issues kept reading as still in
+# review. Priority, type, needs-infra and no-auto-heal stay.
+on:
+  # Every close, completed or not planned alike: no filter on the close reason. And
+  # a label added to an issue that is already closed: a loop run that finishes after
+  # a human closed its issue still swaps its labels.
+  issues:
+    types: [closed, labeled]
+  # By hand, once, for issues closed before this workflow existed. Its edits use this
+  # workflow's token, so unlike a run from a terminal they start no ready-to-merge runs.
+  workflow_dispatch:
+
+permissions:
+  # contents: read for the checkout, which a private repo needs; issues: write to
+  # remove the labels. Nothing else.
+  contents: read
+  issues: write
+
+jobs:
+  clear:
+    # A label on an open issue is no business of this workflow; the script checks the
+    # state again, since the issue can be reopened before the run starts.
+    if: github.event_name == 'workflow_dispatch' || github.event.issue.state == 'closed'
+    # Never two runs for one issue at once. On the job, after the if, so a skipped run
+    # never takes the slot. A newer queued run replaces an older one (GitHub keeps one
+    # pending run per group), which is safe: each reads the issue fresh.
+    concurrency:
+      group: clear-closed-labels-${{ github.event.issue.number || 'all' }}
+      cancel-in-progress: false
+    runs-on: ubuntu-latest
+    steps:
+      # The default branch's copy of the script.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          # The script uses GH_TOKEN; no git command needs the token after checkout.
+          persist-credentials: false
+      - name: Clear status labels
+        # The number comes in through the environment, never pasted into the command.
+        run: |
+          if [ -n "$ISSUE" ]; then
+            scripts/clear-closed-labels.sh "$ISSUE"
+          else
+            scripts/clear-closed-labels.sh --all-closed
+          fi
+        env:
+          ISSUE: ${{ github.event.issue.number }}
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
