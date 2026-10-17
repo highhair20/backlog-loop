@@ -266,11 +266,15 @@ log directory as mode 700, and tightens an existing `.loop-logs/` you own to 700
 `LOG_DIR` you point elsewhere that already exists keeps its permissions; the driver
 warns if other users can get into it.
 
-**One driver at a time.** `backlog-loop.sh` holds a lock in the git directory
+**One loop run at a time.** `backlog-loop.sh` holds a lock in the git directory
 (`.git/backlog-loop.lock`) while it runs, so a second driver in the same clone
-refuses to start, whatever its `LOG_DIR`. A lock left by a crashed or killed run is
-reclaimed automatically, because it records its owner's PID. If a run is refused and
-you know no loop is running, the message gives the `rm -rf` that clears the lock.
+refuses to start, whatever its `LOG_DIR`. A `/work-next-item` run started by hand or
+by `/loop` takes the same lock for its run, renews it before each commit, and releases
+it when it ends, so it cannot
+overlap a driver or another session in that clone either. A lock left by a crashed
+driver is reclaimed automatically, because it records its owner's PID; one left by a
+session that died lapses three hours after its last renewal. If a run is refused and you know no loop
+is running, the message gives the `rm -rf` that clears the lock.
 
 The loop manages these status labels: `in-progress`, `in-review`, `blocked`,
 `needs-infra`, and `needs-attention` (it gave up and a human should look). To ask
@@ -400,7 +404,7 @@ scripts/
   check-verify-section.sh    refuses to run without Verify commands
   gh-auth-check.sh           is gh logged in to origin's host? (other hosts don't count)
   gh-repo.sh                 which repo gh acts on; stops if several remotes and no gh default
-  loop-lock.sh               one loop run per clone; reclaims a crashed run's lock
+  loop-lock.sh               one loop run per clone, driver or session; the clone's ID
   missing-allow-rules.sh     names allow rules the example has and your local allowlist lacks
   ready-to-merge.sh          labels ready loop PRs and tells you (run by the workflow)
   report-drained.sh          tells backlog-loop.sh a session found nothing to do

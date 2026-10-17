@@ -148,9 +148,9 @@ if [ "$log_dir_mode" != ------ ]; then
 fi
 
 # Single-instance lock, so two drivers can't double-claim, and so a /work-next-item
-# started by hand while this runs stops at its own lock check. It reclaims a lock a
-# crashed run left behind. The sessions this driver starts run that same check;
-# BACKLOG_LOOP_PID tells them the lock they find is their own driver's.
+# started by hand while this runs cannot take it and stops. It reclaims a lock a
+# crashed run left behind. The sessions this driver starts ask for the lock too;
+# BACKLOG_LOOP_PID tells them the lock they find is their own driver's (#108).
 "$HERE/loop-lock.sh" acquire $$ || exit 1
 trap '"$HERE/loop-lock.sh" release $$; rm -rf "$HERE"' EXIT
 export BACKLOG_LOOP_PID=$$

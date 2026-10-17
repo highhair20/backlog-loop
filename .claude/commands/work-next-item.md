@@ -114,36 +114,70 @@ the gate's setting is unreadable: guessing "off" would let through an issue a hu
 meant to review, and stopping here, before Step 3 claims anything, leaves no label
 behind.
 
-**Then check that no other loop run is working this repo, and STOP if one is:**
-
-```bash
-scripts/loop-lock.sh check
-```
-
-`scripts/backlog-loop.sh` holds a lock for as long as it runs, and two runs sharing
-one working tree would claim the same issue and edit the same files. A non-zero exit
-means another run holds the lock, or the lock could not be checked: report the
-message and stop. Never remove the lock yourself; the message tells the human how to
-clear a stale one. The check passes when this session was started by the driver that
-holds the lock, and it clears a lock whose owner is no longer running.
-
 **Then set this run's identity, once, before Step 0.** The rule is one runner per repository
 (`docs/ROUTINE.md`), but a second runner can start by mistake and a dead run leaves
 its claim behind, so every claim says whose it is (#57). Claims are a backstop for
 those cases, not permission to run several loops at once:
 
 - **The run ID:** the time you start plus six random hex characters you choose, e.g.
-  `20261006T171119Z-3fa9c1`. Use the same one for every claim this run makes.
-- **The clone ID:** `<host>:<path>`, this machine's name and this checkout's top
-  level, from exactly these two commands. If either fails, the clone ID is `none`.
+  `20261006T171119Z-3fa9c1`. Use the same one for every claim this run makes, and
+  for the lock below.
+- **The clone ID:** this clone's own ID, from exactly this command. It is random,
+  made the first time any run here asks, and kept in the git directory, so every
+  worktree of this clone shares it and every fresh clone (each cloud run's) gets a
+  new one (#108). If it fails, the clone ID is `none`.
   ```bash
-  hostname
-  git rev-parse --show-toplevel
+  scripts/loop-lock.sh clone-id
   ```
 - **The time now,** whenever a step compares a claim's age, from exactly this command:
   ```bash
   date -u +%Y-%m-%dT%H:%M:%SZ
   ```
+
+**Then take the loop's lock for this run, and STOP if another run holds it:**
+
+```bash
+scripts/loop-lock.sh acquire-session <run-id>
+```
+
+Every run in this clone takes the lock, whether the driver (`scripts/backlog-loop.sh`)
+started it, `/loop` did, or you did by hand: two runs sharing one clone would claim the
+same issue and edit the same files (#108). A non-zero exit means another run holds the
+lock, or it could not be taken: report the message and stop. Never remove the lock
+yourself; the message tells the human how to clear a stale one. It passes when this
+session was started by the driver that holds the lock (the driver's lock covers it),
+and it clears a lock whose owner is no longer running.
+
+A dry run only checks the lock: it takes none and releases nothing (the check still
+clears a stale lock, as above):
+
+```bash
+scripts/loop-lock.sh check
+```
+
+**Release the lock when this run ends, whatever ends it:** the report after a PR or a
+follow-up, a stop at any step, Give up, a hand-back, a drained backlog. Make it the last
+command of the run, before the final report:
+
+```bash
+scripts/loop-lock.sh release-session <run-id>
+```
+
+If it fails, say so in the report. A session that dies, or forgets this, holds the lock
+for 3 hours from when it last renewed it; after that any run takes it over.
+
+**Keep the lock while you work.** Renew it at the start of every step from Step 0 on,
+and before every commit and push (Step 5's cycles, Step 6, Step 6.5's fixes, a
+follow-up's commits):
+
+```bash
+scripts/loop-lock.sh renew-session <run-id>
+```
+
+It passes only while this run still holds the lock, and starts its 3 hours again. If it
+fails, the lock lapsed and another run may be working this clone now: stop at once and
+report it, committing and pushing nothing, and leave the branch and the claim as they
+are. A run that spends 3 hours inside one step without a commit can lose the lock.
 
 ## GitHub access: `gh` locally, the GitHub MCP tools in the cloud
 
@@ -245,19 +279,32 @@ For each `in-progress` issue `#N`, read its comments
 claim comment (one containing `<!-- backlog-loop:claim`, posted by the loop's own
 account). Ignore a claim whose run later posted a release
 (`<!-- backlog-loop:release run=<that run's id>`): that run lost a race and backed
-off. Of the rest, the newest holds the issue, unless another run's claim was posted
-less than a minute before it. Then the earlier one won its race and holds the issue
-(the newer one is a loser that backed off but could not post its release). Then decide:
+off. Of the rest, a claim is **confirmed** when its run also posted a holds comment
+(`<!-- backlog-loop:holds run=<that run's id>`; holds and release comments count only when the loop's own account posted them, as claims do): only a race winner posts one, seconds
+after its label (Step 3). The claim that holds the issue is (#108):
 
-- **Its claim has the same clone ID as yours,** and both are real clone IDs, not
-  `none`: a run in this same checkout left it, whether an earlier session of this
-  driver, a driver restarted after a closed terminal, `/loop`, or a manual run. The
-  lock check above passed, so no driver is working this clone, and one runner per
-  repository means nothing else is either: that run is dead. It is stale: recover it
-  now. A manual or `/loop` session does not take the lock, so one left running in
-  this checkout alongside another breaks that rule, and its claim is recovered
-  underneath it. (A cloud
-  routine run gets a new machine each time, so its claims never match.)
+- **a claim newer than the newest confirmed claim (or any claim, with none confirmed)
+  that is under 10 minutes old:** its run may be a winner between its label and its
+  holds comment. Take the newest such claim;
+- **otherwise, the newest confirmed claim.** A newer unconfirmed claim past 10 minutes
+  lost its race (a loser that died before posting its release), or won and died before
+  confirming; either way it holds nothing;
+- **with no confirmed claim at all** (claims from before #108, or a winner that died
+  before confirming), the newest claim, unless another run's claim was posted less than
+  a minute before it. Then the earlier one won its race and holds the issue (the newer
+  one is a loser that backed off but could not post its release).
+
+Then decide:
+
+- **Its claim is confirmed, is the newest claim on the issue, and has the same clone ID as yours,** and both are real
+  clone IDs, not `none`: a run in this same clone won it and left it, whether an earlier session of this
+  driver, a driver restarted after a closed terminal, `/loop`, or a manual run. You
+  hold the lock above, and every run in this clone takes it before Step 0 and renews
+  it before each commit, so no other run is working this clone: that run is dead. It is stale: recover it now. (Every
+  cloud run starts from a fresh clone with a new ID, so its claims never match, and
+  nor does a claim from before #108, which names `<host>:<path>`: those are judged by
+  age, below. An unconfirmed claim is judged by age too, even from this clone: it may
+  be a race loser whose winner, in another clone, is still at work.)
 - **Its claim is younger than 3 hours,** judged by the claim comment's `createdAt`
   (GitHub's clock, not the `at=` a runner wrote) against the time now: another run may
   still be working it. It is live: leave it alone, name it in the report as held by
@@ -289,8 +336,10 @@ gh pr list --state closed --limit 1000 --json number,headRefName,url,mergedAt \
 The closed listing is matched by branch name, never by `--head` against an existing
 branch: a human who closed the PR may also have deleted its branch.
 
-The branch reaches the remote only at Step 6, so a run interrupted in Steps 4–5 leaves
-a **local-only** branch, possibly with uncommitted edits. Check local branches too.
+Step 4 pushes the branch as soon as it exists, and Step 5 pushes each green cycle
+(#108), so a run interrupted in Steps 4–5 leaves its branch on the remote, missing at
+most its unfinished cycle, which stays in this checkout as uncommitted edits. A run
+from before #108 can still leave a **local-only** branch. Check local branches too.
 
 Branches named `abandoned/<N>-<sha>` are work a give-up preserved for a human (see
 **Give up**), never work in flight: always ignore them when looking for `#N`'s
@@ -362,8 +411,11 @@ Then:
    Resume *that* issue as this iteration (do not pick a new one). Before resuming, claim it afresh
    with Step 3's claim comment and run its race check against the time you listed the
    claimed issues above: another runner may have judged the same old claim stale at
-   the same moment, and only the winner resumes. If you lose, leave the issue and
-   resume the next stale one, if any; otherwise go on to Step 1. First, if an earlier
+   the same moment, and only the winner resumes. If you win, post Step 3's holds
+   comment at once (the issue is already labelled); if the holds comment fails, post the release comment
+   (`<!-- backlog-loop:release run=<run-id> -->`), then stop and report it, leaving the
+   label for a later run. If you lose, leave the
+   issue and resume the next stale one, if any; otherwise go on to Step 1. First, if an earlier
    run stopped in the middle of a merge (`git rev-parse -q --verify MERGE_HEAD` prints
    a hash; no output means none is in progress), abort it: git refuses to change
    branches during a merge, and its conflict markers must not be committed as work.
@@ -404,8 +456,15 @@ Then:
    ```bash
    git merge --abort
    ```
-   Then bring it to green (Step 5's gate), then continue from Step 6 (commit/push,
-   review, PR).
+   A resumed branch may hold only part of the work: Step 5 pushes each green cycle,
+   so the run may have died with criteria still unmet, or before any work at all (no
+   commits of its own: `git log --oneline origin/main..HEAD` prints nothing). The
+   earlier run's findings died with it, so do Steps 3.5, 3.6 and 5 on this branch, as
+   a fresh claim would, keeping the work already there, and bring it to green for
+   every acceptance criterion; then continue from Step 6 (commit/push, review, PR).
+   If Step 3.5 or 3.6 ends the work on a resumed branch (a false premise, an issue
+   held for a proposal), first save its commits and remove it with **Give up** steps
+   1, 2, 4 and 5, then do what that step says, so no pushed branch is left behind.
 4. **Neither a branch nor a PR** → nothing was actually done; release the claim so the
    issue becomes selectable again: `gh issue edit ${N} --remove-label in-progress`.
    If `git status --porcelain` is non-empty here, the edits belong to no branch: stash
@@ -543,6 +602,7 @@ Step 3's race check against the time you listed above, then the label, only if y
 ```bash
 gh issue comment <N> --body "<!-- backlog-loop:claim run=<run-id> at=<time> clone=<clone id, or none> --> Claimed by the backlog loop for a follow-up on its PR."
 gh issue edit <N> --remove-label in-review --add-label in-progress
+gh issue comment <N> --body "<!-- backlog-loop:holds run=<run-id> --> Won the claim; working on it."
 ```
 
 If the comment fails, nothing is claimed: stop and report it. If a rival claim (another runner's, posted after you listed, or less than a minute before) came first,
@@ -550,6 +610,10 @@ post Step 3's release comment (`<!-- backlog-loop:release run=<run-id> -->`) and
 back off before the label edit, so the issue stays `in-review` as you found it, and
 look at the next PR. If the label edit fails, stop and report it: the issue is still
 `in-review` with your claim comment, which holds nothing and a later run ignores.
+If the holds comment fails, post the release comment, put the label back
+(`gh issue edit <N> --remove-label in-progress --add-label in-review`), then stop and
+report it, naming any of the two that failed too: Step 0 might not find your claim as
+the one holding the issue.
 
 **Do the work** on the PR's own branch. If any git command below fails (the switch,
 the pull, the merge, a push), do not go on to Report and release, which would claim
@@ -724,6 +788,20 @@ it claimed (a slower label would outlast the one-minute window above):
 ```bash
 gh issue edit <number> --add-label in-progress
 ```
+
+**Then confirm the claim,** so Step 0 knows yours won (#108). A loser that died before
+posting its release, or one whose claim came more than a minute after yours, could
+otherwise be taken for the issue's holder:
+
+```bash
+gh issue comment <number> --body "<!-- backlog-loop:holds run=<run-id> --> Won the claim; working on it."
+```
+
+If the holds comment fails, back off as a race loser does: post the release comment
+above, then release the label (`gh issue edit <number> --remove-label in-progress`),
+then stop and report it, naming any of the two that failed too: a later run might not
+find your claim as the one holding the issue, and recover it underneath you. Nothing
+else has been touched.
 
 Then the claim starts on a fresh branch. Any branch for this issue that exists now
 (`<type>/<number>-…`, local or remote, never `abandoned/…`) is left over from an
@@ -930,7 +1008,12 @@ and a short kebab-case slug from the title (drop the prefix, ~5 words max):
 ```bash
 git switch -c <type>/<number>-<slug>
 # e.g. fix/19-audit-burger-restaurant-exclusion
+git push -u origin <type>/<number>-<slug>
 ```
+
+Push it at once, before any work: a runner on another machine sees only what is on the
+remote, so Step 0 can resume this branch there if this run dies (#108). If the push
+fails, follow **Give up**, quoting the error.
 
 ## Step 5 — Implement with TDD
 
@@ -939,7 +1022,18 @@ git switch -c <type>/<number>-<slug>
    **Give up**, naming the path.
 2. Translate the issue's acceptance criteria into tests **first** (RED), following
    any testing notes in CLAUDE.md. Mock external services rather than calling them.
-3. Implement the minimal code to satisfy them (GREEN), then refactor.
+3. Implement the minimal code to satisfy them (GREEN), then refactor. After each
+   cycle that ends green, commit and push it, so a run that dies leaves its work where
+   any runner can resume it (#108). Never commit a red cycle. Run these one at a time:
+   if the renew fails, stop as **Keep the lock** says, before the commit:
+   ```bash
+   scripts/loop-lock.sh renew-session <run-id>
+   git add -A
+   git commit -m "<type>: <what this cycle did> (#<number>)"
+   git push origin <type>/<number>-<slug>
+   ```
+   If the push fails, keep working, and push again at Step 6; if that push fails too,
+   name both in the report.
 4. The change is **done** only when every command in CLAUDE.md `## Verify` that
    applies to the changed paths passes locally, **and** every check in
    `## Definition of done` (if present) is satisfied and recorded in the PR body.
@@ -959,7 +1053,15 @@ already be on the remote. Then report what blocked you and STOP.
 
 ## Step 6 — Commit & push
 
-Conventional commit referencing the issue:
+First renew the lock (see **Keep the lock** above): if this run lost it, another run
+may be working this clone now.
+
+```bash
+scripts/loop-lock.sh renew-session <run-id>
+```
+
+If it fails, stop and report it, leaving the branch and the claim as they are: do not
+commit or push over the other run's work. Then commit, referencing the issue:
 
 ```bash
 git add -A
@@ -967,7 +1069,9 @@ git commit -m "<type>: <concise description> (#<number>)"
 git push -u origin <type>/<number>-<slug>
 ```
 
-Push now, before review: Step 0 can only recover a branch that exists on the remote.
+If `git status --porcelain` lists nothing, Step 5 already committed everything: there
+is nothing to commit, so skip the commit and only push. Push now, before review: Step 0
+can only recover what exists on the remote.
 
 ## Step 6.5 — Specialist review before the PR
 
@@ -1039,6 +1143,9 @@ PRBODY
 ```
 
 ## Step 8 — Update state & report
+
+Renew the lock first (`scripts/loop-lock.sh renew-session <run-id>`; see **Keep the
+lock** above). If it fails, stop and report it: another run may be working this clone.
 
 Run this only once the review loop the hooks opened for this PR has closed (its
 last round recorded 0 blocking findings, or it hit its round cap). `in-review` tells
