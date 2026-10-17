@@ -78,8 +78,10 @@ all_closed() {
     clear_one "$n" || failed=$((failed + 1))
   done
   say "looked at $count closed issue(s) with a status label; $failed failed"
+  # A listing that reached its limit may have left issues labelled: fail, so the run
+  # is not mistaken for a complete one.
   [ "$full" -eq 0 ] || err "a listing reached its limit of $LIMIT issues and may have more: run it again for the rest"
-  [ "$failed" -eq 0 ] || exit 1
+  [ "$failed" -eq 0 ] && [ "$full" -eq 0 ] || exit 1
 }
 
 [ $# -eq 1 ] || usage

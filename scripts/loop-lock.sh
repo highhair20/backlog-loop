@@ -267,7 +267,6 @@ reclaim_blocked() {
 adopt() {
   mkdir "$LOCK/reclaiming" 2>/dev/null || { reclaim_blocked "PID $1"; return 1; }
   rmdir "$LOCK/reclaiming"
-  MARKER_HELD=0
   echo "↻ Reclaimed a stale backlog-loop lock: an earlier run left it under this PID ($1)." >&2
 }
 
@@ -381,8 +380,6 @@ renew_session() {
   lost_lock "$1"
   return 1
 }
-
-
 
 release() {
   [ -d "$LOCK" ] || return 0

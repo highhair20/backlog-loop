@@ -95,7 +95,7 @@ check "--all-closed fails when it cannot list the closed issues" "[ $rc -eq 1 ] 
 N="$(setup backfill-limit)"
 printf '3\n5\n' >"$N/list-in-review"; printf 'in-review\n' >"$N/labels-3"; printf 'in-review\n' >"$N/labels-5"
 PATH="$N/bin:$PATH" GH_REPO=o/r CLEAR_CLOSED_LIMIT=2 "$HERE/clear-closed-labels.sh" --all-closed >"$N/out" 2>&1; rc=$?
-check "--all-closed warns when a listing hits its limit" "[ $rc -eq 0 ] && grep -q 'may have more' '$N/out'"
+check "--all-closed fails, saying so, when a listing hits its limit" "[ $rc -eq 1 ] && grep -q 'may have more' '$N/out'"
 PATH="$N/bin:$PATH" GH_REPO=o/r CLEAR_CLOSED_LIMIT=abc "$HERE/clear-closed-labels.sh" --all-closed >"$N/out" 2>&1; rc=$?
 check "a CLEAR_CLOSED_LIMIT that is not a number is a usage error" "[ $rc -eq 2 ] && grep -q 'CLEAR_CLOSED_LIMIT' '$N/out'"
 O="$(setup backfill-none)"

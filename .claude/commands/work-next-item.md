@@ -169,8 +169,10 @@ If it fails, say so in the report. A session that dies, or forgets this, holds t
 for 3 hours from when it last renewed it; after that any run takes it over.
 
 **Keep the lock while you work.** Renew it at the start of every step from Step 0 on,
-and before every commit and push (Step 5's cycles, Step 6, Step 6.5's fixes, the
-review loop's fixes after Step 7, a follow-up's commits):
+and before every commit, push or remote branch deletion (Step 5's cycles, Step 6,
+Step 6.5's fixes, the review loop's fixes after Step 7, a follow-up's commits, Give up
+(its commit, its pushes and its branch deletion), a hand-back, and Step 3's retiring of
+a leftover branch). A dry run, which holds no lock, skips every renew (#123):
 
 ```bash
 scripts/loop-lock.sh renew-session <run-id>
@@ -286,8 +288,10 @@ off. Of the rest, a claim is **confirmed** when its run also posted a holds comm
 after its label (Step 3). The claim that holds the issue is (#108):
 
 - **a claim newer than the newest confirmed claim (or any claim, with none confirmed)
-  that is under 10 minutes old:** its run may be a winner between its label and its
-  holds comment. Take the newest such claim;
+  that is under 10 minutes old, and not posted less than a minute after another run's
+  claim** (that one lost its race, as the last rule below says, whatever its age): its
+  run may be a winner between its label and its holds comment. Take the newest such
+  claim (#123);
 - **otherwise, the newest confirmed claim.** A newer unconfirmed claim past 10 minutes
   lost its race (a loser that died before posting its release), or won and died before
   confirming; either way it holds nothing;
@@ -1035,8 +1039,8 @@ git switch -c <type>/<number>-<slug>
    ```
    If the branch's first push fails (the one that creates it on the remote; a branch
    Step 0 resumed from the remote is past it), run it once more; if that fails too, stop and report it, keeping the claim and the branch:
-   a runner that cannot push would only waste the rest of the work, and Step 4 no
-   longer pushes to find that out early. Not Give up: its save is a push too, and would
+   a runner that cannot push would only waste the rest of the work, and no earlier
+   step pushes to find that out. Not Give up: its save is a push too, and would
    fail the same way. A later run in this clone resumes the branch (Step 0); a push
    that keeps failing is a setup problem (see the guardrails), not this issue's. A later cycle's push that fails:
    keep working, and Step 6 pushes again (and stops the run if that fails twice).

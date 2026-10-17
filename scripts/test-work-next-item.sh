@@ -488,6 +488,13 @@ check "Step 5's snippet says to stop when the renew fails" "printf '%s' \"\$step
 check "the lock is renewed at the start of every step" "printf '%s' \"\$pre0_flat\" | grep -q 'at the start of every step'"
 check "a resumed branch with no commits of its own redoes Steps 3.5 to 3.7 and 5" "printf '%s' \"\$step0_flat\" | grep -q 'no commits of its own' && printf '%s' \"\$step0_flat\" | grep -q 'Steps 3.5 to 3.7 and 5'"
 
+# --- v0.2.0 fixes (#123) ---
+check "a dry run, which holds no lock, skips every renew" "printf '%s' \"\$pre0_flat\" | grep -q 'A dry run, which holds no lock, skips every renew'"
+check "the renew list covers Give up, a hand-back and Step 3's branch retirement" "printf '%s' \"\$pre0_flat\" | grep -q 'Give up (its commit, its pushes and its branch deletion), a hand-back, and Step 3.s retiring of a leftover branch'"
+check "Step 0 never names a claim posted under a minute after another run's claim as the holder" "printf '%s' \"\$step0_flat\" | grep -q 'and not posted less than a minute after another run.s claim'"
+check "Step 5 no longer refers to a Step 4 push" "! printf '%s' \"\$step5_flat\" | grep -q 'Step 4 no longer pushes'"
+check "ROUTINE.md: only a confirmed, newest own-clone claim is recovered at once, and dry runs take no lock" "f=\$(tr '\\n' ' ' < '$ROOT/docs/ROUTINE.md' | tr -s ' '); printf '%s' \"\$f\" | grep -q 'recovers its own clone.s confirmed, newest claim at once' && printf '%s' \"\$f\" | grep -q 'Every live run'"
+
 for row in 'gh pr checks|mcp__github__pull_request_read' 'gh pr view N --json|mcp__github__pull_request_read' 'gh run view|mcp__github__get_job_logs' 'gh pr comment|mcp__github__add_issue_comment' 'gh pr edit|mcp__github__issue_write' 'gh pr update-branch|mcp__github__update_pull_request_branch' 'gh api repos/{owner}/{repo}/pulls|mcp__github__pull_request_read' 'gh api repos/{owner}/{repo}/pulls|get_review_comments'; do
   check "the MCP table maps ${row%%|*} to ${row#*|}" "grep '^| .${row%%|*}' '$CMD' | grep -q -- '${row#*|}'"
 done

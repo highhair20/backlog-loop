@@ -79,8 +79,8 @@ gate on.
   every 2 hours or more. Claims are a backstop for when this slips (#57, #108):
   every claim is a comment naming the run and its clone, and the race winner
   confirms it. Step 0 leaves alone a claim younger than three hours, recovers older
-  ones, and recovers a claim from its own clone at once. Every run, the driver,
-  `/loop` and a manual one, takes the clone's lock, and each run pushes its branch
+  ones, and recovers its own clone's confirmed, newest claim at once. Every live run,
+  the driver, `/loop` and a manual one, takes the clone's lock (a dry run only checks it), and each run pushes its branch
   after each green test cycle. Its limits:
   - A run past three hours can have its claim recovered underneath it: nothing
     renews a claim.
