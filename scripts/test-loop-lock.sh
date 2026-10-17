@@ -312,6 +312,18 @@ check "acquire-session for the run that holds the lock renews it" "[ $rc -eq 0 ]
 "$Y/scripts/loop-lock.sh" release-session run-y >"$Y/out" 2>&1; rc=$?
 check "release-session leaves no lock and no marker behind" "[ $rc -eq 0 ] && [ ! -e '$YLOCK' ] && [ \"\$(ls '$Y/.git' | grep -c backlog-loop.lock)\" = 0 ]"
 
+# Another run's marker can sit in the lock for a moment (its renew or release checks
+# the lock only after taking the marker): the holder waits it out instead of stopping.
+plant_session "$Y" run-y "$NOW"
+mkdir "$YLOCK/reclaiming"
+( sleep 0.5; rmdir "$YLOCK/reclaiming" ) &
+"$Y/scripts/loop-lock.sh" renew-session run-y >"$Y/out" 2>&1; rc=$?
+check "renew-session waits out another run's passing marker" "[ $rc -eq 0 ] && [ \"\$(ls '$YLOCK')\" = run ]"
+mkdir "$YLOCK/reclaiming"
+( sleep 0.5; rmdir "$YLOCK/reclaiming" ) &
+"$Y/scripts/loop-lock.sh" release-session run-y >"$Y/out" 2>&1; rc=$?
+check "release-session waits out another run's passing marker" "[ $rc -eq 0 ] && [ ! -e '$YLOCK' ]"
+
 # A clone ID that cannot be created is named as such, not as a corrupt file.
 if [ "$(id -u)" -ne 0 ]; then
   Z="$(new_repo cloneid-readonly)"
@@ -374,6 +386,11 @@ if [ "$(id -u)" -ne 0 ]; then
   chmod u+w "$WF/.git/backlog-loop.lock"
   check "a renew that cannot write says so, not that the lock was lost" "[ $rc -eq 1 ] && grep -q 'could not write' '$WF/out' && ! grep -q 'no longer holds' '$WF/out' && [ ! -e '$WF/.git/backlog-loop.lock/run.new' ]"
 fi
+
+RW="$(new_repo refresh-fail)"
+plant_session "$RW" run-r "$NOW"
+PATH="$SHIMS/failmv:$PATH" "$RW/scripts/loop-lock.sh" renew-session run-r >"$RW/out" 2>&1; rc=$?
+check "a renew whose rename fails says it could not write, and leaves no temp file or marker" "[ $rc -eq 1 ] && grep -q 'could not write' '$RW/out' && [ \"\$(ls '$RW/.git/backlog-loop.lock')\" = run ]"
 
 # --- errors are not reported as "held", and never pass ---
 N="$WORK/not-a-repo"

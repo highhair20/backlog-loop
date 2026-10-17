@@ -291,15 +291,30 @@ acquire_session() {
 # takes the same marker, so the lock cannot be reclaimed (or taken) part-way through.
 # Returns 1, changing nothing, when the lock is gone, is another run's, or another run
 # is reclaiming it.
+# Take the reclaim marker in run $1's own lock. Another run's marker sits there only
+# for a moment (a reclaim, or a renew or release by a run that then finds the lock is
+# not its own), so try again before deciding. Returns 0 when taken; 1 when the lock is
+# gone or a marker stays (another run is reclaiming it); 3 when our own lock, with no
+# marker in it, still refuses one: it cannot be written.
+MARKER_TRIES=3
+take_marker() {
+  local i=1
+  while ! mkdir "$LOCK/reclaiming" 2>/dev/null; do
+    [ -d "$LOCK" ] || return 1
+    if [ "$i" -ge "$MARKER_TRIES" ]; then
+      { [ ! -e "$LOCK/reclaiming" ] && held_by "" "$1"; } && return 3
+      return 1
+    fi
+    i=$((i + 1))
+    sleep 1
+  done
+}
+
 as_holder() {
   local run="$1" rc
   shift
-  if ! mkdir "$LOCK/reclaiming" 2>/dev/null; then
-    # No lock to put it in, or another run's marker: not ours. Our own lock with no
-    # marker, that still refuses one, cannot be written.
-    { [ -d "$LOCK" ] && [ ! -e "$LOCK/reclaiming" ] && held_by "" "$run"; } && return 3
-    return 1
-  fi
+  take_marker "$run"; rc=$?
+  [ "$rc" -eq 0 ] || return "$rc"
   if ! held_by "" "$run"; then rmdir "$LOCK/reclaiming" 2>/dev/null; return 1; fi
   "$@"; rc=$?
   rmdir "$LOCK/reclaiming" 2>/dev/null
@@ -351,11 +366,16 @@ release_session() {
   held_by "${BACKLOG_LOOP_PID:-}" "" && return 0
   # Not as_holder: the marker leaves with the lock, and removing it afterwards could
   # remove a marker in a new lock another run has taken since.
-  if ! mkdir "$LOCK/reclaiming" 2>/dev/null; then
-    [ -d "$LOCK" ] || return 0
-    echo "loop-lock: not releasing $LOCK: another run is reclaiming it" >&2
-    return 1
-  fi
+  take_marker "$1"
+  case $? in
+    0) ;;
+    3) echo "loop-lock: not releasing $LOCK: could not write it" >&2; return 1 ;;
+    *)
+      [ -d "$LOCK" ] || return 0
+      echo "loop-lock: not releasing $LOCK: another run is reclaiming it" >&2
+      return 1
+      ;;
+  esac
   if ! held_by "" "$1"; then
     rmdir "$LOCK/reclaiming" 2>/dev/null
     echo "loop-lock: not releasing $LOCK: run $1 does not hold it" >&2

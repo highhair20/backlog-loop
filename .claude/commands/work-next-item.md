@@ -156,7 +156,8 @@ scripts/loop-lock.sh check
 ```
 
 **Release the lock when this run ends, whatever ends it,** once this run has taken it
-(a run stopped before that, or by the lock itself, has nothing to release): the report
+(a run stopped before that, or because `acquire-session` refused it, has nothing to
+release; a run stopped by a failed renew still runs it, and reports its result): the report
 after a PR or a follow-up, a stop at any step, Give up, a hand-back, a drained backlog.
 Make it the last command of the run, before the final report:
 
@@ -341,7 +342,8 @@ branch: a human who closed the PR may also have deleted its branch.
 Step 5 pushes each green cycle (#108), so a run interrupted in Step 5 leaves its
 branch on the remote, missing at most its unfinished cycle, which stays in this
 checkout as uncommitted edits. A run interrupted before its first green cycle leaves a
-local-only branch with nothing committed, which a runner elsewhere starts over. A run
+local-only branch with nothing committed, which a runner elsewhere starts over and a
+later run in this clone resumes (case 3 below). A run
 from before #108 can still leave a **local-only** branch. Check local branches too.
 
 Branches named `abandoned/<N>-<sha>` are work a give-up preserved for a human (see
@@ -1031,8 +1033,10 @@ git switch -c <type>/<number>-<slug>
    git commit -m "<type>: <what this cycle did> (#<number>)"
    git push -u origin <type>/<number>-<slug>
    ```
-   If the push fails, keep working, and push again at Step 6; if that push fails too,
-   name both in the report.
+   If the branch's first push fails, run it once more; if that fails too, follow
+   **Give up**: a runner that cannot push would only waste the rest of the work, and
+   Step 4 no longer pushes to find that out early. A later cycle's push that fails:
+   keep working, and Step 6 pushes again (and stops the run if that fails twice).
 4. The change is **done** only when every command in CLAUDE.md `## Verify` that
    applies to the changed paths passes locally, **and** every check in
    `## Definition of done` (if present) is satisfied and recorded in the PR body.
@@ -1210,7 +1214,7 @@ actionable issues remain, the loop will continue to the next one.
 
 ## Give up — keep the work, then release the issue
 
-Steps 5 and 6.5 both end here, and so does Step 0 for a rejected PR whose branch remains, and a refused tool call specific to the issue after the claim (a setup problem never comes here; see the guardrails). Step 3 borrows steps 2, 4 and 5 to retire a leftover branch. The branch may be in any state: fresh, resumed by
+Steps 5, 6 and 6.5 all end here, and so does Step 0 for a rejected PR whose branch remains, and a refused tool call specific to the issue after the claim (a setup problem never comes here; see the guardrails). Step 3 borrows steps 2, 4 and 5 to retire a leftover branch. The branch may be in any state: fresh, resumed by
 Step 0 with commits, local-only, or already pushed. Giving up must never destroy
 work silently, and must not leave the issue's branch on the remote. So: save the
 work, then release the issue, then delete branches. An interruption after the

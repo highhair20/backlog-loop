@@ -9,9 +9,24 @@ set -uo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 CMD="$ROOT/.claude/commands/work-next-item.md"
 failures=0
-# pipefail off inside a check: `printf … | grep -q` lets grep exit at its first match,
-# and on a large section printf then dies of SIGPIPE, failing a check whose text is there.
-check() { if (set +o pipefail; eval "$2"); then echo "ok   $1"; else echo "FAIL $1" >&2; failures=$((failures + 1)); fi; }
+check() { if eval "$2"; then echo "ok   $1"; else echo "FAIL $1" >&2; failures=$((failures + 1)); fi; }
+# grep -q stops reading at its first match, and under pipefail the printf feeding it
+# then dies of SIGPIPE on a large section, failing a check whose text is there. Here
+# -q reads all its input and discards the output instead, so pipefail stays on and a
+# failing producer still fails its check.
+grep() {
+  local a quiet=0 args=()
+  for a in "$@"; do
+    case "$a" in
+      -q) quiet=1 ;;
+      -qF) quiet=1; args+=(-F) ;;
+      -qi) quiet=1; args+=(-i) ;;
+      *) args+=("$a") ;;
+    esac
+  done
+  if [ "$quiet" = 1 ]; then command grep "${args[@]}" >/dev/null; else command grep "$@"; fi
+}
+check "a failing producer fails a grep -q check even when the text matches" "! ( { printf 'x'; false; } | grep -q x )"
 check "a large section matched early by grep -q still passes" "s=\$(printf 'x%.0s' \$(seq 1 200000)); printf '%s' \"x\$s\" | grep -q x"
 
 # The text of one "## <heading>" section, up to the next "## " heading. A "## " line
@@ -441,7 +456,7 @@ check "Step 4 pushes nothing: the first push is the first green cycle" "printf '
 check "Step 5 commits and pushes each green cycle" "printf '%s' \"\$step5_flat\" | grep -q 'each cycle that ends green' && printf '%s' \"\$step5\" | grep -q '^ *git push -u origin <type>/<number>-<slug>'"
 check "the lock is renewed before every commit from Step 5 on, and a failed renew stops the run" "printf '%s' \"\$pre0\" | grep -q '^ *scripts/loop-lock.sh renew-session <run-id>\$' && printf '%s' \"\$pre0_flat\" | grep -q 'Keep the lock' && printf '%s' \"\$pre0_flat\" | grep -q 'committing and pushing nothing'"
 check "Step 5 renews the lock before each cycle's commit" "r=\$(printf '%s\n' \"\$step5\" | grep -n -m1 'scripts/loop-lock.sh renew-session <run-id>' | cut -d: -f1); a=\$(printf '%s\n' \"\$step5\" | grep -n -m1 'git add -A' | cut -d: -f1); [ -n \"\$r\" ] && [ -n \"\$a\" ] && [ \"\$r\" -lt \"\$a\" ]"
-check "Step 8 renews the lock first" "printf '%s' \"\$step8\" | grep 'scripts/loop-lock.sh renew-session <run-id>' >/dev/null"
+check "Step 8 renews the lock first" "printf '%s' \"\$step8\" | grep -q 'scripts/loop-lock.sh renew-session <run-id>'"
 check "a failed holds comment on a resume posts a release too" "printf '%s' \"\$step0_flat\" | grep -q 'if the holds comment fails, post the release comment'"
 check "the empty-branch rule comes before 'bring it to green'" "e=\$(printf '%s\n' \"\$step0\" | grep -n -m1 'commits of its own' | cut -d: -f1); g=\$(printf '%s\n' \"\$step0\" | grep -n -m1 'bring it to green' | cut -d: -f1); [ -n \"\$e\" ] && [ -n \"\$g\" ] && [ \"\$e\" -lt \"\$g\" ]"
 check "Step 6 renews rather than re-takes the lock" "printf '%s' \"\$step6\" | grep -q '^ *scripts/loop-lock.sh renew-session <run-id>' && ! printf '%s' \"\$step6\" | grep -q 'acquire-session'"
@@ -453,7 +468,9 @@ check "only a confirmed claim from this clone is recovered at once" "printf '%s'
 check "holds and release comments count only from the loop's own account" "printf '%s' \"\$step0_flat\" | grep -q 'holds and release comments count only when the loop.s own account posted them'"
 check "a resume whose Steps 3.5 to 3.7 end the work saves and removes the branch first" "printf '%s' \"\$step0_flat\" | grep -q 'If Step 3.5, 3.6 or 3.7 ends the work on a resumed branch.*Give up\*\* steps 1, 2, 4 and 5.*no pushed branch is left behind'"
 check "Step 6 retries a failed push once, then stops" "printf '%s' \"\$(flat \"\$step6\")\" | grep -q 'If the push fails, run it once more; if that fails too, stop'"
-check "a run releases only a lock it took" "printf '%s' \"\$pre0_flat\" | grep -q 'once this run has taken it'"
+check "a run releases only a lock it took, and still releases after a failed renew" "printf '%s' \"\$pre0_flat\" | grep -q 'once this run has taken it' && printf '%s' \"\$pre0_flat\" | grep -q 'a run stopped by a failed renew still runs it'"
+check "a branch whose first push fails twice gives up at once" "printf '%s' \"\$step5_flat\" | grep -q 'If the branch.s first push fails, run it once more; if that fails too, follow .*Give up'"
+check "Give up lists Step 6 among the steps that end there" "printf '%s' \"\$give_up\" | grep -q 'Steps 5, 6 and 6.5 all end here'"
 check "the review loop's fixes and a follow-up's commits renew the lock" "printf '%s' \"\$pre0_flat\" | grep -q 'the review loop.s fixes after Step 7' && printf '%s' \"\$follow\" | grep -q 'scripts/loop-lock.sh renew-session <run-id>'"
 check "a dry run never takes the same-clone shortcut" "printf '%s' \"\$step0_flat\" | grep -q 'A dry run holds no lock'"
 check "a clone-id failure is reported" "printf '%s' \"\$pre0_flat\" | grep -q 'clone ID is .none., and say why in the report'"
