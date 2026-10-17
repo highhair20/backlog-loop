@@ -20,17 +20,17 @@ permissions:
   contents: read
   issues: write
 
-# Never two runs for one issue at once. A newer queued run replaces an older one
-# (GitHub keeps one pending run per group), which is safe: each reads the issue fresh.
-concurrency:
-  group: clear-closed-labels-${{ github.event.issue.number || 'all' }}
-  cancel-in-progress: false
-
 jobs:
   clear:
     # A label on an open issue is no business of this workflow; the script checks the
     # state again, since the issue can be reopened before the run starts.
     if: github.event_name == 'workflow_dispatch' || github.event.issue.state == 'closed'
+    # Never two runs for one issue at once. On the job, after the if, so a skipped run
+    # never takes the slot. A newer queued run replaces an older one (GitHub keeps one
+    # pending run per group), which is safe: each reads the issue fresh.
+    concurrency:
+      group: clear-closed-labels-${{ github.event.issue.number || 'all' }}
+      cancel-in-progress: false
     runs-on: ubuntu-latest
     steps:
       # The default branch's copy of the script.

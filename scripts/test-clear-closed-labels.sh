@@ -95,7 +95,9 @@ check "--all-closed fails when it cannot list the closed issues" "[ $rc -eq 1 ] 
 N="$(setup backfill-limit)"
 printf '3\n5\n' >"$N/list-in-review"; printf 'in-review\n' >"$N/labels-3"; printf 'in-review\n' >"$N/labels-5"
 PATH="$N/bin:$PATH" GH_REPO=o/r CLEAR_CLOSED_LIMIT=2 "$HERE/clear-closed-labels.sh" --all-closed >"$N/out" 2>&1; rc=$?
-check "--all-closed warns when a listing hits its limit" "[ $rc -eq 0 ] && grep -q 'run it again' '$N/out'"
+check "--all-closed warns when a listing hits its limit" "[ $rc -eq 0 ] && grep -q 'may have more' '$N/out'"
+PATH="$N/bin:$PATH" GH_REPO=o/r CLEAR_CLOSED_LIMIT=abc "$HERE/clear-closed-labels.sh" --all-closed >"$N/out" 2>&1; rc=$?
+check "a CLEAR_CLOSED_LIMIT that is not a number is a usage error" "[ $rc -eq 2 ] && grep -q 'CLEAR_CLOSED_LIMIT' '$N/out'"
 O="$(setup backfill-none)"
 run "$O" --all-closed; rc=$?
 check "--all-closed with nothing to clear succeeds and edits nothing" "[ $rc -eq 0 ] && [ \$(edits '$O') -eq 0 ] && grep -q 'looked at 0 closed issue' '$O/out'"
@@ -144,6 +146,7 @@ WF="$ROOT/.github/workflows/clear-closed-labels.yml"
 check "the workflow runs when an issue closes, and when a closed issue is labelled again" "[ -f '$WF' ] && grep -qE '^  issues:' '$WF' && grep -qE 'types: \\[closed, labeled\\]' '$WF'"
 check "its job runs only for a closed issue, or when started by hand" "grep -qE \"^    if: github.event_name == 'workflow_dispatch' \\|\\| github.event.issue.state == 'closed'\\\$\" '$WF'"
 check "it can be started by hand to clear issues closed before it existed" "grep -qE '^  workflow_dispatch:' '$WF' && grep -q 'scripts/clear-closed-labels.sh --all-closed' '$WF'"
+check "its concurrency group sits on the job, after the if, so skipped runs never take a slot" "awk '/^    if: /{i=NR} /^    concurrency:/{c=NR} END{exit !(i && c && i < c)}' '$WF' && ! grep -q '^concurrency:' '$WF'"
 check "runs for one issue queue rather than race" "grep -qF 'group: clear-closed-labels-\${{ github.event.issue.number ||' '$WF' && grep -q 'cancel-in-progress: false' '$WF'"
 check "it runs for every close reason, not planned included (no state_reason filter, and its one if: checks only the state)" "! grep -q 'state_reason' '$WF' && [ \$(grep -cE '^ +if:' '$WF') -eq 1 ]"
 check "it can write issues and read contents, nothing more" "[ \"\$(sed -n '/^permissions:/,/^[a-z]/p' '$WF' | grep -cE '^  [a-z-]+:')\" -eq 2 ] && grep -qE '^  issues: write' '$WF' && grep -qE '^  contents: read' '$WF'"

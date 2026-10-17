@@ -78,11 +78,12 @@ all_closed() {
     clear_one "$n" || failed=$((failed + 1))
   done
   say "looked at $count closed issue(s) with a status label; $failed failed"
-  [ "$full" -eq 0 ] || err "a listing reached its limit of $LIMIT issues: run it again for the rest"
+  [ "$full" -eq 0 ] || err "a listing reached its limit of $LIMIT issues and may have more: run it again for the rest"
   [ "$failed" -eq 0 ] || exit 1
 }
 
 [ $# -eq 1 ] || usage
+case "$LIMIT" in ''|*[!0-9]*|0) echo "clear-closed-labels: CLEAR_CLOSED_LIMIT must be a positive number, not '$LIMIT'" >&2; exit 2 ;; esac
 case "$1" in
   --all-closed) all_closed ;;
   ''|*[!0-9]*) usage ;;
