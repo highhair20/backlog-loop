@@ -125,7 +125,7 @@ those cases, not permission to run several loops at once:
 - **The clone ID:** this clone's own ID, from exactly this command. It is random,
   made the first time any run here asks, and kept in the git directory, so every
   worktree of this clone shares it and every fresh clone (each cloud run's) gets a
-  new one (#108). If it fails, the clone ID is `none`.
+  new one (#108). If it fails, the clone ID is `none`, and say why in the report.
   ```bash
   scripts/loop-lock.sh clone-id
   ```
@@ -155,9 +155,11 @@ clears a stale lock, as above):
 scripts/loop-lock.sh check
 ```
 
-**Release the lock when this run ends, whatever ends it:** the report after a PR or a
-follow-up, a stop at any step, Give up, a hand-back, a drained backlog. Make it the last
-command of the run, before the final report:
+**Release the lock when this run ends, whatever ends it,** once this run has taken it
+(a run stopped before that, or because `acquire-session` refused it, has nothing to
+release; a run stopped by a failed renew still runs it, and reports its result): the report
+after a PR or a follow-up, a stop at any step, Give up, a hand-back, a drained backlog.
+Make it the last command of the run, before the final report:
 
 ```bash
 scripts/loop-lock.sh release-session <run-id>
@@ -167,8 +169,8 @@ If it fails, say so in the report. A session that dies, or forgets this, holds t
 for 3 hours from when it last renewed it; after that any run takes it over.
 
 **Keep the lock while you work.** Renew it at the start of every step from Step 0 on,
-and before every commit and push (Step 5's cycles, Step 6, Step 6.5's fixes, a
-follow-up's commits):
+and before every commit and push (Step 5's cycles, Step 6, Step 6.5's fixes, the
+review loop's fixes after Step 7, a follow-up's commits):
 
 ```bash
 scripts/loop-lock.sh renew-session <run-id>
@@ -304,7 +306,8 @@ Then decide:
   cloud run starts from a fresh clone with a new ID, so its claims never match, and
   nor does a claim from before #108, which names `<host>:<path>`: those are judged by
   age, below. An unconfirmed claim is judged by age too, even from this clone: it may
-  be a race loser whose winner, in another clone, is still at work.)
+  be a race loser whose winner, in another clone, is still at work. A dry run holds no
+  lock, so it never takes this shortcut: it judges every claim by age.)
 - **Its claim is younger than 3 hours,** judged by the claim comment's `createdAt`
   (GitHub's clock, not the `at=` a runner wrote) against the time now: another run may
   still be working it. It is live: leave it alone, name it in the report as held by
@@ -336,9 +339,11 @@ gh pr list --state closed --limit 1000 --json number,headRefName,url,mergedAt \
 The closed listing is matched by branch name, never by `--head` against an existing
 branch: a human who closed the PR may also have deleted its branch.
 
-Step 4 pushes the branch as soon as it exists, and Step 5 pushes each green cycle
-(#108), so a run interrupted in Steps 4–5 leaves its branch on the remote, missing at
-most its unfinished cycle, which stays in this checkout as uncommitted edits. A run
+Step 5 pushes each green cycle (#108), so a run interrupted in Step 5 leaves its
+branch on the remote, missing at most its unfinished cycle, which stays in this
+checkout as uncommitted edits. A run interrupted before its first green cycle leaves a
+local-only branch with nothing committed, which a runner elsewhere starts over and a
+later run in this clone resumes (case 3 below). A run
 from before #108 can still leave a **local-only** branch. Check local branches too.
 
 Branches named `abandoned/<N>-<sha>` are work a give-up preserved for a human (see
@@ -459,11 +464,11 @@ Then:
    A resumed branch may hold only part of the work: Step 5 pushes each green cycle,
    so the run may have died with criteria still unmet, or before any work at all (no
    commits of its own: `git log --oneline origin/main..HEAD` prints nothing). The
-   earlier run's findings died with it, so do Steps 3.5, 3.6 and 5 on this branch, as
+   earlier run's findings died with it, so do Steps 3.5 to 3.7 and 5 on this branch, as
    a fresh claim would, keeping the work already there, and bring it to green for
    every acceptance criterion; then continue from Step 6 (commit/push, review, PR).
-   If Step 3.5 or 3.6 ends the work on a resumed branch (a false premise, an issue
-   held for a proposal), first save its commits and remove it with **Give up** steps
+   If Step 3.5, 3.6 or 3.7 ends the work on a resumed branch (a false premise, an
+   issue held for a proposal), first save its commits and remove it with **Give up** steps
    1, 2, 4 and 5, then do what that step says, so no pushed branch is left behind.
 4. **Neither a branch nor a PR** → nothing was actually done; release the claim so the
    issue becomes selectable again: `gh issue edit ${N} --remove-label in-progress`.
@@ -647,7 +652,8 @@ a fix the PR does not have: hand back, quoting the error.
 5. Test first, then run Step 5's gate: every `## Verify` command must pass, run
    in the foreground, as Step 5 says. After
    about three failed cycles, hand back.
-6. Commit as `fix: <what> (#<N>)`, push with
+6. Renew the lock (`scripts/loop-lock.sh renew-session <run-id>`; if it fails, stop as
+   **Keep the lock** says), then commit as `fix: <what> (#<N>)`, push with
    `git push origin <type>/<N>-<slug>`, and run Step 6.5's specialist reviewers on
    what this follow-up changed (`git diff --name-only <previous-head>..HEAD`). Push
    any review fixes the same way.
@@ -1008,12 +1014,7 @@ and a short kebab-case slug from the title (drop the prefix, ~5 words max):
 ```bash
 git switch -c <type>/<number>-<slug>
 # e.g. fix/19-audit-burger-restaurant-exclusion
-git push -u origin <type>/<number>-<slug>
 ```
-
-Push it at once, before any work: a runner on another machine sees only what is on the
-remote, so Step 0 can resume this branch there if this run dies (#108). If the push
-fails, follow **Give up**, quoting the error.
 
 ## Step 5 — Implement with TDD
 
@@ -1030,10 +1031,15 @@ fails, follow **Give up**, quoting the error.
    scripts/loop-lock.sh renew-session <run-id>
    git add -A
    git commit -m "<type>: <what this cycle did> (#<number>)"
-   git push origin <type>/<number>-<slug>
+   git push -u origin <type>/<number>-<slug>
    ```
-   If the push fails, keep working, and push again at Step 6; if that push fails too,
-   name both in the report.
+   If the branch's first push fails (the one that creates it on the remote; a branch
+   Step 0 resumed from the remote is past it), run it once more; if that fails too, stop and report it, keeping the claim and the branch:
+   a runner that cannot push would only waste the rest of the work, and Step 4 no
+   longer pushes to find that out early. Not Give up: its save is a push too, and would
+   fail the same way. A later run in this clone resumes the branch (Step 0); a push
+   that keeps failing is a setup problem (see the guardrails), not this issue's. A later cycle's push that fails:
+   keep working, and Step 6 pushes again (and stops the run if that fails twice).
 4. The change is **done** only when every command in CLAUDE.md `## Verify` that
    applies to the changed paths passes locally, **and** every check in
    `## Definition of done` (if present) is satisfied and recorded in the PR body.
@@ -1071,7 +1077,11 @@ git push -u origin <type>/<number>-<slug>
 
 If `git status --porcelain` lists nothing, Step 5 already committed everything: there
 is nothing to commit, so skip the commit and only push. Push now, before review: Step 0
-can only recover what exists on the remote.
+can only recover what exists on the remote. If the push fails, run it once more; if that fails too, stop: open no PR.
+Report it, keeping the claim and the branch with its commits: Give up's save is a push
+too and would fail the same way, and a later run in this clone resumes the branch
+(Step 0). In a cloud session, say the work exists only in this checkout, which is
+discarded when the session ends.
 
 ## Step 6.5 — Specialist review before the PR
 
@@ -1141,6 +1151,10 @@ Closes #<number>
 PRBODY
 )"
 ```
+
+The review loop the hooks open once the PR exists pushes its fixes to this branch:
+renew the lock before each of those commits too (**Keep the lock**), and stop if the
+renew fails.
 
 ## Step 8 — Update state & report
 

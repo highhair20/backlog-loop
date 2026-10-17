@@ -52,11 +52,10 @@ removes it from a repo made with "Use this template", and sync never copies it.
   hours after its last renewal (`scripts/loop-lock.sh acquire-session` /
   `renew-session` / `release-session`). A run that finds it lost the lock stops. Claims name a random
   per-clone ID (`scripts/loop-lock.sh clone-id`, kept in the git directory) instead of
-  `<host>:<path>`, which cloud containers could share. A run pushes its branch as soon
-  as Step 4 makes it and after each green test cycle, so a runner elsewhere can resume
-  it. A race winner confirms its claim with a `holds` comment, so a loser that died
+  `<host>:<path>`, which cloud containers could share. A run pushes its branch after
+  each green test cycle, so a runner elsewhere can resume it. A race winner confirms its claim with a `holds` comment, so a loser that died
   before releasing is never taken for the holder. Each push runs CI on the branch, so
-  an issue now costs a few more CI runs. One runner per repository stays the rule
+  an issue now costs a CI run per green cycle. One runner per repository stays the rule
   until a live walkthrough shows a local driver and the routine never work one issue.
 
 ### Fixed

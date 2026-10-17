@@ -80,8 +80,8 @@ gate on.
   every claim is a comment naming the run and its clone, and the race winner
   confirms it. Step 0 leaves alone a claim younger than three hours, recovers older
   ones, and recovers a claim from its own clone at once. Every run, the driver,
-  `/loop` and a manual one, takes the clone's lock, and each run pushes its branch as
-  soon as it makes it and again after each green test cycle. Its limits:
+  `/loop` and a manual one, takes the clone's lock, and each run pushes its branch
+  after each green test cycle. Its limits:
   - A run past three hours can have its claim recovered underneath it: nothing
     renews a claim.
   - A session that dies without releasing the lock holds it for three hours, so a

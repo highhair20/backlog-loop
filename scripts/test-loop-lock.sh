@@ -192,7 +192,7 @@ check "a driver is refused while a session holds the lock" "[ $rc -eq 1 ] && gre
 "$E/scripts/loop-lock.sh" check >"$E/out" 2>&1; rc=$?
 check "check fails while a session holds the lock" "[ $rc -eq 1 ] && grep -q 'holds the lock' '$E/out'"
 "$E/scripts/loop-lock.sh" release-session run-b >"$E/out" 2>&1; rc=$?
-check "release-session by another run fails and keeps the lock" "[ $rc -eq 1 ] && [ \"\$(cut -d' ' -f1 '$ELOCK/run')\" = run-a ]"
+check "release-session by another run fails, says so, and keeps the lock" "[ $rc -eq 1 ] && grep -q 'run run-b does not hold it' '$E/out' && [ \"\$(cut -d' ' -f1 '$ELOCK/run')\" = run-a ]"
 "$E/scripts/loop-lock.sh" release-session run-a >"$E/out" 2>&1; rc=$?
 check "release-session by its run removes the lock" "[ $rc -eq 0 ] && [ ! -e '$ELOCK' ]"
 "$E/scripts/loop-lock.sh" release-session run-a >"$E/out" 2>&1; rc=$?
@@ -297,7 +297,7 @@ mkdir "$YLOCK/reclaiming"
 "$Y/scripts/loop-lock.sh" renew-session run-y >"$Y/out" 2>&1; rc=$?
 check "renew-session fails while another run is reclaiming the lock" "[ $rc -eq 1 ] && [ \"\$(cut -d' ' -f2 '$YLOCK/run')\" = $((NOW - 10900)) ]"
 "$Y/scripts/loop-lock.sh" release-session run-y >"$Y/out" 2>&1; rc=$?
-check "release-session never deletes a lock another run is reclaiming" "[ $rc -eq 1 ] && [ -d '$YLOCK/reclaiming' ] && grep -q 'run-y' '$YLOCK/run'"
+check "release-session never deletes a lock another run is reclaiming, and says so" "[ $rc -eq 1 ] && grep -q 'another run is reclaiming it' '$Y/out' && [ -d '$YLOCK/reclaiming' ] && grep -q 'run-y' '$YLOCK/run'"
 rm -rf "$YLOCK"
 "$Y/scripts/loop-lock.sh" acquire $$ >/dev/null 2>&1
 BACKLOG_LOOP_PID=$$ "$Y/scripts/loop-lock.sh" renew-session run-y >"$Y/out" 2>&1; rc=$?
@@ -312,6 +312,38 @@ check "acquire-session for the run that holds the lock renews it" "[ $rc -eq 0 ]
 "$Y/scripts/loop-lock.sh" release-session run-y >"$Y/out" 2>&1; rc=$?
 check "release-session leaves no lock and no marker behind" "[ $rc -eq 0 ] && [ ! -e '$YLOCK' ] && [ \"\$(ls '$Y/.git' | grep -c backlog-loop.lock)\" = 0 ]"
 
+# Another run's marker can sit in the lock for a moment (its renew or release checks
+# the lock only after taking the marker): the holder waits it out instead of stopping.
+plant_session "$Y" run-y "$NOW"
+mkdir "$YLOCK/reclaiming"
+( sleep 0.2; rmdir "$YLOCK/reclaiming" ) &
+bg=$!
+"$Y/scripts/loop-lock.sh" renew-session run-y >"$Y/out" 2>&1; rc=$?
+wait "$bg"
+check "renew-session waits out another run's passing marker" "[ $rc -eq 0 ] && [ \"\$(ls '$YLOCK')\" = run ]"
+mkdir "$YLOCK/reclaiming"
+( sleep 0.2; rmdir "$YLOCK/reclaiming" ) &
+bg=$!
+"$Y/scripts/loop-lock.sh" release-session run-y >"$Y/out" 2>&1; rc=$?
+wait "$bg"
+check "release-session waits out another run's passing marker" "[ $rc -eq 0 ] && [ ! -e '$YLOCK' ]"
+
+# A run that does not hold the lock never puts a marker in it: another run's renew or
+# release would then find a marker that is not a reclaim, and stop.
+MK="$WORK/shims/mkdirlog"
+mkdir -p "$MK"
+# shellcheck disable=SC2016  # expanded by the shim, not here
+printf '#!/bin/sh\necho "$@" >>"%s/calls"\nexec /bin/mkdir "$@"\n' "$MK" >"$MK/mkdir"
+chmod +x "$MK/mkdir"
+plant_session "$Y" run-y "$NOW"
+: >"$MK/calls"
+PATH="$MK:$PATH" "$Y/scripts/loop-lock.sh" renew-session run-z >"$Y/out" 2>&1; rc1=$?
+PATH="$MK:$PATH" "$Y/scripts/loop-lock.sh" release-session run-z >>"$Y/out" 2>&1; rc2=$?
+check "renew and release by a run that does not hold the lock never take its marker" "[ $rc1 -eq 1 ] && [ $rc2 -eq 1 ] && ! grep -q reclaiming '$MK/calls' && grep -q '^run-y ' '$YLOCK/run'"
+PATH="$MK:$PATH" "$Y/scripts/loop-lock.sh" renew-session run-y >/dev/null 2>&1; rc=$?
+check "while the holder's own renew does take it (the shim sees mkdir)" "[ $rc -eq 0 ] && grep -q reclaiming '$MK/calls'"
+rm -rf "$YLOCK"
+
 # A clone ID that cannot be created is named as such, not as a corrupt file.
 if [ "$(id -u)" -ne 0 ]; then
   Z="$(new_repo cloneid-readonly)"
@@ -320,6 +352,80 @@ if [ "$(id -u)" -ne 0 ]; then
   chmod u+w "$Z/.git"
   check "a clone ID that cannot be written is an error saying so" "[ $rc -eq 2 ] && grep -q 'could not' '$Z/out' && ! grep -q 'remove it' '$Z/out'"
 fi
+
+# --- re-review of #119/#120: the driver's lock covers its session by identity; failed moves; the release race ---
+# A session the driver started never judges the driver alive or dead: inside a sandbox
+# that hides other processes, a live driver would look dead and its lock be removed.
+# It goes by what the lock records: once another run has taken it, renew fails.
+DD="$(new_repo dead-driver)"
+plant_lock "$DD" "$DEAD"
+BACKLOG_LOOP_PID=$DEAD "$DD/scripts/loop-lock.sh" acquire-session run-o >"$DD/out" 2>&1; rc=$?
+check "a driver's session never removes its driver's lock, whatever it can see of the driver" "[ $rc -eq 0 ] && [ \"\$(cat '$DD/.git/backlog-loop.lock/pid')\" = '$DEAD' ] && [ ! -e '$DD/.git/backlog-loop.lock/run' ]"
+rm -rf "$DD/.git/backlog-loop.lock"
+plant_session "$DD" run-other "$NOW"
+BACKLOG_LOOP_PID=$DEAD "$DD/scripts/loop-lock.sh" renew-session run-o >"$DD/out" 2>&1; rc=$?
+check "once another run has taken its driver's lock, a session's renew fails" "[ $rc -eq 1 ] && grep -q '^run-other ' '$DD/.git/backlog-loop.lock/run'"
+
+# Shims for mv, on PATH for one call: one that fails, one that lets another run take
+# the lock the moment the release has moved it away.
+SHIMS="$WORK/shims"
+mkdir -p "$SHIMS/failmv" "$SHIMS/racemv"
+printf '#!/bin/sh\nexit 1\n' >"$SHIMS/failmv/mv"
+# shellcheck disable=SC2016  # expanded by the shim, not here
+printf '#!/bin/sh\n/bin/mv "$@" || exit 1\ncase "$2" in *.released.*) l="${2%%%%.released.*}"; mkdir "$l" && echo "run-other %s" >"$l/run" && mkdir "$l/reclaiming" ;; esac\n' "$NOW" >"$SHIMS/racemv/mv"
+chmod +x "$SHIMS/failmv/mv" "$SHIMS/racemv/mv"
+
+RR="$(new_repo release-race)"
+plant_session "$RR" run-y "$NOW"
+PATH="$SHIMS/racemv:$PATH" "$RR/scripts/loop-lock.sh" release-session run-y >"$RR/out" 2>&1; rc=$?
+check "release-session leaves alone a lock another run took right after the move" "[ $rc -eq 0 ] && grep -q '^run-other ' '$RR/.git/backlog-loop.lock/run' && [ -d '$RR/.git/backlog-loop.lock/reclaiming' ]"
+
+FM="$(new_repo failed-move)"
+plant_session "$FM" run-old $((NOW - 10900))
+PATH="$SHIMS/failmv:$PATH" "$FM/scripts/loop-lock.sh" acquire $$ >"$FM/out" 2>&1; rc=$?
+check "a reclaim whose move fails keeps the lock and leaves no marker" "[ $rc -eq 1 ] && grep -q '^run-old ' '$FM/.git/backlog-loop.lock/run' && [ ! -e '$FM/.git/backlog-loop.lock/reclaiming' ]"
+FR="$(new_repo failed-release)"
+plant_session "$FR" run-y "$NOW"
+PATH="$SHIMS/failmv:$PATH" "$FR/scripts/loop-lock.sh" release-session run-y >"$FR/out" 2>&1; rc=$?
+check "a release whose move fails exits 2, says so, keeps the lock and leaves no marker" "[ $rc -eq 2 ] && grep -q 'could not remove' '$FR/out' && grep -q '^run-y ' '$FR/.git/backlog-loop.lock/run' && [ ! -e '$FR/.git/backlog-loop.lock/reclaiming' ]"
+
+HA="$(new_repo holder-acquire)"
+plant_session "$HA" run-h $((NOW - 10900))
+"$HA/scripts/loop-lock.sh" acquire-session run-h >"$HA/out" 2>&1; rc=$?
+check "acquire-session by the holder of a lock past 3 hours renews it, not reclaims it" "[ $rc -eq 0 ] && [ \"\$(cut -d' ' -f2 '$HA/.git/backlog-loop.lock/run')\" -ge $NOW ] && ! grep -qi stale '$HA/out'"
+mkdir "$HA/.git/backlog-loop.lock/reclaiming"
+before="$(cat "$HA/.git/backlog-loop.lock/run")"
+"$HA/scripts/loop-lock.sh" acquire-session run-h >"$HA/out" 2>&1; rc=$?
+check "acquire-session by the holder fails while another run is reclaiming" "[ $rc -eq 1 ] && [ \"\$(cat '$HA/.git/backlog-loop.lock/run')\" = '$before' ]"
+
+if [ "$(id -u)" -ne 0 ]; then
+  WF="$(new_repo write-fail)"
+  plant_session "$WF" run-w "$NOW"
+  chmod a-w "$WF/.git/backlog-loop.lock"
+  "$WF/scripts/loop-lock.sh" renew-session run-w >"$WF/out" 2>&1; rc=$?
+  chmod u+w "$WF/.git/backlog-loop.lock"
+  check "a renew that cannot write exits 2 with the OS reason, not that the lock was lost" "[ $rc -eq 2 ] && grep -q 'could not write' '$WF/out' && grep -qi 'permission denied' '$WF/out' && ! grep -q 'no longer holds' '$WF/out' && [ ! -e '$WF/.git/backlog-loop.lock/run.new' ]"
+  chmod a-w "$WF/.git/backlog-loop.lock"
+  "$WF/scripts/loop-lock.sh" release-session run-w >"$WF/out" 2>&1; rc=$?
+  chmod u+w "$WF/.git/backlog-loop.lock"
+  check "a release that cannot write exits 2, says so, and keeps the lock" "[ $rc -eq 2 ] && grep -q 'could not write it' '$WF/out' && grep -q '^run-w ' '$WF/.git/backlog-loop.lock/run'"
+fi
+
+RW="$(new_repo refresh-fail)"
+plant_session "$RW" run-r "$NOW"
+PATH="$SHIMS/failmv:$PATH" "$RW/scripts/loop-lock.sh" renew-session run-r >"$RW/out" 2>&1; rc=$?
+check "a renew whose rename fails exits 2, and leaves no temp file or marker" "[ $rc -eq 2 ] && grep -q 'could not write' '$RW/out' && [ \"\$(ls '$RW/.git/backlog-loop.lock')\" = run ]"
+mkdir -p "$SHIMS/boommv"
+printf '#!/bin/sh\necho "mv: boom" >&2\nexit 1\n' >"$SHIMS/boommv/mv"
+chmod +x "$SHIMS/boommv/mv"
+PATH="$SHIMS/boommv:$PATH" "$RW/scripts/loop-lock.sh" renew-session run-r >"$RW/out" 2>&1; rc=$?
+check "a renew whose rename fails prints the OS reason" "[ $rc -eq 2 ] && grep -q 'mv: boom' '$RW/out' && [ \"\$(ls '$RW/.git/backlog-loop.lock')\" = run ]"
+
+LV="$(new_repo reclaim-precheck)"
+plant_session "$LV" run-live "$NOW"
+: >"$MK/calls"
+PATH="$MK:$PATH" "$LV/scripts/loop-lock.sh" acquire-session run-new >"$LV/out" 2>&1; rc=$?
+check "a run refused by a live lock puts no marker in it" "[ $rc -eq 1 ] && ! grep -q reclaiming '$MK/calls'"
 
 # --- errors are not reported as "held", and never pass ---
 N="$WORK/not-a-repo"

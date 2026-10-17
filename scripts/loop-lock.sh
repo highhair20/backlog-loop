@@ -78,6 +78,14 @@ case "$git_dir" in /*) ;; *) git_dir="$PWD/$git_dir" ;; esac
 LOCK="$git_dir/backlog-loop.lock"
 CLONE_ID="$git_dir/backlog-loop.clone-id"
 
+# Set while this run holds the reclaim marker in a lock, so a run killed meanwhile
+# removes it on the way out; a marker left behind would block the lock until a human
+# cleared it. A signal exits through the EXIT trap. (SIGKILL cannot be caught.)
+MARKER_HELD=0
+trap '[ "$MARKER_HELD" = 1 ] && rmdir "$LOCK/reclaiming" 2>/dev/null' EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
+
 # The driver PID recorded in the lock; nothing if there is none or it is not a number.
 owner() {
   local pid=""
@@ -148,13 +156,19 @@ how_to_clear() { echo "  If no backlog loop is running here, clear it: rm -rf $L
 # holder's (and still stale: a new driver could have been given the same PID).
 # Returns 1, removing nothing, if another run got there first.
 reclaim() {
+  # Checked before the marker too, so a lock that has changed hands or been renewed
+  # since settle judged it never gets a passing marker from this run.
+  { [ "$(holder)" = "$1" ] && ! is_live "$1"; } || return 1
   mkdir "$LOCK/reclaiming" 2>/dev/null || return 1
+  MARKER_HELD=1
   if [ "$(holder)" != "$1" ] || is_live "$1"; then
-    # The marker landed in a lock someone has since taken. If it cannot be removed
-    # it is harmless there: that run's release deletes the whole lock.
+    # The marker landed in a lock someone has since taken: remove it, or that run's
+    # renew and release would take it for a reclaim under way and stop.
     rmdir "$LOCK/reclaiming" 2>/dev/null
+    MARKER_HELD=0
     return 1
   fi
+  MARKER_HELD=0
   remove_lock stale || { rmdir "$LOCK/reclaiming" 2>/dev/null; return 1; }
 }
 
@@ -164,11 +178,16 @@ remove_lock() {
   local aside="$LOCK.$1.$$"
   rm -rf "$aside"
   mv "$LOCK" "$aside" || return 1
-  rm -rf "$aside"
+  # The lock is gone once moved; a leftover copy only needs tidying.
+  rm -rf "$aside" || echo "loop-lock: could not delete $aside; remove it by hand" >&2
+  return 0
 }
 
 # True if the lock is held by $1 (a driver PID) or $2 (a session's run ID), either of
-# which may be empty: the holders a caller may go on under.
+# which may be empty: the holders a caller may go on under. By identity only, never by
+# whether the driver is running: a session sandboxed from other processes would see a
+# live driver as dead and remove its lock. Once another run takes the lock, it no
+# longer records the driver, so the session's next renew fails and it stops.
 held_by() {
   local h
   h="$(holder)"
@@ -203,6 +222,9 @@ settle() {
     return 0
   fi
   [ -d "$LOCK" ] || return 0
+  # It changed hands while this run judged it: judge the new holder instead of
+  # reporting a stuck reclaim (whose advice, rm -rf, would remove a live run's lock).
+  if [ "$(holder)" != "$h" ]; then settle "${1:-}" "${2:-}"; return; fi
   reclaim_blocked "$(describe "$h")"
   return 1
 }
@@ -245,6 +267,7 @@ reclaim_blocked() {
 adopt() {
   mkdir "$LOCK/reclaiming" 2>/dev/null || { reclaim_blocked "PID $1"; return 1; }
   rmdir "$LOCK/reclaiming"
+  MARKER_HELD=0
   echo "↻ Reclaimed a stale backlog-loop lock: an earlier run left it under this PID ($1)." >&2
 }
 
@@ -282,17 +305,50 @@ acquire_session() {
   settle_then_take run "$1 $now" "${BACKLOG_LOOP_PID:-}" "$1"
 }
 
+# Take the reclaim marker in run $1's own lock. A run tries only while the lock names
+# it, which keeps most runs that lost their lock out of others' locks; the lock can
+# still change hands between that check and the mkdir, and a reclaimer's marker can be
+# in the way, so a marker found there ("File exists") is waited out. Returns 0 when
+# taken; 1 when the lock is gone, is not run $1's, or a marker stays (another run is
+# reclaiming it); 3 when mkdir fails for any other reason: the lock cannot be written
+# (the OS reason is printed).
+MARKER_TRIES=10
+MARKER_WAIT=0.2
+take_marker() {
+  local i=1 err
+  while :; do
+    held_by "" "$1" || return 1
+    if err="$(LC_ALL=C mkdir "$LOCK/reclaiming" 2>&1)"; then
+      MARKER_HELD=1
+      return 0
+    fi
+    case "$err" in
+      *"File exists"*) ;;
+      *)
+        [ -d "$LOCK" ] || return 1
+        echo "loop-lock: $err" >&2
+        return 3
+        ;;
+    esac
+    [ "$i" -ge "$MARKER_TRIES" ] && return 1
+    i=$((i + 1))
+    sleep "$MARKER_WAIT"
+  done
+}
+
 # Run "$2..." with the reclaim marker held, if the lock is still run $1's; reclaim()
 # takes the same marker, so the lock cannot be reclaimed (or taken) part-way through.
-# Returns 1, changing nothing, when the lock is gone, is another run's, or another run
-# is reclaiming it.
+# Returns take_marker's 1 or 3, changing nothing, when it cannot take the marker;
+# otherwise what "$2..." returns.
 as_holder() {
   local run="$1" rc
   shift
-  mkdir "$LOCK/reclaiming" 2>/dev/null || return 1
-  if ! held_by "" "$run"; then rmdir "$LOCK/reclaiming" 2>/dev/null; return 1; fi
+  take_marker "$run"; rc=$?
+  [ "$rc" -eq 0 ] || return "$rc"
+  if ! held_by "" "$run"; then rmdir "$LOCK/reclaiming" 2>/dev/null; MARKER_HELD=0; return 1; fi
   "$@"; rc=$?
   rmdir "$LOCK/reclaiming" 2>/dev/null
+  MARKER_HELD=0
   return "$rc"
 }
 
@@ -303,8 +359,13 @@ lost_lock() {
 }
 
 # Write a fresh time into run $1's lock. Replaced by a rename, so no reader sees it half-written.
+# Returns 3 if it cannot write, after printing why.
 refresh() {
-  echo "$1 $2" >"$LOCK/run.new" && mv "$LOCK/run.new" "$LOCK/run"
+  local err
+  err="$({ echo "$1 $2" >"$LOCK/run.new" && mv "$LOCK/run.new" "$LOCK/run"; } 2>&1)" && return 0
+  rm -f "$LOCK/run.new"
+  [ -z "$err" ] || echo "loop-lock: $err" >&2
+  return 3
 }
 
 renew_session() {
@@ -312,7 +373,11 @@ renew_session() {
   # A session the driver started holds nothing to renew: the driver's lock covers it.
   held_by "${BACKLOG_LOOP_PID:-}" "" && return 0
   now="$(now_or_die)" || exit 2
-  as_holder "$1" refresh "$1" "$now" && return 0
+  as_holder "$1" refresh "$1" "$now"
+  case $? in
+    0) return 0 ;;
+    3) echo "✗ Run $1 holds the backlog-loop lock but could not write $LOCK to renew it. Stop." >&2; return 2 ;;
+  esac
   lost_lock "$1"
   return 1
 }
@@ -334,20 +399,29 @@ release_session() {
   held_by "${BACKLOG_LOOP_PID:-}" "" && return 0
   # Not as_holder: the marker leaves with the lock, and removing it afterwards could
   # remove a marker in a new lock another run has taken since.
-  if ! mkdir "$LOCK/reclaiming" 2>/dev/null; then
-    [ -d "$LOCK" ] || return 0
-    echo "loop-lock: not releasing $LOCK: another run is reclaiming it" >&2
-    return 1
-  fi
+  take_marker "$1"
+  case $? in
+    0) ;;
+    3) echo "loop-lock: not releasing $LOCK: could not write it" >&2; return 2 ;;
+    *)
+      [ -d "$LOCK" ] || return 0
+      if held_by "" "$1"; then
+        echo "loop-lock: not releasing $LOCK: another run is reclaiming it" >&2
+        return 1
+      fi
+      ;;
+  esac
   if ! held_by "" "$1"; then
-    rmdir "$LOCK/reclaiming" 2>/dev/null
+    [ "$MARKER_HELD" = 1 ] && rmdir "$LOCK/reclaiming" 2>/dev/null
+    MARKER_HELD=0
     echo "loop-lock: not releasing $LOCK: run $1 does not hold it" >&2
     return 1
   fi
+  MARKER_HELD=0
   remove_lock released && return 0
   rmdir "$LOCK/reclaiming" 2>/dev/null
   echo "loop-lock: could not remove $LOCK" >&2
-  return 1
+  return 2
 }
 
 # Print this clone's ID, making it on first use. Several runs may make one at once:
