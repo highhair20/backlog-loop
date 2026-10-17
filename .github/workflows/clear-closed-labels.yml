@@ -10,6 +10,9 @@ on:
   # a human closed its issue still swaps its labels.
   issues:
     types: [closed, labeled]
+  # By hand, once, for issues closed before this workflow existed. Its edits use this
+  # workflow's token, so unlike a run from a terminal they start no ready-to-merge runs.
+  workflow_dispatch:
 
 permissions:
   # contents: read for the checkout, which a private repo needs; issues: write to
@@ -17,16 +20,17 @@ permissions:
   contents: read
   issues: write
 
-# One run at a time per issue, in order: each reads the issue fresh.
+# Never two runs for one issue at once. A newer queued run replaces an older one
+# (GitHub keeps one pending run per group), which is safe: each reads the issue fresh.
 concurrency:
-  group: clear-closed-labels-${{ github.event.issue.number }}
+  group: clear-closed-labels-${{ github.event.issue.number || 'all' }}
   cancel-in-progress: false
 
 jobs:
   clear:
     # A label on an open issue is no business of this workflow; the script checks the
     # state again, since the issue can be reopened before the run starts.
-    if: github.event.issue.state == 'closed'
+    if: github.event_name == 'workflow_dispatch' || github.event.issue.state == 'closed'
     runs-on: ubuntu-latest
     steps:
       # The default branch's copy of the script.
@@ -37,7 +41,12 @@ jobs:
           persist-credentials: false
       - name: Clear status labels
         # The number comes in through the environment, never pasted into the command.
-        run: scripts/clear-closed-labels.sh "$ISSUE"
+        run: |
+          if [ -n "$ISSUE" ]; then
+            scripts/clear-closed-labels.sh "$ISSUE"
+          else
+            scripts/clear-closed-labels.sh --all-closed
+          fi
         env:
           ISSUE: ${{ github.event.issue.number }}
           GH_TOKEN: ${{ github.token }}
