@@ -271,7 +271,18 @@ every_section_has_manual_steps() {
   ' "$CHANGELOG"
 }
 check "every CHANGELOG.md section has manual steps for existing repos" "every_section_has_manual_steps"
-check "CHANGELOG.md links each version heading" "grep -qF '[0.1.0]: https://github.com/highhair20/backlog-loop/releases/tag/v0.1.0' '$CHANGELOG' && grep -qF '[Unreleased]: https://github.com/highhair20/backlog-loop/compare/v0.1.0...HEAD' '$CHANGELOG'"
+# Every version heading has a link, and Unreleased compares from the newest version.
+every_version_is_linked() {
+  local v newest
+  newest="$(sed -n 's/^## \[\([0-9][0-9.]*\)\] - .*/\1/p' "$CHANGELOG" | head -1)"
+  [ -n "$newest" ] || return 1
+  grep -qF "[Unreleased]: https://github.com/highhair20/backlog-loop/compare/v$newest...HEAD" "$CHANGELOG" || return 1
+  for v in $(sed -n 's/^## \[\([0-9][0-9.]*\)\] - .*/\1/p' "$CHANGELOG"); do
+    grep -qE "^\[$v\]: https://github.com/highhair20/backlog-loop/(releases/tag/v$v|compare/v[0-9.]+\.\.\.v$v)\$" "$CHANGELOG" || return 1
+  done
+}
+check "CHANGELOG.md links each version heading" "every_version_is_linked"
+check "the first release links to its tag" "grep -qF '[0.1.0]: https://github.com/highhair20/backlog-loop/releases/tag/v0.1.0' '$CHANGELOG'"
 check "README says how to cut a release" "grep -qx '### Cutting a release' '$ROOT/README.md' && grep -qF 'git tag -a vX.Y.Z' '$ROOT/README.md'"
 check "README's file list includes the changelog" "grep -qE '^CHANGELOG\\.md[[:space:]]' '$ROOT/README.md'"
 
