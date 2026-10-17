@@ -427,6 +427,15 @@ plant_session "$LV" run-live "$NOW"
 PATH="$MK:$PATH" "$LV/scripts/loop-lock.sh" acquire-session run-new >"$LV/out" 2>&1; rc=$?
 check "a run refused by a live lock puts no marker in it" "[ $rc -eq 1 ] && ! grep -q reclaiming '$MK/calls'"
 
+# adopt cannot take over a lock whose reclaim marker it cannot remove.
+AD="$(new_repo adopt-stuck)"
+plant_lock "$AD" $$
+mkdir -p "$SHIMS/failrmdir"
+printf '#!/bin/sh\nexit 1\n' >"$SHIMS/failrmdir/rmdir"
+chmod +x "$SHIMS/failrmdir/rmdir"
+PATH="$SHIMS/failrmdir:$PATH" "$AD/scripts/loop-lock.sh" acquire $$ >"$AD/out" 2>&1; rc=$?
+check "adopt fails, saying so, when it cannot remove the reclaim marker" "[ $rc -ne 0 ] && grep -q 'Could not remove' '$AD/out' && ! grep -q 'Reclaimed' '$AD/out'"
+
 # --- errors are not reported as "held", and never pass ---
 N="$WORK/not-a-repo"
 mkdir -p "$N/scripts" && cp "$HERE/loop-lock.sh" "$N/scripts/"

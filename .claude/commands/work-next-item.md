@@ -172,7 +172,8 @@ for 3 hours from when it last renewed it; after that any run takes it over.
 and before every commit, push or remote branch deletion (Step 5's cycles, Step 6,
 Step 6.5's fixes, the review loop's fixes after Step 7, a follow-up's commits, Give up
 (its commit, its pushes and its branch deletion), a hand-back, and Step 3's retiring of
-a leftover branch). A dry run, which holds no lock, skips every renew (#123):
+a leftover branch; these last three renew once, at their start, since their steps run in
+seconds). A dry run, which holds no lock, skips every renew (#123):
 
 ```bash
 scripts/loop-lock.sh renew-session <run-id>
@@ -238,6 +239,8 @@ watch what it would do before it can do it.
   ls-remote, status and log, and reading files. Step 1's switch to main and its
   fast-forward pull count as reads here: they change only this checkout, and a dirty
   tree still stops the run.
+- **Never run `scripts/loop-lock.sh renew-session`** (#123): a dry run holds no lock,
+  so every renew a step asks for is skipped, and its failure never stops the run.
 - **Never run a write:** anything that changes GitHub, a git ref, the index, or the
   working tree. The list below gives examples; it is not the whole rule. On GitHub:
   gh issue comment, gh issue edit, gh issue close, gh pr create, or their MCP
@@ -288,12 +291,14 @@ off. Of the rest, a claim is **confirmed** when its run also posted a holds comm
 after its label (Step 3). The claim that holds the issue is (#108):
 
 - **a claim newer than the newest confirmed claim (or any claim, with none confirmed)
-  that is under 10 minutes old, and not a race loser by Step 3's rule** (#123): one
-  posted less than a minute after a rival's claim, or in the same second with a larger
-  `run=`, a rival being another runner's claim (a different `run=`, and not your own
-  clone when both are real clone IDs). That one lost its race, whatever its age. Its
-  run may be a winner between its label and its holds comment. Take the newest such
-  claim;
+  that is under 10 minutes old, and not a race loser** (#123): its run may be a winner
+  between its label and its holds comment. Take the newest such claim. A claim is a
+  race loser, whatever its age, when it was posted after a confirmed claim less than
+  3 hours old (that run still held the issue, so no later claim could win it), or less
+  than a minute after another runner's claim, or in the same second as one with a
+  larger `run=`. Another runner's claim has a different `run=` and is not from the
+  same clone as that claim's run (both real clone IDs): one clone's own claims never
+  race each other;
 - **otherwise, the newest confirmed claim.** A newer unconfirmed claim past 10 minutes
   lost its race (a loser that died before posting its release), or won and died before
   confirming; either way it holds nothing;
@@ -701,7 +706,7 @@ only when `git branch --show-current` prints the PR's branch. Otherwise skip to 
 whatever stopped the follow-up (the round cap before the claim, a failed switch):
 steps 2 and 3 run on `main` would save `main`'s own commits.
 
-Before step 1, renew the lock (`scripts/loop-lock.sh renew-session <run-id>`; see **Keep the lock**). If it fails, another run may hold this branch: change nothing, and report it.
+First, whichever step you start at, renew the lock (`scripts/loop-lock.sh renew-session <run-id>`; see **Keep the lock**). If it fails, another run may hold this branch: change nothing, and report it.
 
 1. Keep any work: abort a half-done merge
    (`git rev-parse -q --verify MERGE_HEAD` prints a hash only when one is in
@@ -1245,7 +1250,7 @@ step 4 or 5 fails, the work is already saved: add a comment naming what is left,
 so a human removes it. Never get past a failure with `--no-verify` or `--force`.
 
 Run these on the issue's branch, `<type>/<number>-<slug>`. Before step 1, renew the lock (`scripts/loop-lock.sh renew-session <run-id>`; see **Keep the lock**). If it fails, another run may hold this branch: change nothing, and report it. The steps then
-run in seconds, so one renew covers them all.
+run in seconds, so this one renew covers them all (see **Keep the lock**).
 
 1. **Commit anything uncommitted**, so it travels with the branch. A stash would stay
    on this machine, and a cloud session's clone is discarded. First make sure a merge
