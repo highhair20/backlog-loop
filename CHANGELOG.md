@@ -16,9 +16,21 @@ removes it from a repo made with "Use this template", and sync never copies it.
 
 ## [Unreleased]
 
+### Fixed
+
+- `/work-next-item` dry runs no longer stop at Step 0: a dry run, which takes no lock,
+  skips every renew. Before, "Keep the lock" told it to renew a lock it never held, so
+  a scheduled routine's dry run failed at once (#123).
+- Step 0's holder rules agree: a claim posted less than a minute after another run's
+  claim lost its race, and the 10-minute rule never names it the holder (#123).
+- Give up, a follow-up's hand-back and Step 3's retiring of a leftover branch renew the
+  lock first, like every other commit and push (#123).
+- `clear-closed-labels.sh --all-closed` exits non-zero when a listing reaches its
+  limit, so the manual workflow run does not go green while issues stay labelled (#123).
+
 ### Manual steps for existing repos
 
-None.
+None: a re-sync is enough.
 
 ## [0.2.0] - 2026-10-16
 
