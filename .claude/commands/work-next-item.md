@@ -171,9 +171,10 @@ for 3 hours from when it last renewed it; after that any run takes it over.
 **Keep the lock while you work.** Renew it at the start of every step from Step 0 on,
 and before every commit, push or remote branch deletion (Step 5's cycles, Step 6,
 Step 6.5's fixes, the review loop's fixes after Step 7, a follow-up's commits, Give up
-(its commit, its pushes and its branch deletion), a hand-back, and Step 3's retiring of
-a leftover branch; these last three renew once, at their start, since their steps run in
-seconds). A dry run, which holds no lock, skips every renew (#123):
+(its commit, its pushes and its branch deletion) and a hand-back, which renew once, at
+their start, since their steps run in seconds; Step 3's retiring of a leftover branch is
+covered by the renew at Step 3's start). A dry run, which holds no lock, skips every
+renew (#123):
 
 ```bash
 scripts/loop-lock.sh renew-session <run-id>
@@ -293,10 +294,9 @@ after its label (Step 3). The claim that holds the issue is (#108):
 - **a claim newer than the newest confirmed claim (or any claim, with none confirmed)
   that is under 10 minutes old, and not a race loser** (#123): its run may be a winner
   between its label and its holds comment. Take the newest such claim. A claim is a
-  race loser, whatever its age, when it was posted less than 3 hours after another
-  runner's confirmed claim (that run still held the issue then, so no later claim
-  could win it), less than a minute after another runner's claim, or in the same
-  second as one with a smaller `run=`. Another runner's claim, here, has a different
+  race loser, whatever its age, when it was posted less than a minute after another
+  runner's claim, or in the same second as one with a smaller `run=`. Another
+  runner's claim, here, has a different
   `run=` and is not from the same clone as the claim being judged (both real clone
   IDs): one clone's own claims never race each other. These are the losers the
   comments show; a loser that listed before a rival's claim cannot be told apart;
@@ -838,10 +838,8 @@ to Step 2 for another issue.
 
 **Retire a leftover branch before labelling.** Do this for every leftover branch
 name (a title edit can change the type or slug, so there may be more than one); a
-local and a remote branch with the same name are one. Before the first one, renew the
-lock as **Keep the lock** says, and if the renew fails, stop at once, as it says.
-Check it out (the local copy if there is one, otherwise fetch the remote one), then
-run **Give up** steps 2, 4 and 5:
+local and a remote branch with the same name are one. Check it out (the local copy if
+there is one, otherwise fetch the remote one), then run **Give up** steps 2, 4 and 5:
 save its commits under `abandoned/<number>-<short-sha>`, delete the remote copy only
 once it is proven to hold nothing unsaved, then delete the local branch and return to
 `main`. Skip Give up's step 1 (Step 1 left nothing uncommitted) and step 3 (this
@@ -1053,7 +1051,8 @@ git switch -c <type>/<number>-<slug>
    ```
    If the branch's first push fails (the one that creates it on the remote; a branch
    Step 0 resumed from the remote is past it), run it once more; if that fails too, stop and report it, keeping the claim and the branch:
-   a runner that cannot push would only waste the rest of the work. Not Give up: its save is a push too, and would
+   a runner that cannot push would only waste the rest of the work. Not Give up: its
+   save is a push too, and would
    fail the same way. A later run in this clone resumes the branch (Step 0); a push
    that keeps failing is a setup problem (see the guardrails), not this issue's. A later cycle's push that fails:
    keep working, and Step 6 pushes again (and stops the run if that fails twice).
@@ -1255,10 +1254,8 @@ step 4 or 5 fails, the work is already saved: add a comment naming what is left,
 so a human removes it. Never get past a failure with `--no-verify` or `--force`.
 
 Run these on the issue's branch, `<type>/<number>-<slug>`. Before step 1, renew the
-lock as **Keep the lock** says; the steps then run in seconds, so this one renew covers
-them all. If it says another run holds the lock (exit 1), stop at once, as Keep the
-lock says: that run may be working this branch. If the lock only cannot be written
-(exit 2), go on: no other run holds it, and saving the work is what Give up is for.
+lock as **Keep the lock** says, and if the renew fails, stop at once, as it says. The
+steps then run in seconds, so this one renew covers them all.
 
 1. **Commit anything uncommitted**, so it travels with the branch. A stash would stay
    on this machine, and a cloud session's clone is discarded. First make sure a merge
