@@ -16,6 +16,12 @@ removes it from a repo made with "Use this template", and sync never copies it.
 
 ## [Unreleased]
 
+### Manual steps for existing repos
+
+None.
+
+## [0.2.1] - 2026-10-17
+
 ### Fixed
 
 - `/work-next-item` dry runs no longer stop at Step 0: a dry run, which takes no lock,
@@ -227,6 +233,7 @@ The first tagged release. It records what the template does today.
   the workflows a PR must pass in its `workflow_run` trigger, and run
   `scripts/seed-labels.sh` to create the `ready-to-merge` label.
 
-[Unreleased]: https://github.com/highhair20/backlog-loop/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/highhair20/backlog-loop/compare/v0.2.1...HEAD
+[0.2.1]: https://github.com/highhair20/backlog-loop/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/highhair20/backlog-loop/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/highhair20/backlog-loop/releases/tag/v0.1.0
