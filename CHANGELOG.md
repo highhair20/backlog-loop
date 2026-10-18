@@ -16,6 +16,12 @@ removes it from a repo made with "Use this template", and sync never copies it.
 
 ## [Unreleased]
 
+### Manual steps for existing repos
+
+None.
+
+## [0.2.1] - 2026-10-17
+
 ### Fixed
 
 - `/work-next-item` dry runs no longer stop at Step 0: a dry run, which takes no lock,
@@ -25,13 +31,16 @@ removes it from a repo made with "Use this template", and sync never copies it.
   race loser, and never named the holder, when it was posted less than a minute after
   another runner's claim, or in the same second as one with a smaller `run=`. Another
   runner's claim has a different `run=` and comes from a different clone than the
-  claim being judged, when both clone IDs are real (#123).
-- Give up, a follow-up's hand-back and Step 3's retiring of a leftover branch renew the
-  lock first, once at their start, like every other commit and push (#123).
+  claim being judged; when either clone ID is `none`, a different `run=` alone makes it
+  another runner's (#123).
+- Give up and a follow-up's hand-back renew the lock first, once at their start, like
+  every other commit and push; Step 3's retiring of a leftover branch is covered by the
+  renew at Step 3's start (#123).
 - `clear-closed-labels.sh --all-closed` exits non-zero when a listing has more issues
   than its limit, so the manual workflow run does not go green while issues stay
   labelled. It clears at most `CLEAR_CLOSED_LIMIT` issues per label; a zero-padded
-  limit is read as decimal, and one of more than 7 digits is a usage error (#123).
+  limit is read as decimal, and one longer than 7 characters, leading zeros included,
+  is a usage error (#123).
 - `scripts/loop-lock.sh`: a driver taking over its own stale lock (`adopt`) now marks
   the reclaim marker it holds, so a run killed meanwhile removes it, and warns if it
   cannot (#123).
@@ -227,6 +236,7 @@ The first tagged release. It records what the template does today.
   the workflows a PR must pass in its `workflow_run` trigger, and run
   `scripts/seed-labels.sh` to create the `ready-to-merge` label.
 
-[Unreleased]: https://github.com/highhair20/backlog-loop/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/highhair20/backlog-loop/compare/v0.2.1...HEAD
+[0.2.1]: https://github.com/highhair20/backlog-loop/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/highhair20/backlog-loop/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/highhair20/backlog-loop/releases/tag/v0.1.0
