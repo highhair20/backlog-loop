@@ -16,9 +16,29 @@ removes it from a repo made with "Use this template", and sync never copies it.
 
 ## [Unreleased]
 
+### Fixed
+
+- `/work-next-item` dry runs no longer stop at Step 0: a dry run, which takes no lock,
+  skips every renew. Before, "Keep the lock" told it to renew a lock it never held, so
+  a scheduled routine's dry run failed at once (#123).
+- Step 0's holder rules agree, with each other and with Step 3's tie-break. A claim is a
+  race loser, and never named the holder, when it was posted less than a minute after
+  another runner's claim, or in the same second as one with a smaller `run=`. Another
+  runner's claim has a different `run=` and comes from a different clone than the
+  claim being judged, when both clone IDs are real (#123).
+- Give up, a follow-up's hand-back and Step 3's retiring of a leftover branch renew the
+  lock first, once at their start, like every other commit and push (#123).
+- `clear-closed-labels.sh --all-closed` exits non-zero when a listing has more issues
+  than its limit, so the manual workflow run does not go green while issues stay
+  labelled. It clears at most `CLEAR_CLOSED_LIMIT` issues per label; a zero-padded
+  limit is read as decimal, and one of more than 7 digits is a usage error (#123).
+- `scripts/loop-lock.sh`: a driver taking over its own stale lock (`adopt`) now marks
+  the reclaim marker it holds, so a run killed meanwhile removes it, and warns if it
+  cannot (#123).
+
 ### Manual steps for existing repos
 
-None.
+None: a re-sync is enough.
 
 ## [0.2.0] - 2026-10-16
 

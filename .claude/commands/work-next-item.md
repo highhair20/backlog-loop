@@ -169,8 +169,12 @@ If it fails, say so in the report. A session that dies, or forgets this, holds t
 for 3 hours from when it last renewed it; after that any run takes it over.
 
 **Keep the lock while you work.** Renew it at the start of every step from Step 0 on,
-and before every commit and push (Step 5's cycles, Step 6, Step 6.5's fixes, the
-review loop's fixes after Step 7, a follow-up's commits):
+and before every commit, push or remote branch deletion (Step 5's cycles, Step 6,
+Step 6.5's fixes, the review loop's fixes after Step 7, a follow-up's commits, Give up
+(its commit, its pushes and its branch deletion) and a hand-back, which renew once, at
+their start, since their steps run in seconds; Step 3's retiring of a leftover branch is
+covered by the renew at Step 3's start). A dry run, which holds no lock, skips every
+renew (#123):
 
 ```bash
 scripts/loop-lock.sh renew-session <run-id>
@@ -236,6 +240,8 @@ watch what it would do before it can do it.
   ls-remote, status and log, and reading files. Step 1's switch to main and its
   fast-forward pull count as reads here: they change only this checkout, and a dirty
   tree still stops the run.
+- **Never run `scripts/loop-lock.sh renew-session`** (#123): a dry run holds no lock,
+  so every renew a step asks for is skipped, and its failure never stops the run.
 - **Never run a write:** anything that changes GitHub, a git ref, the index, or the
   working tree. The list below gives examples; it is not the whole rule. On GitHub:
   gh issue comment, gh issue edit, gh issue close, gh pr create, or their MCP
@@ -286,15 +292,22 @@ off. Of the rest, a claim is **confirmed** when its run also posted a holds comm
 after its label (Step 3). The claim that holds the issue is (#108):
 
 - **a claim newer than the newest confirmed claim (or any claim, with none confirmed)
-  that is under 10 minutes old:** its run may be a winner between its label and its
-  holds comment. Take the newest such claim;
+  that is under 10 minutes old, and not a race loser** (#123): its run may be a winner
+  between its label and its holds comment. Take the newest such claim. A claim is a
+  race loser, whatever its age, when it was posted less than a minute after another
+  runner's claim, or in the same second as one with a smaller `run=`. Another
+  runner's claim, here, has a different
+  `run=` and is not from the same clone as the claim being judged (both real clone
+  IDs): one clone's own claims never race each other. These are the losers the
+  comments show; a loser that listed before a rival's claim cannot be told apart;
 - **otherwise, the newest confirmed claim.** A newer unconfirmed claim past 10 minutes
   lost its race (a loser that died before posting its release), or won and died before
   confirming; either way it holds nothing;
 - **with no confirmed claim at all** (claims from before #108, or a winner that died
-  before confirming), the newest claim, unless another run's claim was posted less than
-  a minute before it. Then the earlier one won its race and holds the issue (the newer
-  one is a loser that backed off but could not post its release).
+  before confirming), the newest claim, unless it is a race loser, as defined above
+  (another runner's claim was posted less than a minute before it, say). Then the
+  earlier one won its race and holds the issue: the newest claim that is not a loser
+  (a loser backed off but could not post its release).
 
 Then decide:
 
@@ -695,6 +708,9 @@ only when `git branch --show-current` prints the PR's branch. Otherwise skip to 
 whatever stopped the follow-up (the round cap before the claim, a failed switch):
 steps 2 and 3 run on `main` would save `main`'s own commits.
 
+First, whichever step you start at, renew the lock as **Keep the lock** says, and if
+the renew fails, stop at once, as it says.
+
 1. Keep any work: abort a half-done merge
    (`git rev-parse -q --verify MERGE_HEAD` prints a hash only when one is in
    progress; then `git merge --abort`), and commit anything left
@@ -1035,8 +1051,8 @@ git switch -c <type>/<number>-<slug>
    ```
    If the branch's first push fails (the one that creates it on the remote; a branch
    Step 0 resumed from the remote is past it), run it once more; if that fails too, stop and report it, keeping the claim and the branch:
-   a runner that cannot push would only waste the rest of the work, and Step 4 no
-   longer pushes to find that out early. Not Give up: its save is a push too, and would
+   a runner that cannot push would only waste the rest of the work. Not Give up: its
+   save is a push too, and would
    fail the same way. A later run in this clone resumes the branch (Step 0); a push
    that keeps failing is a setup problem (see the guardrails), not this issue's. A later cycle's push that fails:
    keep working, and Step 6 pushes again (and stops the run if that fails twice).
@@ -1237,7 +1253,9 @@ would look claimed, or unexplained, with its work gone. Stop and report it. If
 step 4 or 5 fails, the work is already saved: add a comment naming what is left,
 so a human removes it. Never get past a failure with `--no-verify` or `--force`.
 
-Run these on the issue's branch, `<type>/<number>-<slug>`.
+Run these on the issue's branch, `<type>/<number>-<slug>`. Before step 1, renew the
+lock as **Keep the lock** says, and if the renew fails, stop at once, as it says. The
+steps then run in seconds, so this one renew covers them all.
 
 1. **Commit anything uncommitted**, so it travels with the branch. A stash would stay
    on this machine, and a cloud session's clone is discarded. First make sure a merge

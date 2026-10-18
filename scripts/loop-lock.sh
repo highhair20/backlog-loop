@@ -266,8 +266,14 @@ reclaim_blocked() {
 # stale before this process started cannot remove it afterwards.
 adopt() {
   mkdir "$LOCK/reclaiming" 2>/dev/null || { reclaim_blocked "PID $1"; return 1; }
-  rmdir "$LOCK/reclaiming"
-  MARKER_HELD=0
+  MARKER_HELD=1
+  # The lock is this run's either way. A marker it cannot remove (the EXIT trap tries
+  # again) would only stop a later reclaim, so say so rather than refuse to start.
+  if rmdir "$LOCK/reclaiming" 2>/dev/null; then
+    MARKER_HELD=0
+  else
+    echo "loop-lock: could not remove $LOCK/reclaiming; if it outlives this run, remove it by hand" >&2
+  fi
   echo "↻ Reclaimed a stale backlog-loop lock: an earlier run left it under this PID ($1)." >&2
 }
 
@@ -381,8 +387,6 @@ renew_session() {
   lost_lock "$1"
   return 1
 }
-
-
 
 release() {
   [ -d "$LOCK" ] || return 0

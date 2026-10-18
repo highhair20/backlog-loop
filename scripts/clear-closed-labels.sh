@@ -16,8 +16,8 @@
 #        scripts/clear-closed-labels.sh --all-closed     every closed issue at once
 # Run from a terminal, each removal is an `unlabeled` event that starts a
 # ready-to-merge run; the workflow's manual run (workflow_dispatch) starts none.
-# Exit: 0 cleared, or nothing to clear · 1 a gh call failed, or an unexpected state ·
-# 2 usage.
+# Exit: 0 cleared, or nothing to clear · 1 a gh call failed, an unexpected state, or
+# (--all-closed) a listing with more issues than its limit · 2 usage.
 set -uo pipefail
 
 # The labels this clears: the open-issue states in docs/ISSUE_GUIDE.md. The script's
@@ -63,13 +63,18 @@ clear_one() {
 
 # Every closed issue that still carries a status label: listed one label at a time (a
 # search on several labels would have to spell heal:proposed's colon), each issue once.
-# Goes on past a failure, then exits 1 if there was one.
+# Goes on past a failure, then exits 1 if there was one, or if a listing had more
+# issues than LIMIT (it asks for one more, to tell "exactly LIMIT" from "more").
 all_closed() {
   local l nums="" got n count=0 failed=0 full=0
   for l in $STATUS_LABELS; do
-    got="$(gh issue list --state closed --label "$l" --limit "$LIMIT" --json number --jq '.[].number')" ||
+    got="$(gh issue list --state closed --label "$l" --limit "$((LIMIT + 1))" --json number --jq '.[].number')" ||
       { err "could not list closed issues labelled $l"; exit 1; }
-    [ "$(printf '%s\n' "$got" | grep -c .)" -lt "$LIMIT" ] || full=1
+    # One more than LIMIT means more are waiting: clear the first LIMIT, flag the rest.
+    if [ "$(printf '%s\n' "$got" | grep -c .)" -gt "$LIMIT" ]; then
+      full=1
+      got="$(printf '%s\n' "$got" | head -n "$LIMIT")"
+    fi
     nums="$nums $got"
   done
   # shellcheck disable=SC2086  # $nums is a list of issue numbers
@@ -78,12 +83,17 @@ all_closed() {
     clear_one "$n" || failed=$((failed + 1))
   done
   say "looked at $count closed issue(s) with a status label; $failed failed"
-  [ "$full" -eq 0 ] || err "a listing reached its limit of $LIMIT issues and may have more: run it again for the rest"
-  [ "$failed" -eq 0 ] || exit 1
+  # A listing with more than its limit may have left issues labelled: fail, so the run
+  # is not mistaken for a complete one.
+  [ "$full" -eq 0 ] || err "a listing had more than its limit of $LIMIT issues, so some may still be labelled: run it again for the rest"
+  [ "$failed" -eq 0 ] && [ "$full" -eq 0 ] || exit 1
 }
 
 [ $# -eq 1 ] || usage
-case "$LIMIT" in ''|*[!0-9]*|0) echo "clear-closed-labels: CLEAR_CLOSED_LIMIT must be a positive number, not '$LIMIT'" >&2; exit 2 ;; esac
+case "$LIMIT" in ''|*[!0-9]*|????????*) echo "clear-closed-labels: CLEAR_CLOSED_LIMIT must be a positive number of at most 7 digits, not '$LIMIT'" >&2; exit 2 ;; esac
+# Read as decimal: a leading zero would otherwise be octal (08 an error, 010 eight).
+LIMIT=$((10#$LIMIT))
+[ "$LIMIT" -gt 0 ] || { echo "clear-closed-labels: CLEAR_CLOSED_LIMIT must be a positive number, not 0" >&2; exit 2; }
 case "$1" in
   --all-closed) all_closed ;;
   ''|*[!0-9]*) usage ;;
