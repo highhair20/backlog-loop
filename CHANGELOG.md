@@ -16,6 +16,10 @@ removes it from a repo made with "Use this template", and sync never copies it.
 
 ## [Unreleased]
 
+### Changed
+
+- `/work-next-item` no longer shows a branch name from another project as its example.
+
 ### Manual steps for existing repos
 
 None.
