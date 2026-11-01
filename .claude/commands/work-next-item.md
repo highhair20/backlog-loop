@@ -1029,7 +1029,6 @@ and a short kebab-case slug from the title (drop the prefix, ~5 words max):
 
 ```bash
 git switch -c <type>/<number>-<slug>
-# e.g. fix/19-audit-burger-restaurant-exclusion
 ```
 
 ## Step 5 — Implement with TDD
